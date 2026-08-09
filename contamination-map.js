@@ -3,6 +3,12 @@
  * Shared by the dashboard UI and headless metric checks.
  * Contamination Index c ∈ [0, 100] drives all speculative readouts and visual params.
  *
+ * World premise (2040–2075): AI data-centre energy demand forced the return of
+ * coal and kerosene at industrial scale; nearly all food is ultra-processed and
+ * chemically formulated; battery production (grid storage, vehicles, AI
+ * infrastructure) exploded. These three systems — energy, food processing,
+ * batteries — drive the contamination load reported here.
+ *
  * Works in browser (global ContaminationMap) and Node (module.exports).
  */
 (function (root, factory) {
@@ -34,8 +40,28 @@
   }
 
   /**
-   * Map Contamination Index → metrics, status, year, and visual parameters.
-   * All outputs are continuous in c; no discrete jumps.
+   * Operational regime bands (narrative stages of the premise).
+   * Returned as { id, label } — label is display-ready institutional text.
+   */
+  var REGIMES = [
+    { max: 15, id: "EARLY_DEMAND", label: "EARLY AI ENERGY DEMAND" },
+    { max: 35, id: "COAL_RETURN", label: "COAL & KEROSENE RETURN" },
+    { max: 55, id: "FOOD_BATTERY", label: "FOOD-PROCESSING + BATTERY SCALING" },
+    { max: 75, id: "CHEM_INVASIVE", label: "HEAVY CHEMICAL-METAL LOADING / EARLY INVASIVES" },
+    { max: 90, id: "SYSTEMIC", label: "SYSTEMIC DEGRADATION" },
+    { max: 100, id: "TERMINAL", label: "TERMINAL" },
+  ];
+
+  function regimeAt(c) {
+    for (var i = 0; i < REGIMES.length; i++) {
+      if (c <= REGIMES[i].max) return REGIMES[i];
+    }
+    return REGIMES[REGIMES.length - 1];
+  }
+
+  /**
+   * Map Contamination Index → metrics, status, year, regime, visual parameters.
+   * All outputs are continuous in c except status/regime bands (labels only).
    * @param {number} c Contamination Index 0–100
    * @returns {object}
    */
@@ -44,83 +70,110 @@
     var t = c / 100;
     var te = easeInOut(t);
 
-    // --- Metrics (speculative bureaucratic ranges) ---
-    // Microplastic Density: 12 → 48,000 particles/m³ (exponential-ish rise)
-    var microplastic = lerp(12, 48000, Math.pow(te, 1.35));
+    // ── Primary metrics ────────────────────────────────────────────────
 
-    // Light Penetration: 38 m → 0.4 m
-    var lightPenetration = lerp(38, 0.4, te);
+    // 1. Particulate & Metal Load (µg/L suspended solids + dissolved metals).
+    //    Coal/kerosene ash, black carbon, battery-mineral runoff (Li, Co, Ni,
+    //    Mn compounds). Steady rise that accelerates through the mid–high band
+    //    as coal combustion and battery throughput compound.
+    var particulateMetal = lerp(28, 15800, Math.pow(te, 1.55));
 
-    // Non-Human Habitability: 94% → 3%
-    var habitability = lerp(94, 3, te);
+    // 2. Nutrient & Process Residue (mg/L nitrogen-equivalent + additives).
+    //    Ultra-processed food industry discharge: N/P loading, chemical
+    //    additives, organic sludge. Peaks in drive through the food-scaling
+    //    band (35–55) and keeps climbing as dead-zone conditions self-reinforce.
+    var nutrientDrive = 0.55 * te + 0.45 * smoothstep(0.3, 0.85, t);
+    var nutrientResidue = lerp(0.4, 88, nutrientDrive);
 
-    // Aura of Waste: 0.08 → 9.7
-    var aura = lerp(0.08, 9.7, te);
+    // 3. Photic Depth (m) — light penetration.
+    //    Beer–Lambert-style attenuation: falls exponentially with turbidity,
+    //    particulates and organic matter; near-zero in the terminal range.
+    var photicDepth = 42 * Math.exp(-5.63 * te); // → 0.15 m at c = 100
 
-    // Year: 2026 → 2075
+    // 4. Non-Human Viability (%) — composite of oxygen stress, toxicity,
+    //    habitat loss. Holds early, then collapses non-linearly once invasive
+    //    blooms and heavy chemical loading dominate (second term dominates).
+    var viabilityStress = 0.3 * te + 0.7 * smoothstep(0.42, 1.0, t);
+    var viability = lerp(96, 1.5, viabilityStress);
+
+    // ── Bureaucratic envelope ──────────────────────────────────────────
     var year = Math.round(lerp(2026, 2075, t));
 
-    // Status bands (label changes at thresholds; values still continuous)
     var status;
     if (c < 20) status = "NOMINAL";
     else if (c < 50) status = "ELEVATED";
     else if (c < 80) status = "CRITICAL";
     else status = "TERMINAL";
 
-    // --- Visual parameters (0–1 style scalars + RGB arrays) ---
-    // Water colour: clear blue-green → green-brown → murky → near-black toxic
+    var regime = regimeAt(c);
+
+    // ── Visual parameters (scalars 0–1 + RGB arrays) ───────────────────
     var waterColor = waterColorAt(t);
     var skyColor = skyColorAt(t);
     var fogColor = fogColorAt(t);
 
-    // Fog density grows smoothly (capped so horizon still reads at terminal)
-    var fogDensity = lerp(0.012, 0.062, Math.pow(te, 0.9));
+    // Fog density grows smoothly (capped so the scene still reads at terminal)
+    var fogDensity = lerp(0.008, 0.034, Math.pow(te, 0.9));
 
-    // Debris density factor 0–1 (drives instance count/opacity)
-    var debrisDensity = smoothstep(0, 0.15, t) * lerp(0.05, 1, te);
+    // Debris density factor 0–1 (drives instance counts)
+    var debrisDensity = smoothstep(0.02, 0.15, t) * lerp(0.06, 1, te);
 
-    // Surface murk / oil slick intensity (high contamination)
-    var oilSlick = smoothstep(0.75, 1.0, t);
-
-    // Haze / atmospheric opacity
-    var haze = smoothstep(0.15, 0.95, t);
+    // Chemical sheen / oil iridescence (coal-kerosene + process chemicals)
+    var oilSheen = smoothstep(0.55, 0.92, t);
 
     // Light penetration feel for shader (1 = clear, 0 = black)
     var waterClarity = 1 - te;
 
-    // Ash / microplastic particle intensity
-    var particleIntensity = smoothstep(0.45, 1.0, t);
+    // Airborne ash / black-carbon fallout (coal return begins ~15)
+    var ashFallout = smoothstep(0.18, 0.85, t);
+
+    // Invasive gelatinous biomass (establishes ~55, dominant by ~95)
+    var invasiveBiomass = smoothstep(0.55, 0.95, t);
+
+    // Algal-style surface mat coverage
+    var matCoverage = smoothstep(0.6, 1.0, t);
+
+    // Surface wave energy: lively early swell, choked under biomass at terminal
+    var waveAmp = lerp(1.05, 0.55, smoothstep(0.55, 1.0, t));
+
+    // Sunlight attenuation through the haze
+    var sunIntensity = lerp(1, 0.42, te);
 
     return {
       c: c,
       t: t,
-      microplastic: microplastic,
-      lightPenetration: lightPenetration,
-      habitability: habitability,
-      aura: aura,
+      particulateMetal: particulateMetal,
+      nutrientResidue: nutrientResidue,
+      photicDepth: photicDepth,
+      viability: viability,
       year: year,
       status: status,
+      regime: regime.id,
+      regimeLabel: regime.label,
       waterColor: waterColor,
       skyColor: skyColor,
       fogColor: fogColor,
       fogDensity: fogDensity,
       debrisDensity: debrisDensity,
-      oilSlick: oilSlick,
-      haze: haze,
+      oilSheen: oilSheen,
       waterClarity: waterClarity,
-      particleIntensity: particleIntensity,
+      ashFallout: ashFallout,
+      invasiveBiomass: invasiveBiomass,
+      matCoverage: matCoverage,
+      waveAmp: waveAmp,
+      sunIntensity: sunIntensity,
     };
   }
 
   function waterColorAt(t) {
-    // Key stops: clean teal-blue → green → brown-green → near-black toxic
-    // Terminal kept slightly lifted so surface/oil remain readable
+    // Clean teal-blue → green → brown-green → near-black toxic
+    // Terminal kept slightly lifted so surface/sheen remain readable
     var stops = [
-      { t: 0.0, c: [0.05, 0.28, 0.38] },
-      { t: 0.2, c: [0.08, 0.32, 0.3] },
-      { t: 0.5, c: [0.18, 0.28, 0.12] },
-      { t: 0.8, c: [0.14, 0.15, 0.09] },
-      { t: 1.0, c: [0.07, 0.08, 0.05] },
+      { t: 0.0, c: [0.045, 0.27, 0.36] },
+      { t: 0.2, c: [0.07, 0.3, 0.29] },
+      { t: 0.5, c: [0.17, 0.27, 0.12] },
+      { t: 0.8, c: [0.13, 0.14, 0.08] },
+      { t: 1.0, c: [0.06, 0.07, 0.045] },
     ];
     return sampleStops(stops, t);
   }
@@ -166,21 +219,28 @@
   /** Format metrics for display with appropriate precision. */
   function formatMetrics(m) {
     return {
-      microplastic:
-        m.microplastic < 100
-          ? m.microplastic.toFixed(1)
-          : Math.round(m.microplastic).toLocaleString("en-US"),
-      lightPenetration: m.lightPenetration.toFixed(1),
-      habitability: m.habitability.toFixed(1),
-      aura: m.aura.toFixed(2),
+      particulateMetal:
+        m.particulateMetal < 100
+          ? m.particulateMetal.toFixed(1)
+          : Math.round(m.particulateMetal).toLocaleString("en-US"),
+      nutrientResidue:
+        m.nutrientResidue < 10
+          ? m.nutrientResidue.toFixed(2)
+          : m.nutrientResidue.toFixed(1),
+      photicDepth:
+        m.photicDepth < 3 ? m.photicDepth.toFixed(2) : m.photicDepth.toFixed(1),
+      viability: m.viability.toFixed(1),
       year: String(m.year),
       status: m.status,
+      regime: m.regimeLabel,
     };
   }
 
   return {
     mapContamination: mapContamination,
     formatMetrics: formatMetrics,
+    regimeAt: regimeAt,
+    REGIMES: REGIMES,
     clamp: clamp,
     lerp: lerp,
     smoothstep: smoothstep,

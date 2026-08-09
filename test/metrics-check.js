@@ -24,7 +24,7 @@ function approx(a, b, tol, msg) {
   assert(Math.abs(a - b) <= tol, msg + " (got " + a + ", expected ~" + b + " ±" + tol + ")");
 }
 
-// Endpoint ranges (from project brief / mapContamination implementation)
+// Sample points across the index
 var m0 = mapContamination(0);
 var m20 = mapContamination(20);
 var m50 = mapContamination(50);
@@ -33,23 +33,23 @@ var m100 = mapContamination(100);
 
 console.log("--- Endpoints ---");
 console.log("c=0  ", JSON.stringify({
-  micro: m0.microplastic, light: m0.lightPenetration,
-  habit: m0.habitability, aura: m0.aura, year: m0.year, status: m0.status
+  part: m0.particulateMetal, nutr: m0.nutrientResidue,
+  phot: m0.photicDepth, viab: m0.viability, year: m0.year, status: m0.status
 }));
 console.log("c=100", JSON.stringify({
-  micro: m100.microplastic, light: m100.lightPenetration,
-  habit: m100.habitability, aura: m100.aura, year: m100.year, status: m100.status
+  part: m100.particulateMetal, nutr: m100.nutrientResidue,
+  phot: m100.photicDepth, viab: m100.viability, year: m100.year, status: m100.status
 }));
 
 // Endpoint ranges
-approx(m0.microplastic, 12, 0.01, "microplastic at 0 ≈ 12");
-approx(m100.microplastic, 48000, 1, "microplastic at 100 ≈ 48000");
-approx(m0.lightPenetration, 38, 0.01, "light at 0 ≈ 38");
-approx(m100.lightPenetration, 0.4, 0.01, "light at 100 ≈ 0.4");
-approx(m0.habitability, 94, 0.01, "habitability at 0 ≈ 94");
-approx(m100.habitability, 3, 0.01, "habitability at 100 ≈ 3");
-approx(m0.aura, 0.08, 0.001, "aura at 0 ≈ 0.08");
-approx(m100.aura, 9.7, 0.01, "aura at 100 ≈ 9.7");
+approx(m0.particulateMetal, 28, 0.01, "particulateMetal at 0 ≈ 28");
+approx(m100.particulateMetal, 15800, 1, "particulateMetal at 100 ≈ 15800");
+approx(m0.nutrientResidue, 0.4, 0.001, "nutrientResidue at 0 ≈ 0.4");
+approx(m100.nutrientResidue, 88, 0.01, "nutrientResidue at 100 ≈ 88");
+approx(m0.photicDepth, 42, 0.01, "photicDepth at 0 ≈ 42");
+approx(m100.photicDepth, 0.15, 0.01, "photicDepth at 100 ≈ 0.15");
+approx(m0.viability, 96, 0.01, "viability at 0 ≈ 96");
+approx(m100.viability, 1.5, 0.01, "viability at 100 ≈ 1.5");
 assert(m0.year === 2026, "year at 0 is 2026");
 assert(m100.year === 2075, "year at 100 is 2075");
 
@@ -63,69 +63,73 @@ assert(mapContamination(19.9).status === "NOMINAL", "status at 19.9 = NOMINAL");
 assert(mapContamination(49.9).status === "ELEVATED", "status at 49.9 = ELEVATED");
 assert(mapContamination(79.9).status === "CRITICAL", "status at 79.9 = CRITICAL");
 
+// Regime bands (premise stages)
+console.log("--- Regimes ---");
+assert(mapContamination(0).regime === "EARLY_DEMAND", "regime at 0 = EARLY_DEMAND");
+assert(mapContamination(14.9).regime === "EARLY_DEMAND", "regime at 14.9 = EARLY_DEMAND");
+assert(mapContamination(15).regime === "EARLY_DEMAND", "regime at 15 = EARLY_DEMAND (inclusive)");
+assert(mapContamination(15.1).regime === "COAL_RETURN", "regime at 15.1 = COAL_RETURN");
+assert(mapContamination(35).regime === "COAL_RETURN", "regime at 35 = COAL_RETURN (inclusive)");
+assert(mapContamination(45).regime === "FOOD_BATTERY", "regime at 45 = FOOD_BATTERY");
+assert(mapContamination(65).regime === "CHEM_INVASIVE", "regime at 65 = CHEM_INVASIVE");
+assert(mapContamination(82).regime === "SYSTEMIC", "regime at 82 = SYSTEMIC");
+assert(mapContamination(90).regime === "SYSTEMIC", "regime at 90 = SYSTEMIC (inclusive)");
+assert(mapContamination(90.1).regime === "TERMINAL", "regime at 90.1 = TERMINAL");
+assert(mapContamination(100).regime === "TERMINAL", "regime at 100 = TERMINAL");
+assert(typeof mapContamination(50).regimeLabel === "string" &&
+       mapContamination(50).regimeLabel.length > 3, "regimeLabel present");
+
+// Metric shape expectations from the brief
+console.log("--- Curve shapes ---");
+var m40 = mapContamination(40);
+var m60 = mapContamination(60);
+var m90 = mapContamination(90);
+// Particulate accelerates mid-to-high: second-half gain exceeds first-half gain
+assert(
+  (m100.particulateMetal - m50.particulateMetal) > (m50.particulateMetal - m0.particulateMetal),
+  "particulateMetal accelerates in upper half"
+);
+// Viability collapses non-linearly: still fairly high mid, near floor by 90
+assert(m50.viability > 60, "viability still > 60% at 50 (got " + m50.viability + ")");
+assert(m90.viability < 15, "viability < 15% at 90 (got " + m90.viability + ")");
+// Photic depth near-zero by terminal
+assert(m90.photicDepth < 1.0, "photicDepth < 1 m at 90 (got " + m90.photicDepth + ")");
+
 // Monotonicity: sample dense path
 console.log("--- Monotonicity ---");
 var prev = mapContamination(0);
 var monoOk = true;
 for (var c = 1; c <= 100; c++) {
   var cur = mapContamination(c);
-  if (!(cur.microplastic >= prev.microplastic - 1e-9)) {
-    console.log("FAIL: microplastic not non-decreasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
+  var checks = [
+    [cur.particulateMetal >= prev.particulateMetal - 1e-9, "particulateMetal not non-decreasing"],
+    [cur.nutrientResidue >= prev.nutrientResidue - 1e-9, "nutrientResidue not non-decreasing"],
+    [cur.photicDepth <= prev.photicDepth + 1e-9, "photicDepth not non-increasing"],
+    [cur.viability <= prev.viability + 1e-9, "viability not non-increasing"],
+    [cur.year >= prev.year, "year not non-decreasing"],
+    [cur.debrisDensity >= prev.debrisDensity - 1e-9, "debrisDensity not non-decreasing"],
+    [cur.fogDensity >= prev.fogDensity - 1e-9, "fogDensity not non-decreasing"],
+    [cur.waterClarity <= prev.waterClarity + 1e-9, "waterClarity not non-increasing"],
+    [cur.oilSheen >= prev.oilSheen - 1e-9, "oilSheen not non-decreasing"],
+    [cur.ashFallout >= prev.ashFallout - 1e-9, "ashFallout not non-decreasing"],
+    [cur.invasiveBiomass >= prev.invasiveBiomass - 1e-9, "invasiveBiomass not non-decreasing"],
+    [cur.matCoverage >= prev.matCoverage - 1e-9, "matCoverage not non-decreasing"],
+  ];
+  for (var k = 0; k < checks.length; k++) {
+    if (!checks[k][0]) {
+      console.log("FAIL: " + checks[k][1] + " at c=" + c);
+      monoOk = false;
+      failed++;
+      break;
+    }
   }
-  if (!(cur.lightPenetration <= prev.lightPenetration + 1e-9)) {
-    console.log("FAIL: lightPenetration not non-increasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
-  }
-  if (!(cur.habitability <= prev.habitability + 1e-9)) {
-    console.log("FAIL: habitability not non-increasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
-  }
-  if (!(cur.aura >= prev.aura - 1e-9)) {
-    console.log("FAIL: aura not non-decreasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
-  }
-  if (!(cur.year >= prev.year)) {
-    console.log("FAIL: year not non-decreasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
-  }
-  if (!(cur.debrisDensity >= prev.debrisDensity - 1e-9)) {
-    console.log("FAIL: debrisDensity not non-decreasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
-  }
-  if (!(cur.fogDensity >= prev.fogDensity - 1e-9)) {
-    console.log("FAIL: fogDensity not non-decreasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
-  }
-  if (!(cur.waterClarity <= prev.waterClarity + 1e-9)) {
-    console.log("FAIL: waterClarity not non-increasing at c=" + c);
-    monoOk = false;
-    failed++;
-    break;
-  }
+  if (!monoOk) break;
   prev = cur;
 }
 if (monoOk) console.log("PASS: metrics/visual params monotonic 0→100");
 
 // Year span
 assert(m50.year >= 2026 && m50.year <= 2075, "year at 50 in [2026,2075]");
-assert(m50.year === Math.round(2026 + 49 * (2075 - 2026) / 100) ||
-       Math.abs(m50.year - (2026 + 50 * 0.49)) < 2,
-       "year advances with index (mid)");
 
 // Continuity: small step changes should be small (no huge jumps mid-band)
 console.log("--- Continuity ---");
@@ -133,31 +137,28 @@ var contOk = true;
 for (var c2 = 0; c2 < 100; c2 += 0.5) {
   var a = mapContamination(c2);
   var b = mapContamination(c2 + 0.5);
-  var dMicro = Math.abs(b.microplastic - a.microplastic);
-  var dLight = Math.abs(b.lightPenetration - a.lightPenetration);
-  // Max step over 0.5 index should be far below full range / 10
-  if (dMicro > 5000) {
-    console.log("FAIL: microplastic jump too large at " + c2 + " Δ=" + dMicro);
-    contOk = false;
-    failed++;
-    break;
+  var dPart = Math.abs(b.particulateMetal - a.particulateMetal);
+  var dPhot = Math.abs(b.photicDepth - a.photicDepth);
+  var dViab = Math.abs(b.viability - a.viability);
+  if (dPart > 1600) {
+    console.log("FAIL: particulateMetal jump too large at " + c2 + " Δ=" + dPart);
+    contOk = false; failed++; break;
   }
-  if (dLight > 2) {
-    console.log("FAIL: light jump too large at " + c2 + " Δ=" + dLight);
-    contOk = false;
-    failed++;
-    break;
+  if (dPhot > 2) {
+    console.log("FAIL: photicDepth jump too large at " + c2 + " Δ=" + dPhot);
+    contOk = false; failed++; break;
   }
-  // Colours change continuously
+  if (dViab > 4) {
+    console.log("FAIL: viability jump too large at " + c2 + " Δ=" + dViab);
+    contOk = false; failed++; break;
+  }
   var dCol =
     Math.abs(b.waterColor[0] - a.waterColor[0]) +
     Math.abs(b.waterColor[1] - a.waterColor[1]) +
     Math.abs(b.waterColor[2] - a.waterColor[2]);
   if (dCol > 0.15) {
     console.log("FAIL: water colour jump at " + c2 + " Δ=" + dCol);
-    contOk = false;
-    failed++;
-    break;
+    contOk = false; failed++; break;
   }
 }
 if (contOk) console.log("PASS: continuous small-step transitions");
@@ -165,10 +166,15 @@ if (contOk) console.log("PASS: continuous small-step transitions");
 // formatMetrics uses real map output
 var fmt0 = formatMetrics(m0);
 var fmt100 = formatMetrics(m100);
-assert(typeof fmt0.microplastic === "string", "format microplastic string at 0");
-assert(typeof fmt100.microplastic === "string", "format microplastic string at 100");
+assert(typeof fmt0.particulateMetal === "string", "format particulateMetal string at 0");
+assert(typeof fmt100.particulateMetal === "string", "format particulateMetal string at 100");
+assert(typeof fmt0.nutrientResidue === "string", "format nutrientResidue string");
+assert(typeof fmt0.photicDepth === "string", "format photicDepth string");
+assert(typeof fmt0.viability === "string", "format viability string");
 assert(fmt0.status === "NOMINAL", "format status nominal");
 assert(fmt100.status === "TERMINAL", "format status terminal");
+assert(fmt0.regime === "EARLY AI ENERGY DEMAND", "format regime label at 0");
+assert(fmt100.regime === "TERMINAL", "format regime label at 100");
 
 // Clamp out of range
 assert(mapContamination(-5).c === 0, "clamps negative to 0");
@@ -176,9 +182,14 @@ assert(mapContamination(150).c === 100, "clamps >100 to 100");
 
 // Visual directionality
 assert(m100.debrisDensity > m0.debrisDensity, "debris denser at 100");
-assert(m100.oilSlick > m50.oilSlick, "oil slick rises at high end");
-assert(m100.haze > m0.haze, "haze higher at 100");
+assert(m100.oilSheen > m50.oilSheen, "oil sheen rises at high end");
+assert(m50.oilSheen === 0, "no oil sheen yet at 50");
+assert(m100.invasiveBiomass > m40.invasiveBiomass, "invasives rise at high end");
+assert(m40.invasiveBiomass === 0, "no invasives yet at 40");
+assert(m100.matCoverage > m50.matCoverage, "algal mats spread at high end");
+assert(m100.ashFallout > m0.ashFallout, "ash fallout higher at 100");
 assert(m0.waterClarity > m100.waterClarity, "clarity lower at 100");
+assert(m100.waveAmp < m0.waveAmp, "wave energy choked at terminal");
 
 console.log("--- Summary ---");
 if (failed === 0) {
