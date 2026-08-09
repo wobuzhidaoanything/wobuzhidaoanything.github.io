@@ -41,15 +41,51 @@
 
   /**
    * Operational regime bands (narrative stages of the premise).
-   * Returned as { id, label } — label is display-ready institutional text.
+   * Each stage: id, short label, institutional caption (1–2 sentences).
    */
   var REGIMES = [
-    { max: 15, id: "EARLY_DEMAND", label: "EARLY AI ENERGY DEMAND" },
-    { max: 35, id: "COAL_RETURN", label: "COAL & KEROSENE RETURN" },
-    { max: 55, id: "FOOD_BATTERY", label: "FOOD-PROCESSING + BATTERY SCALING" },
-    { max: 75, id: "CHEM_INVASIVE", label: "HEAVY CHEMICAL-METAL LOADING / EARLY INVASIVES" },
-    { max: 90, id: "SYSTEMIC", label: "SYSTEMIC DEGRADATION" },
-    { max: 100, id: "TERMINAL", label: "TERMINAL" },
+    {
+      max: 15,
+      id: "EARLY_DEMAND",
+      label: "Rising demand",
+      caption:
+        "AI energy demand rises; monitoring still reports nominal coastal chemistry.",
+    },
+    {
+      max: 35,
+      id: "COAL_RETURN",
+      label: "Coal return",
+      caption:
+        "Fossil baseload returns at industrial scale; ash fallout reaches open water.",
+    },
+    {
+      max: 55,
+      id: "FOOD_BATTERY",
+      label: "Food & batteries",
+      caption:
+        "Ultra-processed food and battery throughput scale; packaging and mineral runoff dominate loads.",
+    },
+    {
+      max: 75,
+      id: "CHEM_INVASIVE",
+      label: "Heavy load",
+      caption:
+        "Chemical–metal saturation; early invasive blooms and surface films establish. Medical and solar scrap join the sink.",
+    },
+    {
+      max: 90,
+      id: "SYSTEMIC",
+      label: "Systemic decay",
+      caption:
+        "Oxygen stress and habitat loss compound; light fails in the upper meters.",
+    },
+    {
+      max: 100,
+      id: "TERMINAL",
+      label: "Terminal",
+      caption:
+        "The sea functions as a managed waste sink; non-recovery conditions prevail.",
+    },
   ];
 
   function regimeAt(c) {
@@ -90,9 +126,10 @@
     //    particulates and organic matter; near-zero in the terminal range.
     var photicDepth = 42 * Math.exp(-5.63 * te); // → 0.15 m at c = 100
 
-    // 4. Non-Human Viability (%) — composite of oxygen stress, toxicity,
-    //    habitat loss. Holds early, then collapses non-linearly once invasive
-    //    blooms and heavy chemical loading dominate (second term dominates).
+    // 4. Life health (%) — composite of oxygen stress, toxicity, habitat loss.
+    //    Holds early, then collapses non-linearly once invasive blooms and
+    //    heavy chemical loading dominate (second term dominates).
+    //    Displayed as "Life health" in the UI.
     var viabilityStress = 0.3 * te + 0.7 * smoothstep(0.42, 1.0, t);
     var viability = lerp(96, 1.5, viabilityStress);
 
@@ -112,32 +149,32 @@
     var skyColor = skyColorAt(t);
     var fogColor = fogColorAt(t);
 
-    // Fog density grows smoothly (capped so the scene still reads at terminal)
-    var fogDensity = lerp(0.008, 0.034, Math.pow(te, 0.9));
+    // Fog density: soft early, stage-readable brown-out by terminal.
+    var fogDensity = lerp(0.006, 0.055, Math.pow(te, 0.82));
 
-    // Debris density factor 0–1 (drives instance counts)
+    // Debris density factor 0–1 (drives instance counts / overall fill)
     var debrisDensity = smoothstep(0.02, 0.15, t) * lerp(0.06, 1, te);
 
     // Chemical sheen / oil iridescence (coal-kerosene + process chemicals)
-    var oilSheen = smoothstep(0.55, 0.92, t);
+    var oilSheen = smoothstep(0.52, 0.9, t);
 
     // Light penetration feel for shader (1 = clear, 0 = black)
     var waterClarity = 1 - te;
 
-    // Airborne ash / black-carbon fallout (coal return begins ~15)
-    var ashFallout = smoothstep(0.18, 0.85, t);
+    // Airborne ash / black-carbon fallout (coal return begins ~15 / t~0.15)
+    var ashFallout = smoothstep(0.14, 0.82, t);
 
     // Invasive gelatinous biomass (establishes ~55, dominant by ~95)
     var invasiveBiomass = smoothstep(0.55, 0.95, t);
 
-    // Algal-style surface mat coverage
-    var matCoverage = smoothstep(0.6, 1.0, t);
+    // Algal-style surface mat / scum coverage (shader foam + debris mats)
+    var matCoverage = smoothstep(0.52, 1.0, t);
 
     // Surface wave energy: lively early swell, choked under biomass at terminal
-    var waveAmp = lerp(1.05, 0.55, smoothstep(0.55, 1.0, t));
+    var waveAmp = lerp(1.15, 0.32, smoothstep(0.48, 1.0, t));
 
-    // Sunlight attenuation through the haze
-    var sunIntensity = lerp(1, 0.42, te);
+    // Sunlight attenuation through the haze (darker terminal sky)
+    var sunIntensity = lerp(1, 0.22, te);
 
     return {
       c: c,
@@ -150,6 +187,7 @@
       status: status,
       regime: regime.id,
       regimeLabel: regime.label,
+      regimeCaption: regime.caption,
       waterColor: waterColor,
       skyColor: skyColor,
       fogColor: fogColor,
@@ -233,6 +271,7 @@
       year: String(m.year),
       status: m.status,
       regime: m.regimeLabel,
+      caption: m.regimeCaption,
     };
   }
 

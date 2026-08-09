@@ -19,7 +19,7 @@ python3 -m http.server 8080
 
 | File | Role |
 |------|------|
-| `index.html` | Mosa-style app shell UI (top bar, rail, floating cards) + import map / module wiring |
+| `index.html` | Minimal app shell (top bar + single right panel) + import map / module wiring |
 | `scene.js` | ES module: ocean/sky shaders, camera rig, instanced procedural debris fill, GLB hero debris, invasive biomass, ash fallout |
 | `models/*.glb` | Local GLB waste models (bottle, can, cardboard box, barrel, battery), cloned 15–30× and faded in with the index; procedural debris remains as fill and as fallback if a GLB fails to load |
 | `contamination-map.js` | Pure Contamination Index → metrics / visual parameters (shared with tests) |
@@ -39,17 +39,21 @@ python3 -m http.server 8080
 
 All metrics derive continuously from the Contamination Index:
 
-- **Particulate & Metal Load** (µg/L) — coal/kerosene ash, black carbon, battery-mineral runoff.
-- **Nutrient & Process Residue** (mg/L N-eq) — ultra-processed food industry discharge.
-- **Photic Depth** (m) — light penetration; near-zero in the terminal range.
-- **Non-Human Viability** (%) — oxygen stress / toxicity / habitat composite; collapses non-linearly.
-- **Operating Regime** — the premise stage (Early AI Energy Demand → Coal & Kerosene Return → … → Terminal).
-- **Observation Year** (2026–2075) and **System Status** (Nominal → Elevated → Critical → Terminal).
+- **Particles** (µg/L) — coal/kerosene ash, black carbon, battery-mineral runoff.
+- **Nutrients** (mg/L) — ultra-processed food industry discharge.
+- **Light depth** (m) — how far light reaches underwater; near-zero at terminal.
+- **Life health** (%) — oxygen / toxicity / habitat composite; collapses non-linearly.
+- **Stage** — premise band (Rising demand → Coal return → Food & batteries → Heavy load → Systemic decay → Terminal) with a short institutional caption per band.
+- **Year** (2026–2075) and **Status** (OK → Elevated → Critical → Terminal).
 
-## Verify metrics
+Floating waste composition shifts by stage (ordinary bottles/film early → battery, solar scrap, food packaging, medical plastics, then biomass). A survey buoy and exclusion ring mark the monitored sector.
+
+## Verify
 
 ```bash
 node test/metrics-check.js
+node test/ui-shell-check.js
+node test/stage-captions-check.js
 ```
 
 ## Deploy (GitHub Pages)

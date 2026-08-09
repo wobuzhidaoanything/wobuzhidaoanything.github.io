@@ -173,8 +173,11 @@ assert(typeof fmt0.photicDepth === "string", "format photicDepth string");
 assert(typeof fmt0.viability === "string", "format viability string");
 assert(fmt0.status === "NOMINAL", "format status nominal");
 assert(fmt100.status === "TERMINAL", "format status terminal");
-assert(fmt0.regime === "EARLY AI ENERGY DEMAND", "format regime label at 0");
-assert(fmt100.regime === "TERMINAL", "format regime label at 100");
+assert(fmt0.regime === "Rising demand", "format regime label at 0");
+assert(fmt100.regime === "Terminal", "format regime label at 100");
+assert(typeof fmt0.caption === "string" && fmt0.caption.length > 20, "format caption at 0");
+assert(typeof fmt100.caption === "string" && fmt100.caption.indexOf("sink") !== -1,
+  "format caption at 100 mentions sink");
 
 // Clamp out of range
 assert(mapContamination(-5).c === 0, "clamps negative to 0");

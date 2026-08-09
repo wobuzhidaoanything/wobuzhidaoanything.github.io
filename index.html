@@ -3,41 +3,33 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SEA STATE — Contamination Index // Live Feed</title>
+<title>SEA STATE — Contamination Index</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root {
     --bg: #09090b;
-    --surface: rgba(24, 24, 27, 0.78);
-    --surface-solid: #18181b;
-    --surface-elevated: rgba(39, 39, 42, 0.9);
-    --border: rgba(63, 63, 70, 0.65);
-    --border-soft: rgba(63, 63, 70, 0.4);
+    --panel: rgba(18, 18, 20, 0.82);
+    --panel-solid: #121214;
+    --row: rgba(9, 9, 11, 0.4);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-soft: rgba(255, 255, 255, 0.05);
     --text: #e4e4e7;
     --text-dim: #a1a1aa;
     --text-muted: #71717a;
     --text-bright: #fafafa;
     --accent: #8b5cf6;
-    --accent-hover: #a78bfa;
-    --accent-soft: rgba(139, 92, 246, 0.16);
+    --accent-soft: rgba(139, 92, 246, 0.18);
     --ok: #22c55e;
-    --ok-soft: rgba(34, 197, 94, 0.15);
     --warn: #f59e0b;
-    --warn-soft: rgba(245, 158, 11, 0.15);
     --danger: #ef4444;
-    --danger-soft: rgba(239, 68, 68, 0.15);
     --critical: #f97316;
-    --radius: 16px;
-    --radius-sm: 10px;
-    --radius-full: 9999px;
-    --rail-w: 64px;
-    --topbar-h: 56px;
-    --panel-w: 340px;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --topbar-h: 48px;
+    --panel-w: 300px;
     --font: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-    --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-    --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.3);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -50,7 +42,7 @@
     color: var(--text);
     font-family: var(--font);
     font-size: 13px;
-    line-height: 1.45;
+    line-height: 1.4;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -68,37 +60,35 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px 0 12px;
-    background: rgba(9, 9, 11, 0.92);
+    padding: 0 16px;
+    background: rgba(9, 9, 11, 0.9);
     border-bottom: 1px solid var(--border-soft);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 20;
   }
 
   .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
   }
 
   .brand-mark {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 50%, #a78bfa 100%);
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
     display: grid;
     place-items: center;
-    box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35), 0 4px 14px rgba(139, 92, 246, 0.35);
     flex-shrink: 0;
   }
 
-  .brand-mark svg { width: 18px; height: 18px; color: white; }
+  .brand-mark svg { width: 15px; height: 15px; color: white; }
 
-  .brand-text { min-width: 0; }
   .brand-text h1 {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-bright);
     letter-spacing: -0.01em;
@@ -113,54 +103,22 @@
   .topbar-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     flex-shrink: 0;
   }
 
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 12px;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--border);
-    background: var(--surface-solid);
-    color: var(--text-dim);
+  .meta-chip {
     font-size: 12px;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .chip strong {
-    color: var(--text-bright);
-    font-weight: 600;
+    color: var(--text-dim);
     font-variant-numeric: tabular-nums;
   }
-
-  .chip-live {
-    background: var(--accent-soft);
-    border-color: rgba(139, 92, 246, 0.35);
-    color: var(--accent-hover);
-  }
-
-  .chip-live .pulse {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.55);
-    animation: pulse 1.8s ease-out infinite;
-  }
-
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.55); }
-    70% { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+  .meta-chip strong {
+    color: var(--text-bright);
+    font-weight: 600;
   }
 
   .status-line {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -171,20 +129,20 @@
   .status-line.terminal { color: var(--danger); }
 
   #sys-status {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: var(--ok);
-    box-shadow: 0 0 8px var(--ok);
+    box-shadow: 0 0 6px var(--ok);
     flex-shrink: 0;
   }
   #sys-status.warn {
     background: var(--warn);
-    box-shadow: 0 0 8px var(--warn);
+    box-shadow: 0 0 6px var(--warn);
   }
   #sys-status.crit {
     background: var(--danger);
-    box-shadow: 0 0 10px var(--danger);
+    box-shadow: 0 0 8px var(--danger);
     animation: flicker 1.4s ease-in-out infinite;
   }
   @keyframes flicker {
@@ -194,56 +152,19 @@
     70% { opacity: 0.45; }
   }
 
-  .chip-status {
-    gap: 8px;
+  .status-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
   }
 
-  /* ── Body: rail + main ───────────────────────────────────── */
+  /* ── Main / viewport ─────────────────────────────────────── */
   #body {
     flex: 1;
     min-height: 0;
     display: flex;
   }
 
-  #rail {
-    width: var(--rail-w);
-    flex-shrink: 0;
-    background: rgba(9, 9, 11, 0.96);
-    border-right: 1px solid var(--border-soft);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 14px 0 16px;
-    gap: 6px;
-    z-index: 15;
-  }
-
-  .rail-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    display: grid;
-    place-items: center;
-    cursor: default;
-    transition: background 0.15s, color 0.15s;
-  }
-  .rail-btn svg { width: 20px; height: 20px; }
-  .rail-btn.active {
-    background: var(--accent-soft);
-    color: var(--accent-hover);
-    box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.3);
-  }
-  .rail-btn:not(.active):hover {
-    background: rgba(39, 39, 42, 0.8);
-    color: var(--text);
-  }
-  .rail-spacer { flex: 1; }
-  .rail-btn.bottom { margin-top: auto; }
-
-  /* ── Main / viewport ─────────────────────────────────────── */
   #main {
     flex: 1;
     min-width: 0;
@@ -267,24 +188,17 @@
 
   #hud-corner {
     position: absolute;
-    left: 16px;
-    bottom: 16px;
+    left: 14px;
+    bottom: 14px;
     z-index: 5;
     pointer-events: none;
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    border: 1px solid var(--border-soft);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: var(--shadow-sm);
-    color: var(--text-dim);
+    color: var(--text-muted);
     font-size: 11px;
-    line-height: 1.55;
-    max-width: min(420px, calc(100% - 380px));
+    line-height: 1.5;
+    max-width: min(360px, calc(100% - 340px));
+    text-shadow: 0 1px 4px rgba(0,0,0,0.7);
   }
-  #hud-corner .live { color: var(--accent-hover); font-weight: 600; }
-  #hud-corner .hint { color: var(--text-muted); margin-top: 4px; }
+  #hud-corner .hint { opacity: 0.85; }
 
   #error-banner {
     display: none;
@@ -299,71 +213,40 @@
     white-space: pre-wrap;
   }
 
-  /* ── Floating panel stack ────────────────────────────────── */
+  /* ── Right panel (single card) ───────────────────────────── */
   #panel {
     position: absolute;
-    top: 16px;
-    right: 16px;
-    bottom: 16px;
+    top: 14px;
+    right: 14px;
+    bottom: 14px;
     width: var(--panel-w);
     z-index: 10;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
     pointer-events: none;
     overflow: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
 
-  .card {
+  .panel-card {
     pointer-events: auto;
-    background: var(--surface);
+    background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    box-shadow: var(--shadow);
-    padding: 16px 16px 14px;
-  }
-
-  .card-header {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 16px;
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 14px;
+    flex-direction: column;
+    gap: 16px;
   }
 
-  .card-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-bright);
-  }
-  .card-sub {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 2px;
-  }
-
-  .badge {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    padding: 4px 8px;
-    border-radius: var(--radius-full);
-    background: var(--accent-soft);
-    color: var(--accent-hover);
-    border: 1px solid rgba(139, 92, 246, 0.25);
-    white-space: nowrap;
-  }
-
-  .index-row {
+  /* Index control */
+  .index-head {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 10px;
   }
   .index-label {
     font-size: 12px;
@@ -371,7 +254,7 @@
     color: var(--text-dim);
   }
   #ci-value {
-    font-size: 36px;
+    font-size: 32px;
     font-weight: 600;
     color: var(--text-bright);
     font-variant-numeric: tabular-nums;
@@ -385,25 +268,25 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 6px;
-    border-radius: var(--radius-full);
+    height: 5px;
+    border-radius: 999px;
     background: linear-gradient(90deg, #22c55e 0%, #8b5cf6 45%, #f59e0b 72%, #ef4444 100%);
     outline: none;
     cursor: pointer;
   }
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #fff;
     border: 2px solid var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 8px rgba(0,0,0,0.4);
+    box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 6px rgba(0,0,0,0.35);
     cursor: grab;
   }
   input[type="range"]::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #fff;
     border: 2px solid var(--accent);
@@ -413,43 +296,43 @@
   .range-ends {
     display: flex;
     justify-content: space-between;
-    margin-top: 8px;
-    font-size: 11px;
+    margin-top: 6px;
+    font-size: 10px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
 
+  /* Metrics grid */
   .metrics {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 8px;
   }
 
   .metric {
-    background: rgba(9, 9, 11, 0.45);
+    background: var(--row);
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-sm);
-    padding: 12px 12px 10px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    min-height: 78px;
+    gap: 4px;
+    min-height: 64px;
   }
   .metric .name {
     font-size: 11px;
     font-weight: 500;
     color: var(--text-muted);
-    line-height: 1.3;
   }
   .metric .val-row {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 6px;
+    gap: 4px;
     margin-top: auto;
   }
   .metric .val {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--text-bright);
     font-variant-numeric: tabular-nums;
@@ -458,24 +341,25 @@
   .metric .unit {
     font-size: 10px;
     color: var(--text-muted);
-    text-align: right;
     flex-shrink: 0;
   }
 
-  .meta-list {
+  /* Context footer */
+  .context {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
+    padding-top: 2px;
+    border-top: 1px solid var(--border-soft);
   }
-  .meta-row {
+  .ctx-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: baseline;
     gap: 12px;
   }
-  .meta-row .label {
+  .ctx-row .label {
     font-size: 11px;
-    font-weight: 500;
     color: var(--text-muted);
     flex-shrink: 0;
   }
@@ -484,32 +368,28 @@
     font-weight: 500;
     color: var(--text);
     text-align: right;
-    max-width: 200px;
-    line-height: 1.4;
+    line-height: 1.3;
   }
   #year-value-panel {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-bright);
     font-variant-numeric: tabular-nums;
   }
-  .sys-caption {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-soft);
-    font-size: 10px;
-    color: var(--text-muted);
+  #stage-caption {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-dim);
+    margin-top: 4px;
   }
 
   /* ── Responsive ──────────────────────────────────────────── */
   @media (max-width: 900px) {
-    :root { --rail-w: 0px; --panel-w: 100%; }
-
-    #rail { display: none; }
+    :root { --panel-w: 100%; }
 
     #topbar { padding: 0 12px; }
     .brand-text p { display: none; }
-    .chip-year { display: none; }
+    .meta-chip-year { display: none; }
 
     #main {
       display: flex;
@@ -519,7 +399,7 @@
     #viewport {
       position: relative;
       flex: 1;
-      min-height: 48%;
+      min-height: 50%;
     }
 
     #panel {
@@ -528,33 +408,33 @@
       right: auto;
       bottom: auto;
       width: 100%;
-      max-height: 48%;
-      padding: 10px 12px 12px;
-      gap: 10px;
-      background: rgba(9, 9, 11, 0.96);
-      border-top: 1px solid var(--border-soft);
-      border-radius: 0;
+      max-height: 50%;
+      padding: 0;
       pointer-events: auto;
+      background: var(--panel-solid);
+      border-top: 1px solid var(--border);
     }
 
-    .card {
-      box-shadow: none;
+    .panel-card {
+      border: none;
+      border-radius: 0;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
-      background: var(--surface-solid);
+      background: transparent;
+      box-shadow: none;
     }
 
     #hud-corner {
       max-width: calc(100% - 24px);
       font-size: 10px;
-      bottom: 12px;
-      left: 12px;
+      bottom: 10px;
+      left: 10px;
     }
   }
 
   @media (max-width: 480px) {
     .metrics { grid-template-columns: 1fr; }
-    #ci-value { font-size: 28px; }
+    #ci-value { font-size: 26px; }
   }
 </style>
 </head>
@@ -570,131 +450,88 @@
       </div>
       <div class="brand-text">
         <h1>SEA STATE</h1>
-        <p>Contamination Index · Live feed</p>
+        <p>Ocean monitor</p>
       </div>
     </div>
     <div class="topbar-right">
-      <div class="chip chip-live"><span class="pulse"></span> Live feed</div>
-      <div class="chip chip-year">Year <strong id="year-value">2026</strong></div>
-      <div class="chip chip-status">
-        <span id="sys-status" title="System status indicator"></span>
-        <span class="status-line" id="status-line">NOMINAL</span>
+      <span class="meta-chip meta-chip-year">Year <strong id="year-value">2026</strong></span>
+      <div class="status-wrap">
+        <span id="sys-status" title="Status"></span>
+        <span class="status-line" id="status-line">OK</span>
       </div>
     </div>
   </header>
 
   <div id="body">
-    <nav id="rail" aria-label="Primary">
-      <button type="button" class="rail-btn active" title="Live feed" aria-current="page">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-      </button>
-      <button type="button" class="rail-btn" title="Metrics" tabindex="-1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M10 19V9M16 19v-6M22 19V8"/></svg>
-      </button>
-      <button type="button" class="rail-btn" title="Sensors" tabindex="-1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      </button>
-      <button type="button" class="rail-btn" title="Archive" tabindex="-1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
-      </button>
-      <div class="rail-spacer"></div>
-      <button type="button" class="rail-btn bottom" title="Settings" tabindex="-1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      </button>
-    </nav>
-
     <div id="main">
       <div id="viewport">
         <div id="hud-corner">
-          <div><span class="live">●</span> SEA STATE AUTH · FEED-07</div>
-          <div>Sensor grid active · local processing</div>
-          <div class="hint">Drag orbit · R-drag / Shift pan · Wheel zoom · Click water to dispense</div>
+          <div class="hint">Drag orbit · Shift pan · Scroll zoom · Click water to drop waste</div>
         </div>
         <div id="error-banner"></div>
       </div>
 
-      <aside id="panel" aria-label="Contamination monitoring panel">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Contamination Index</div>
-              <div class="card-sub">Primary control · continuous 0–100</div>
+      <aside id="panel" aria-label="Contamination panel">
+        <div class="panel-card">
+          <div>
+            <div class="index-head">
+              <span class="index-label">Contamination</span>
+              <span id="ci-value">0</span>
             </div>
-            <span class="badge">Primary</span>
+            <input
+              type="range"
+              id="ci-slider"
+              min="0"
+              max="100"
+              step="0.1"
+              value="0"
+              aria-label="Contamination"
+            />
+            <div class="range-ends"><span>Clean</span><span>Terminal</span></div>
           </div>
-          <div class="index-row">
-            <span class="index-label">Current reading</span>
-            <span id="ci-value">0</span>
-          </div>
-          <input
-            type="range"
-            id="ci-slider"
-            min="0"
-            max="100"
-            step="0.1"
-            value="0"
-            aria-label="Contamination Index"
-          />
-          <div class="range-ends"><span>0</span><span>100</span></div>
-        </div>
 
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Live metrics</div>
-              <div class="card-sub">Derived from index · continuous</div>
-            </div>
-          </div>
           <div class="metrics" id="metrics">
             <div class="metric">
-              <span class="name">Particulate &amp; Metal Load</span>
+              <span class="name">Particles</span>
               <div class="val-row">
                 <span class="val" id="m-particulate">28.0</span>
                 <span class="unit">µg/L</span>
               </div>
             </div>
             <div class="metric">
-              <span class="name">Nutrient &amp; Process Residue</span>
+              <span class="name">Nutrients</span>
               <div class="val-row">
                 <span class="val" id="m-nutrient">0.40</span>
-                <span class="unit">mg/L N-eq</span>
+                <span class="unit">mg/L</span>
               </div>
             </div>
             <div class="metric">
-              <span class="name">Photic Depth</span>
+              <span class="name">Light depth</span>
               <div class="val-row">
                 <span class="val" id="m-photic">42.0</span>
-                <span class="unit">metres</span>
+                <span class="unit">m</span>
               </div>
             </div>
             <div class="metric">
-              <span class="name">Non-Human Viability</span>
+              <span class="name">Life health</span>
               <div class="val-row">
                 <span class="val" id="m-viability">96.0</span>
                 <span class="unit">%</span>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Operating context</div>
-              <div class="card-sub">Regime band · observation year</div>
+          <div class="context">
+            <div class="ctx-row">
+              <span class="label">Stage</span>
+              <span id="regime-value">Rising demand</span>
             </div>
-          </div>
-          <div class="meta-list">
-            <div class="meta-row">
-              <span class="label">Regime</span>
-              <span id="regime-value">EARLY AI ENERGY DEMAND</span>
-            </div>
-            <div class="meta-row">
-              <span class="label">Observation year</span>
+            <p id="stage-caption">AI energy demand rises; monitoring still reports nominal coastal chemistry.</p>
+            <div class="ctx-row">
+              <span class="label">Year</span>
               <span id="year-value-panel">2026</span>
             </div>
           </div>
-          <div class="sys-caption">SSA-MON v4.7 · Sea State Authority</div>
         </div>
       </aside>
     </div>

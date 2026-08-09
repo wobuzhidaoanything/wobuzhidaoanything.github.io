@@ -41,6 +41,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   var elYear = document.getElementById("year-value");
   var elYearPanel = document.getElementById("year-value-panel");
   var elRegime = document.getElementById("regime-value");
+  var elCaption = document.getElementById("stage-caption");
   var elStatus = document.getElementById("status-line");
   var elSys = document.getElementById("sys-status");
 
@@ -126,6 +127,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   var debrisSystems = [];
   var ashParticles = null, ashGeo = null, ashPositions = null, ashVel = null;
   var dumpGroup, dumpDebris = [];
+  var stationGroup = null;
+  var stationBaseY = 0;
 
   function initThree() {
     renderer = new THREE.WebGLRenderer({
@@ -370,6 +373,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       "uniform float uMurk;",
       "uniform float uOil;",
       "uniform float uClarity;",
+      "uniform float uScum;",
       "uniform float uFogDensity;",
       "uniform vec3 uWaterColor;",
       "uniform vec3 uDeepColor;",
@@ -404,7 +408,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       "  float n0 = fbm2(np);",
       "  float nx = fbm2(np + vec2(0.28, 0.0));",
       "  float nz = fbm2(np + vec2(0.0, 0.28));",
-      "  vec3 Nd = normalize(N + vec3(nx - n0, 0.0, nz - n0) * (0.2 + 0.8 * uClarity) * 0.7);",
+      // Dirtier water loses fine sparkle; scum flattens micro-normals further
+      "  float micro = (0.15 + 0.85 * uClarity) * (1.0 - uScum * 0.7);",
+      "  vec3 Nd = normalize(N + vec3(nx - n0, 0.0, nz - n0) * micro * 0.7);",
       "",
       "  vec3 V = normalize(cameraPosition - vWorldPos);",
       "  float ndv = max(dot(Nd, V), 0.0);",
@@ -412,18 +418,28 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       "",
       // Body of water: deep at grazing angles, surface colour head-on
       "  vec3 base = mix(uDeepColor, uWaterColor, 0.3 + 0.7 * ndv);",
-      "  vec3 col = mix(base, uSkyReflect, fres * (0.12 + 0.5 * uClarity));",
+      "  vec3 col = mix(base, uSkyReflect, fres * (0.12 + 0.5 * uClarity) * (1.0 - uScum * 0.55));",
       "",
-      // Sun: broad sheen + tight glitter path
+      // Sun: broad sheen + tight glitter path — dies as murk/scum rise
       "  vec3 H = normalize(V + uSunDir);",
       "  float ndh = max(dot(Nd, H), 0.0);",
-      "  float glitter = pow(ndh, 260.0) * (1.6 * uClarity + 0.25);",
-      "  float sheen = pow(ndh, 22.0) * 0.1;",
+      "  float sparkle = max(0.0, 1.0 - uMurk * 0.85 - uScum * 0.5);",
+      "  float glitter = pow(ndh, 260.0) * (1.6 * uClarity + 0.25) * sparkle;",
+      "  float sheen = pow(ndh, 22.0) * 0.1 * sparkle;",
       "  col += uSunColor * (glitter + sheen);",
       "",
       // Sparse whitecap speckle on crests while water is still alive
       "  float cap = smoothstep(0.5, 0.85, vCrest) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 2.6 + uTime * 0.35));",
-      "  col += vec3(0.2, 0.22, 0.22) * cap * 0.18 * uClarity;",
+      "  col += vec3(0.2, 0.22, 0.22) * cap * 0.18 * uClarity * (1.0 - uScum);",
+      "",
+      // Surface scum / algal foam mats — blotchy olive-brown film at high load
+      "  if (uScum > 0.004) {",
+      "    float sc = fbm2(vWorldPos.xz * 0.09 + uTime * 0.015);",
+      "    float sc2 = fbm2(vWorldPos.xz * 0.28 - uTime * 0.02);",
+      "    float scumPatch = smoothstep(0.42, 0.78, sc * 0.65 + sc2 * 0.35 + uScum * 0.25);",
+      "    vec3 scumCol = mix(vec3(0.1, 0.12, 0.05), vec3(0.16, 0.14, 0.07), sc2);",
+      "    col = mix(col, scumCol, uScum * scumPatch * 0.72);",
+      "  }",
       "",
       // Chemical / oil thin-film iridescence in drifting patches (kept dark,
       // oily — a greasy rainbow, not a light show)
@@ -439,8 +455,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       "",
       // Murk: desaturate and darken, keep a readable floor
       "  float lum = dot(col, vec3(0.299, 0.587, 0.114));",
-      "  col = mix(col, vec3(lum), uMurk * 0.35);",
-      "  col *= mix(1.0, 0.6, uMurk);",
+      "  col = mix(col, vec3(lum), uMurk * 0.42);",
+      "  col *= mix(1.0, 0.52, uMurk);",
       "  col = max(col, vec3(0.006, 0.007, 0.005));",
       "",
       // Manual exp2 fog (matches scene fog for standard materials)
@@ -461,6 +477,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         uMurk: { value: 0 },
         uOil: { value: 0 },
         uClarity: { value: 1 },
+        uScum: { value: 0 },
         uFogDensity: { value: 0.012 },
         uWaterColor: { value: new THREE.Color(0.045, 0.27, 0.36) },
         uDeepColor: { value: new THREE.Color(0.02, 0.1, 0.15) },
@@ -715,6 +732,24 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     return g;
   }
 
+  /** Thin solar panel / frame scrap — dark glass rectangle. */
+  function makeSolarGeo() {
+    var g = new THREE.BoxGeometry(0.72, 0.03, 0.42, 1, 1, 1);
+    return jitterGeometry(g, 0.006);
+  }
+
+  /** Food-process tub / nutrient tote — soft industrial plastic. */
+  function makeFoodpackGeo() {
+    var g = new THREE.BoxGeometry(0.28, 0.16, 0.22, 1, 1, 1);
+    return jitterGeometry(g, 0.01);
+  }
+
+  /** Abstract medical / health plastic — flat blister-card (no gore). */
+  function makeMedicalGeo() {
+    var g = new THREE.BoxGeometry(0.26, 0.035, 0.16, 1, 1, 1);
+    return jitterGeometry(g, 0.008);
+  }
+
   var PALETTES = {
     bottle: [
       [0.82, 0.85, 0.83], [0.55, 0.7, 0.78], [0.45, 0.62, 0.45],
@@ -740,6 +775,18 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       [0.18, 0.19, 0.22], [0.28, 0.29, 0.32], [0.35, 0.25, 0.18],
       [0.55, 0.57, 0.53], [0.22, 0.24, 0.26],
     ],
+    solar: [
+      [0.08, 0.12, 0.22], [0.1, 0.14, 0.28], [0.15, 0.18, 0.24],
+      [0.25, 0.28, 0.32], [0.12, 0.2, 0.35],
+    ],
+    foodpack: [
+      [0.85, 0.82, 0.72], [0.7, 0.78, 0.65], [0.9, 0.88, 0.82],
+      [0.55, 0.6, 0.5], [0.75, 0.7, 0.55],
+    ],
+    medical: [
+      [0.9, 0.92, 0.94], [0.75, 0.85, 0.9], [0.95, 0.9, 0.88],
+      [0.7, 0.78, 0.82], [0.85, 0.88, 0.9],
+    ],
     shard: [
       [0.3, 0.31, 0.34], [0.4, 0.3, 0.22], [0.5, 0.52, 0.5],
       [0.2, 0.21, 0.24],
@@ -757,35 +804,51 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     ],
   };
 
+  // appear [t0, t1] = contamination fraction (c/100) windows so composition
+  // shifts by stage: early ordinary waste → industrial/battery/solar/food →
+  // medical plastics + biomass at high load / terminal.
   var TYPE_DEFS = [
-    { key: "bottle", make: makeBottleGeo, count: 130, appear: [0.05, 0.55],
+    // Early ordinary consumer waste
+    { key: "bottle", make: makeBottleGeo, count: 110, appear: [0.03, 0.48],
       float: 0.55, lift: 0.1, scale: [0.8, 1.5], tilt: 0.6, spin: 0.1,
       mat: { transparent: true, opacity: 0.72, roughness: 0.28, metalness: 0.02, envMapIntensity: 1.0 } },
-    { key: "container", make: makeContainerGeo, count: 60, appear: [0.14, 0.6],
-      float: 0.7, lift: 0.14, scale: [0.8, 1.3], tilt: 0.5, spin: 0.08,
-      mat: { roughness: 0.5, metalness: 0.05, envMapIntensity: 0.7 } },
-    { key: "film", make: makeFilmGeo, count: 95, appear: [0.17, 0.65],
+    { key: "film", make: makeFilmGeo, count: 80, appear: [0.06, 0.5],
       float: 0.85, lift: 0.03, scale: [0.9, 1.8], tilt: 0.25, spin: 0.25,
       mat: { transparent: true, opacity: 0.45, roughness: 0.35, metalness: 0.0, side: THREE.DoubleSide, envMapIntensity: 0.6 } },
-    { key: "drum", make: makeDrumGeo, count: 44, appear: [0.28, 0.8],
+    { key: "container", make: makeContainerGeo, count: 48, appear: [0.12, 0.58],
+      float: 0.7, lift: 0.14, scale: [0.8, 1.3], tilt: 0.5, spin: 0.08,
+      mat: { roughness: 0.5, metalness: 0.05, envMapIntensity: 0.7 } },
+    // Coal return / industrial
+    { key: "drum", make: makeDrumGeo, count: 48, appear: [0.16, 0.72],
       float: 0.45, lift: 0.16, scale: [0.9, 1.25], tilt: 1.2, spin: 0.05,
       mat: { roughness: 0.55, metalness: 0.6, envMapIntensity: 0.9 } },
-    { key: "net", make: makeNetGeo, count: 40, appear: [0.34, 0.85],
+    { key: "net", make: makeNetGeo, count: 36, appear: [0.22, 0.8],
       float: 0.8, lift: 0.05, scale: [1.0, 2.2], tilt: 0.4, spin: 0.12,
       mat: { roughness: 0.95, metalness: 0.0, envMapIntensity: 0.3 } },
-    { key: "casing", make: makeCasingGeo, count: 70, appear: [0.32, 0.85],
+    // Food & batteries / solar (mid-band premise waste)
+    { key: "casing", make: makeCasingGeo, count: 78, appear: [0.3, 0.78],
       float: 0.6, lift: 0.05, scale: [0.8, 1.5], tilt: 0.8, spin: 0.15,
       mat: { roughness: 0.38, metalness: 0.85, envMapIntensity: 1.1 } },
-    { key: "shard", make: makeShardGeo, count: 85, appear: [0.32, 0.85],
+    { key: "solar", make: makeSolarGeo, count: 55, appear: [0.28, 0.76],
+      float: 0.5, lift: 0.02, scale: [0.85, 1.6], tilt: 0.35, spin: 0.08,
+      mat: { roughness: 0.22, metalness: 0.55, envMapIntensity: 1.15 } },
+    { key: "foodpack", make: makeFoodpackGeo, count: 70, appear: [0.3, 0.8],
+      float: 0.75, lift: 0.06, scale: [0.9, 1.7], tilt: 0.55, spin: 0.12,
+      mat: { roughness: 0.55, metalness: 0.05, envMapIntensity: 0.55 } },
+    { key: "shard", make: makeShardGeo, count: 70, appear: [0.34, 0.85],
       float: 0.7, lift: 0.02, scale: [0.8, 1.8], tilt: 0.9, spin: 0.3,
       mat: { roughness: 0.3, metalness: 0.9, envMapIntensity: 1.1, flatShading: true } },
-    { key: "sludge", make: makeSludgeGeo, count: 70, appear: [0.4, 0.92],
+    // Heavy load+: medical plastics (abstract), sludge, biomass
+    { key: "medical", make: makeMedicalGeo, count: 65, appear: [0.48, 0.95],
+      float: 0.8, lift: 0.03, scale: [0.9, 1.8], tilt: 0.4, spin: 0.18,
+      mat: { transparent: true, opacity: 0.78, roughness: 0.25, metalness: 0.05, envMapIntensity: 0.9 } },
+    { key: "sludge", make: makeSludgeGeo, count: 65, appear: [0.4, 0.92],
       float: 0.9, lift: 0.0, scale: [1.2, 3.0], tilt: 0.4, spin: 0.06,
       mat: { roughness: 0.42, metalness: 0.05, envMapIntensity: 0.35 } },
-    { key: "gel", make: makeGelGeo, count: 46, appear: [0.55, 1.0],
+    { key: "gel", make: makeGelGeo, count: 50, appear: [0.55, 1.0],
       float: 0.75, lift: 0.05, scale: [0.8, 2.4], tilt: 0.3, spin: 0.05, pulse: true,
       mat: { transparent: true, opacity: 0.55, roughness: 0.12, metalness: 0.0, envMapIntensity: 0.7, emissive: 0x0a1406 } },
-    { key: "mat", make: makeMatGeo, count: 22, appear: [0.6, 1.0],
+    { key: "mat", make: makeMatGeo, count: 26, appear: [0.58, 1.0],
       float: 0.35, lift: 0.03, scale: [1.5, 4.2], tilt: 0.05, spin: 0.02,
       mat: { transparent: true, opacity: 0.88, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide, envMapIntensity: 0.2 } },
   ];
@@ -849,20 +912,21 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   }
 
   function buildAsh() {
-    var N = 350;
+    // Denser field so ash fallout is readable once coal return begins
+    var N = 720;
     ashPositions = new Float32Array(N * 3);
     ashVel = new Float32Array(N);
     for (var i = 0; i < N; i++) {
-      ashPositions[i * 3] = (Math.random() - 0.5) * 70;
-      ashPositions[i * 3 + 1] = Math.random() * 20 + 1;
-      ashPositions[i * 3 + 2] = (Math.random() - 0.5) * 70 - 5;
-      ashVel[i] = 0.4 + Math.random() * 1.3;
+      ashPositions[i * 3] = (Math.random() - 0.5) * 90;
+      ashPositions[i * 3 + 1] = Math.random() * 24 + 1;
+      ashPositions[i * 3 + 2] = (Math.random() - 0.5) * 90 - 5;
+      ashVel[i] = 0.35 + Math.random() * 1.5;
     }
     ashGeo = new THREE.BufferGeometry();
     ashGeo.setAttribute("position", new THREE.BufferAttribute(ashPositions, 3));
     var mat = new THREE.PointsMaterial({
-      color: 0x7a7268,
-      size: 0.09,
+      color: 0x8a8278,
+      size: 0.13,
       transparent: true,
       opacity: 0,
       depthWrite: false,
@@ -976,11 +1040,100 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     return { def: def, group: group, clones: clones, mats: sysMats, baseScale: baseScale };
   }
 
+  /**
+   * Place-making: SSA survey buoy + exclusion ring so the operator is
+   * monitoring a managed sector, not free-camera over empty ocean.
+   */
+  function buildStation() {
+    stationGroup = new THREE.Group();
+    stationGroup.name = "ssa-station";
+    stationGroup.position.set(0, 0, -6);
+
+    var steel = new THREE.MeshStandardMaterial({
+      color: 0x6a7278,
+      roughness: 0.55,
+      metalness: 0.65,
+      envMapIntensity: 0.85,
+    });
+    var accent = new THREE.MeshStandardMaterial({
+      color: 0xc45c1a,
+      roughness: 0.45,
+      metalness: 0.35,
+      envMapIntensity: 0.7,
+    });
+    var white = new THREE.MeshStandardMaterial({
+      color: 0xe8eaec,
+      roughness: 0.4,
+      metalness: 0.2,
+    });
+    var dark = new THREE.MeshStandardMaterial({
+      color: 0x1a1e22,
+      roughness: 0.7,
+      metalness: 0.3,
+    });
+
+    // Float hull
+    var hull = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.05, 0.55, 16), steel);
+    hull.position.y = 0.15;
+    stationGroup.add(hull);
+
+    // Mast
+    var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.2, 8), steel);
+    mast.position.y = 1.85;
+    stationGroup.add(mast);
+
+    // Sensor cage / platform deck
+    var deck = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.9), dark);
+    deck.position.y = 0.55;
+    stationGroup.add(deck);
+
+    // Marker light housing
+    var lamp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), accent);
+    lamp.position.y = 3.5;
+    stationGroup.add(lamp);
+
+    // Small instrument box
+    var box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.28, 0.28), white);
+    box.position.set(0.25, 0.78, 0.1);
+    stationGroup.add(box);
+
+    // Exclusion ring (managed sacrifice-zone marker) on the water plane
+    var ring = new THREE.Mesh(
+      new THREE.TorusGeometry(7.5, 0.06, 8, 48),
+      new THREE.MeshStandardMaterial({
+        color: 0xc45c1a,
+        roughness: 0.65,
+        metalness: 0.4,
+        transparent: true,
+        opacity: 0.75,
+        envMapIntensity: 0.5,
+      })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.04;
+    stationGroup.add(ring);
+
+    // Four perimeter marker posts
+    for (var i = 0; i < 4; i++) {
+      var ang = (i / 4) * Math.PI * 2 + 0.4;
+      var post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.1, 6), accent);
+      post.position.set(Math.cos(ang) * 7.5, 0.55, Math.sin(ang) * 7.5);
+      stationGroup.add(post);
+      var cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), white);
+      cap.position.set(Math.cos(ang) * 7.5, 1.15, Math.sin(ang) * 7.5);
+      stationGroup.add(cap);
+    }
+
+    stationBaseY = 0;
+    scene.add(stationGroup);
+  }
+
   function buildScene() {
     buildSky();
     buildOcean();
     buildLights();
     buildEnv();
+    buildStation();
     buildDebris();
     buildGlbDebris();
     buildAsh();
@@ -1073,8 +1226,11 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     elYear.textContent = fmt.year;
     if (elYearPanel) elYearPanel.textContent = fmt.year;
     elRegime.textContent = fmt.regime;
+    if (elCaption) elCaption.textContent = fmt.caption || m.regimeCaption || "";
 
-    elStatus.textContent = m.status;
+    // Short plain status labels (map keeps NOMINAL/… for tests)
+    var statusLabel = m.status === "NOMINAL" ? "OK" : m.status;
+    elStatus.textContent = statusLabel;
     elStatus.className = "status-line";
     if (m.status === "ELEVATED") elStatus.classList.add("elevated");
     else if (m.status === "CRITICAL") elStatus.classList.add("critical");
@@ -1099,6 +1255,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     oceanMaterial.uniforms.uMurk.value = 1 - m.waterClarity;
     oceanMaterial.uniforms.uOil.value = m.oilSheen;
     oceanMaterial.uniforms.uClarity.value = m.waterClarity;
+    oceanMaterial.uniforms.uScum.value = m.matCoverage;
     oceanMaterial.uniforms.uWaveAmp.value = m.waveAmp;
     oceanMaterial.uniforms.uSunColor.value.copy(sun);
     currentWaveAmp = m.waveAmp;
@@ -1121,17 +1278,23 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     hemiLight.groundColor.copy(deep);
     hemiLight.intensity = 0.35 + m.waterClarity * 0.3;
 
-    // Debris visibility per waste stream (staggered by appear window)
+    // Debris visibility per waste stream (staggered by appear window + density)
     for (var d = 0; d < debrisSystems.length; d++) {
       var sys = debrisSystems[d];
       var a = sys.def.appear;
-      var vis = Math.floor(sys.def.count * smoothstep(a[0], a[1], m.t));
+      var band = smoothstep(a[0], a[1], m.t);
+      // Overall density still ramps; band decides *which* families dominate
+      var dens = lerp(0.55, 1, m.debrisDensity);
+      var vis = Math.floor(sys.def.count * band * dens);
       sys.mesh.count = Math.max(0, Math.min(sys.def.count, vis));
     }
 
-    // Ash fallout
-    ashParticles.material.opacity = m.ashFallout * 0.6;
+    // Ash fallout — stronger dirty atmosphere at mid/high CI
+    ashParticles.material.opacity = m.ashFallout * 0.9;
+    ashParticles.material.size = 0.1 + m.ashFallout * 0.14;
     ashParticles.visible = m.ashFallout > 0.02;
+    // Exposure pulls down with sun intensity so terminal reads dimmer
+    renderer.toneMappingExposure = lerp(1.12, 0.72, 1 - m.sunIntensity);
 
     // Environment reflections: regenerate only when the coarse band changes
     var band = Math.floor(m.c / 10);
@@ -1149,6 +1312,15 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
     oceanMaterial.uniforms.uTime.value = t;
     controls.update(dt, t);
+
+    // Survey buoy rides the swell (place-making stays alive)
+    if (stationGroup) {
+      var sx = stationGroup.position.x;
+      var sz = stationGroup.position.z;
+      stationGroup.position.y = stationBaseY + waveHeight(sx, sz, t) * 0.45;
+      stationGroup.rotation.z = Math.sin(t * 0.35) * 0.03;
+      stationGroup.rotation.x = Math.cos(t * 0.28) * 0.025;
+    }
 
     // Debris rides the same wave model the shader draws
     for (var d = 0; d < debrisSystems.length; d++) {
@@ -1227,9 +1399,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         ashPositions[p * 3 + 1] -= ashVel[p] * dt * 0.9;
         ashPositions[p * 3] += Math.sin(t + p) * dt * 0.15;
         if (ashPositions[p * 3 + 1] < 0.2) {
-          ashPositions[p * 3 + 1] = 14 + Math.random() * 8;
-          ashPositions[p * 3] = (Math.random() - 0.5) * 70;
-          ashPositions[p * 3 + 2] = (Math.random() - 0.5) * 70 - 5;
+          ashPositions[p * 3 + 1] = 16 + Math.random() * 10;
+          ashPositions[p * 3] = (Math.random() - 0.5) * 90;
+          ashPositions[p * 3 + 2] = (Math.random() - 0.5) * 90 - 5;
         }
       }
       ashGeo.attributes.position.needsUpdate = true;
