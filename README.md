@@ -1,2 +1,2 @@
 # wobuzhidaoanything.github.io
-Personal GitHub Pages site – Worldbuilding final project (pollution sea simulator)
+Personal GitHub Pages site
