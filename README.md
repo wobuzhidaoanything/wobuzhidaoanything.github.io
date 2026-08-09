@@ -19,7 +19,7 @@ python3 -m http.server 8080
 
 | File | Role |
 |------|------|
-| `index.html` | Dashboard UI (panel, metrics, status) + import map / module wiring |
+| `index.html` | Mosa-style app shell UI (top bar, rail, floating cards) + import map / module wiring |
 | `scene.js` | ES module: ocean/sky shaders, camera rig, instanced procedural debris fill, GLB hero debris, invasive biomass, ash fallout |
 | `models/*.glb` | Local GLB waste models (bottle, can, cardboard box, barrel, battery), cloned 15–30× and faded in with the index; procedural debris remains as fill and as fallback if a GLB fails to load |
 | `contamination-map.js` | Pure Contamination Index → metrics / visual parameters (shared with tests) |

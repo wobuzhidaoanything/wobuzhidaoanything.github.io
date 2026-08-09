@@ -39,6 +39,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   var elPhot = document.getElementById("m-photic");
   var elViab = document.getElementById("m-viability");
   var elYear = document.getElementById("year-value");
+  var elYearPanel = document.getElementById("year-value-panel");
   var elRegime = document.getElementById("regime-value");
   var elStatus = document.getElementById("status-line");
   var elSys = document.getElementById("sys-status");
@@ -1070,6 +1071,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     elPhot.textContent = fmt.photicDepth;
     elViab.textContent = fmt.viability;
     elYear.textContent = fmt.year;
+    if (elYearPanel) elYearPanel.textContent = fmt.year;
     elRegime.textContent = fmt.regime;
 
     elStatus.textContent = m.status;
