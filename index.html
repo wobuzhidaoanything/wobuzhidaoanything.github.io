@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SEA STATE — Contamination Index // Live Feed</title>
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+  SEA STATE / CONTAMINATION INDEX
+  ───────────────────────────────────────────────────────────────────────────
+  Speculative design instrument for a university Worldbuilding final project.
+
+  World premise (2040–2075):
+  After decades of industrial externalisation, the ocean was formally
+  redesignated a managed waste sink. Coastal monitoring stations were
+  nationalised into a single bureaucratic apparatus — the Sea State
+  Authority — which reports contamination not as ecology but as
+  operational capacity. This dashboard is one of those instruments:
+  a cold, continuous readout of how much of the sea has been converted
+  into storage. The Contamination Index is not a warning; it is a
+  logistics parameter. Habitability for non-human life appears only as
+  a secondary metric. The water still moves. The numbers still update.
+
+  Technical notes:
+  - Three.js r160+ via CDN; all geometry/materials procedural in-code.
+  - No external images, models, or download textures.
+  - Offline-capable once CDN scripts have loaded.
+  - Primary control: Contamination Index slider (0–100).
+  - Pure mapping lives in contamination-map.js (shared with tests).
+  ═══════════════════════════════════════════════════════════════════════════
+-->
+<style>
+  :root {
+    --bg: #0a0e12;
+    --panel: rgba(12, 18, 24, 0.82);
+    --panel-border: rgba(80, 110, 120, 0.35);
+    --text: #9aadb8;
+    --text-dim: #5a6a74;
+    --text-bright: #c8d4dc;
+    --teal: #3a7a7a;
+    --teal-dim: #2a5555;
+    --amber: #8a6a3a;
+    --danger: #8a3a3a;
+    --danger-bright: #a84848;
+    --mono: "IBM Plex Mono", "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+    --panel-w: 300px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  #app {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+  }
+
+  #viewport {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+    background: #060a0e;
+  }
+
+  #viewport canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* Optional subtle scanline overlay — very light, GPU-cheap */
+  #scanlines {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.04) 2px,
+      rgba(0, 0, 0, 0.04) 3px
+    );
+    z-index: 2;
+    mix-blend-mode: multiply;
+  }
+
+  #hud-corner {
+    position: absolute;
+    left: 16px;
+    bottom: 14px;
+    z-index: 3;
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 1.5;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  #hud-corner .live {
+    color: var(--teal);
+  }
+
+  /* Right monitoring panel */
+  #panel {
+    width: var(--panel-w);
+    flex-shrink: 0;
+    height: 100%;
+    background: var(--panel);
+    border-left: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    flex-direction: column;
+    padding: 22px 18px 16px;
+    z-index: 4;
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45);
+  }
+
+  #panel header {
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+  }
+
+  #panel h1 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-bright);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  #panel .subtitle {
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+  }
+
+  .section-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* Contamination control */
+  .control-block {
+    margin-bottom: 22px;
+  }
+
+  .index-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .index-label {
+    font-size: 10px;
+    color: var(--text);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  #ci-value {
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--text-bright);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  #ci-value.danger { color: var(--danger-bright); }
+  #ci-value.warn { color: var(--amber); }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--teal-dim), var(--amber), var(--danger));
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-bright);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--panel-border);
+    cursor: grab;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-bright);
+    border: 2px solid var(--bg);
+    cursor: grab;
+  }
+
+  .range-ends {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 9px;
+    color: var(--text-dim);
+  }
+
+  /* Metrics */
+  .metrics {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border-top: 1px solid var(--panel-border);
+    padding-top: 16px;
+    overflow: auto;
+  }
+
+  .metric {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    align-items: baseline;
+  }
+
+  .metric .name {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    grid-column: 1 / -1;
+  }
+
+  .metric .val {
+    font-size: 16px;
+    color: var(--text-bright);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .metric .unit {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  /* Year + status footer */
+  .panel-footer {
+    border-top: 1px solid var(--panel-border);
+    padding-top: 14px;
+    margin-top: 12px;
+  }
+
+  .year-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+  }
+
+  .year-row .label {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  #year-value {
+    font-size: 18px;
+    color: var(--text-bright);
+    letter-spacing: 0.08em;
+  }
+
+  .status-block {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .status-line {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--teal);
+  }
+
+  .status-line.elevated { color: var(--amber); }
+  .status-line.critical { color: #a86848; }
+  .status-line.terminal { color: var(--danger-bright); }
+
+  #sys-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 6px var(--teal);
+    flex-shrink: 0;
+  }
+
+  #sys-status.warn {
+    background: var(--amber);
+    box-shadow: 0 0 6px var(--amber);
+  }
+
+  #sys-status.crit {
+    background: var(--danger-bright);
+    box-shadow: 0 0 8px var(--danger-bright);
+    animation: flicker 1.4s ease-in-out infinite;
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    40% { opacity: 0.35; }
+    55% { opacity: 0.9; }
+    70% { opacity: 0.45; }
+  }
+
+  .sys-caption {
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-top: 10px;
+    text-transform: uppercase;
+  }
+
+  /* Fallback if WebGL fails */
+  #error-banner {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    background: var(--bg);
+    color: var(--danger-bright);
+    padding: 40px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    #app { flex-direction: column; }
+    #panel {
+      width: 100%;
+      height: auto;
+      max-height: 42%;
+      border-left: none;
+      border-top: 1px solid var(--panel-border);
+    }
+    #viewport { min-height: 58%; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="viewport">
+    <div id="scanlines"></div>
+    <div id="hud-corner">
+      <div><span class="live">●</span> SEA STATE AUTH // FEED-07</div>
+      <div>SENSOR GRID: ACTIVE · PROC: LOCAL</div>
+    </div>
+    <div id="error-banner"></div>
+  </div>
+
+  <aside id="panel" aria-label="Contamination monitoring panel">
+    <header>
+      <h1>SEA STATE</h1>
+      <div class="subtitle">CONTAMINATION INDEX // LIVE FEED</div>
+    </header>
+
+    <div class="control-block">
+      <div class="section-label">Primary Control</div>
+      <div class="index-row">
+        <span class="index-label">Contamination Index</span>
+        <span id="ci-value">0</span>
+      </div>
+      <input
+        type="range"
+        id="ci-slider"
+        min="0"
+        max="100"
+        step="0.1"
+        value="0"
+        aria-label="Contamination Index"
+      />
+      <div class="range-ends"><span>0</span><span>100</span></div>
+    </div>
+
+    <div class="metrics" id="metrics">
+      <div class="section-label">Live Metrics</div>
+
+      <div class="metric">
+        <span class="name">Microplastic Density</span>
+        <span class="val" id="m-micro">12.0</span>
+        <span class="unit">particles/m³</span>
+      </div>
+
+      <div class="metric">
+        <span class="name">Light Penetration</span>
+        <span class="val" id="m-light">38.0</span>
+        <span class="unit">metres</span>
+      </div>
+
+      <div class="metric">
+        <span class="name">Non-Human Habitability</span>
+        <span class="val" id="m-habit">94.0</span>
+        <span class="unit">%</span>
+      </div>
+
+      <div class="metric">
+        <span class="name">Aura of Waste</span>
+        <span class="val" id="m-aura">0.08</span>
+        <span class="unit">index</span>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <div class="year-row">
+        <span class="label">Observation Year</span>
+        <span id="year-value">2026</span>
+      </div>
+      <div class="status-block">
+        <div>
+          <div class="section-label" style="margin-bottom:4px">System Status</div>
+          <div class="status-line" id="status-line">NOMINAL</div>
+        </div>
+        <div id="sys-status" title="System status indicator"></div>
+      </div>
+      <div class="sys-caption">SSA-MON v4.7 · CLASSIFIED FEED</div>
+    </div>
+  </aside>
+</div>
+
+<!-- Pure contamination mapping (browser global ContaminationMap) -->
+<script src="contamination-map.js"></script>
+
+<!-- Three.js r160 via CDN (UMD build for file:// and simple GitHub Pages) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<script>
+/**
+ * SEA STATE dashboard — scene, UI wiring, debris simulation.
+ * Depends on: THREE (global), ContaminationMap (global).
+ */
+(function () {
+  "use strict";
+
+  // ── Guard: missing deps ──────────────────────────────────────────────
+  if (typeof THREE === "undefined") {
+    showError("Three.js failed to load. Check network/CDN, then reopen offline once cached.");
+    return;
+  }
+  if (typeof ContaminationMap === "undefined") {
+    showError("contamination-map.js failed to load. Serve this folder over HTTP or open with both files present.");
+    return;
+  }
+
+  var mapContamination = ContaminationMap.mapContamination;
+  var formatMetrics = ContaminationMap.formatMetrics;
+
+  // ── DOM refs ─────────────────────────────────────────────────────────
+  var viewport = document.getElementById("viewport");
+  var slider = document.getElementById("ci-slider");
+  var ciValue = document.getElementById("ci-value");
+  var elMicro = document.getElementById("m-micro");
+  var elLight = document.getElementById("m-light");
+  var elHabit = document.getElementById("m-habit");
+  var elAura = document.getElementById("m-aura");
+  var elYear = document.getElementById("year-value");
+  var elStatus = document.getElementById("status-line");
+  var elSys = document.getElementById("sys-status");
+
+  // Shared state
+  var contamination = 0;
+  var state = mapContamination(0);
+  var clock = new THREE.Clock();
+  var dumpDebris = []; // extra pieces from click-to-dump
+
+  // ── Renderer / scene / camera ────────────────────────────────────────
+  var renderer, scene, camera, ocean, oceanMaterial, skyMesh, fog;
+  var debrisMeshes = []; // { mesh, baseY, phase, speed, type }
+  var ashParticles = null;
+  var ashGeo = null;
+  var ashPositions = null;
+  var ashVel = null;
+  var MAX_DEBRIS_INSTANCES = 420;
+  var dumpGroup;
+
+  try {
+    initThree();
+    buildScene();
+    bindUI();
+    applyState(state, true);
+    animate();
+  } catch (err) {
+    console.error(err);
+    showError("WebGL / scene init failed: " + (err && err.message ? err.message : String(err)));
+  }
+
+  function showError(msg) {
+    var b = document.getElementById("error-banner");
+    if (b) {
+      b.style.display = "block";
+      b.textContent = "SEA STATE — INSTRUMENT FAULT\n\n" + msg;
+    }
+  }
+
+  function initThree() {
+    renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance",
+      alpha: false,
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+    renderer.setClearColor(0x0a1218, 1);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    viewport.insertBefore(renderer.domElement, viewport.firstChild);
+
+    scene = new THREE.Scene();
+
+    camera = new THREE.PerspectiveCamera(
+      48,
+      viewport.clientWidth / Math.max(viewport.clientHeight, 1),
+      0.1,
+      800
+    );
+    // Slightly elevated, angled look-out over water
+    camera.position.set(0, 6.5, 14);
+    camera.lookAt(0, 0.5, -8);
+
+    fog = new THREE.FogExp2(0x738a96, 0.018);
+    scene.fog = fog;
+
+    window.addEventListener("resize", onResize);
+  }
+
+  function onResize() {
+    var w = viewport.clientWidth;
+    var h = Math.max(viewport.clientHeight, 1);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+
+  // ── Ocean shader (procedural water + oil slick) ──────────────────────
+  function buildOcean() {
+    var vertexShader = [
+      "uniform float uTime;",
+      "uniform float uMurk;",
+      "varying vec2 vUv;",
+      "varying float vWave;",
+      "varying vec3 vWorldPos;",
+      "void main() {",
+      "  vUv = uv;",
+      "  vec3 pos = position;",
+      "  float w1 = sin(pos.x * 0.18 + uTime * 0.7) * cos(pos.y * 0.14 + uTime * 0.55);",
+      "  float w2 = sin(pos.x * 0.42 - uTime * 1.1 + pos.y * 0.31) * 0.35;",
+      "  float w3 = sin(pos.x * 0.08 + pos.y * 0.09 + uTime * 0.35) * 0.8;",
+      "  float amp = mix(0.55, 0.22, uMurk);",
+      "  float h = (w1 + w2 + w3) * amp;",
+      "  pos.z += h;",
+      "  vWave = h;",
+      "  vec4 world = modelMatrix * vec4(pos, 1.0);",
+      "  vWorldPos = world.xyz;",
+      "  gl_Position = projectionMatrix * viewMatrix * world;",
+      "}",
+    ].join("\n");
+
+    var fragmentShader = [
+      "uniform float uTime;",
+      "uniform float uMurk;",
+      "uniform float uOil;",
+      "uniform float uClarity;",
+      "uniform vec3 uWaterColor;",
+      "uniform vec3 uSkyReflect;",
+      "varying vec2 vUv;",
+      "varying float vWave;",
+      "varying vec3 vWorldPos;",
+      "void main() {",
+      "  vec3 base = uWaterColor;",
+      // Fresnel-ish: brighter near horizon (higher world y from camera angle uses distance)
+      "  float dist = length(vWorldPos.xz);",
+      "  float horizon = smoothstep(20.0, 90.0, dist);",
+      "  vec3 col = mix(base, uSkyReflect * 0.55 + base * 0.45, horizon * 0.65);",
+      // Wave highlight
+      "  float hl = clamp(vWave * 1.8 + 0.15, 0.0, 1.0);",
+      "  col += vec3(0.04, 0.06, 0.07) * hl * uClarity;",
+      // Speckle / micro surface noise
+      "  float n = fract(sin(dot(vWorldPos.xz * 0.35, vec2(12.9898, 78.233))) * 43758.5453);",
+      "  col += (n - 0.5) * 0.03 * uClarity;",
+      // Oil slick iridescence at high contamination
+      "  if (uOil > 0.01) {",
+      "    float bands = sin(vWorldPos.x * 1.7 + vWorldPos.z * 1.1 + uTime * 0.4 + n * 6.0);",
+      "    vec3 oil = vec3(0.15, 0.05, 0.12) + vec3(0.08, 0.12, 0.04) * bands;",
+      "    col = mix(col, oil + col * 0.3, uOil * (0.35 + 0.4 * abs(bands)));",
+      "  }",
+      // Darken with murk but keep a readable floor so terminal is not pure black
+      "  col *= mix(1.0, 0.62, uMurk);",
+      "  col = max(col, vec3(0.02, 0.025, 0.018) * (0.4 + 0.6 * uOil));",
+      "  gl_FragColor = vec4(col, 1.0);",
+      "}",
+    ].join("\n");
+
+    oceanMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uMurk: { value: 0 },
+        uOil: { value: 0 },
+        uClarity: { value: 1 },
+        uWaterColor: { value: new THREE.Color(0.05, 0.28, 0.38) },
+        uSkyReflect: { value: new THREE.Color(0.55, 0.68, 0.78) },
+      },
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+      side: THREE.FrontSide,
+    });
+
+    // Large plane, rotated to XZ
+    var geo = new THREE.PlaneGeometry(220, 220, 128, 128);
+    ocean = new THREE.Mesh(geo, oceanMaterial);
+    ocean.rotation.x = -Math.PI / 2;
+    ocean.position.y = 0;
+    scene.add(ocean);
+  }
+
+  // ── Sky dome (procedural gradient hemisphere) ────────────────────────
+  function buildSky() {
+    var skyGeo = new THREE.SphereGeometry(280, 32, 16);
+    var skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: {
+        uTop: { value: new THREE.Color(0.35, 0.48, 0.62) },
+        uHorizon: { value: new THREE.Color(0.55, 0.68, 0.78) },
+        uBottom: { value: new THREE.Color(0.2, 0.28, 0.32) },
+      },
+      vertexShader: [
+        "varying vec3 vPos;",
+        "void main() {",
+        "  vPos = position;",
+        "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
+        "}",
+      ].join("\n"),
+      fragmentShader: [
+        "uniform vec3 uTop;",
+        "uniform vec3 uHorizon;",
+        "uniform vec3 uBottom;",
+        "varying vec3 vPos;",
+        "void main() {",
+        "  float h = normalize(vPos).y;",
+        "  vec3 col;",
+        "  if (h > 0.0) {",
+        "    col = mix(uHorizon, uTop, pow(h, 0.65));",
+        "  } else {",
+        "    col = mix(uHorizon, uBottom, pow(-h, 0.8));",
+        "  }",
+        "  gl_FragColor = vec4(col, 1.0);",
+        "}",
+      ].join("\n"),
+    });
+    skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(skyMesh);
+  }
+
+  // ── Debris: instanced low-poly waste ─────────────────────────────────
+  function makeDebrisGeometries() {
+    // Bottle-ish: cylinder + cap
+    var bottle = new THREE.CylinderGeometry(0.08, 0.1, 0.42, 6);
+    // Bag-ish flattened box
+    var bag = new THREE.BoxGeometry(0.35, 0.02, 0.28);
+    // Fragment / irregular
+    var frag = new THREE.IcosahedronGeometry(0.12, 0);
+    // Crate / box
+    var crate = new THREE.BoxGeometry(0.28, 0.18, 0.22);
+    // Net float: torus
+    var floatRing = new THREE.TorusGeometry(0.14, 0.04, 6, 10);
+    // Can
+    var can = new THREE.CylinderGeometry(0.07, 0.07, 0.2, 8);
+    return [bottle, bag, frag, crate, floatRing, can];
+  }
+
+  function debrisColorFor(i, type) {
+    // Dirty whites, blues, transparent-ish darks, faded greens
+    var palette = [
+      [0.72, 0.74, 0.76],
+      [0.35, 0.48, 0.62],
+      [0.55, 0.42, 0.28],
+      [0.2, 0.28, 0.22],
+      [0.65, 0.55, 0.35],
+      [0.45, 0.5, 0.48],
+      [0.25, 0.25, 0.28],
+      [0.5, 0.22, 0.18],
+    ];
+    var c = palette[(i + type * 3) % palette.length];
+    return new THREE.Color(c[0], c[1], c[2]);
+  }
+
+  function buildDebris() {
+    var geos = makeDebrisGeometries();
+    var countPerType = Math.floor(MAX_DEBRIS_INSTANCES / geos.length);
+
+    for (var t = 0; t < geos.length; t++) {
+      var mat = new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        roughness: 0.82,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.92,
+        flatShading: true,
+      });
+      var mesh = new THREE.InstancedMesh(geos[t], mat, countPerType);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.count = 0; // visible count driven by contamination
+
+      var dummy = new THREE.Object3D();
+      var meta = [];
+      for (var i = 0; i < countPerType; i++) {
+        // Scatter in a wide ring ahead of camera
+        var ang = Math.random() * Math.PI * 2;
+        var rad = 2 + Math.random() * 55;
+        var x = Math.cos(ang) * rad;
+        var z = Math.sin(ang) * rad - 8;
+        var y = 0.05 + Math.random() * 0.08;
+        var sx = 0.7 + Math.random() * 1.4;
+        var sy = 0.7 + Math.random() * 1.2;
+        var sz = 0.7 + Math.random() * 1.4;
+        dummy.position.set(x, y, z);
+        dummy.rotation.set(
+          Math.random() * 0.4,
+          Math.random() * Math.PI * 2,
+          Math.random() * 0.5
+        );
+        dummy.scale.set(sx, sy, sz);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setColorAt(i, debrisColorFor(i, t));
+
+        meta.push({
+          x: x,
+          z: z,
+          baseY: y,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.3 + Math.random() * 0.7,
+          drift: 0.15 + Math.random() * 0.35,
+          rotY: (Math.random() - 0.5) * 0.15,
+          scale: [sx, sy, sz],
+          rotX0: dummy.rotation.x,
+          rotZ0: dummy.rotation.z,
+          rotY0: dummy.rotation.y,
+        });
+      }
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.instanceMatrix.needsUpdate = true;
+      scene.add(mesh);
+      debrisMeshes.push({ mesh: mesh, meta: meta, dummy: new THREE.Object3D() });
+    }
+
+    // Group for click-dumped extra waste (non-instanced small pool)
+    dumpGroup = new THREE.Group();
+    scene.add(dumpGroup);
+  }
+
+  // ── Ash / microplastic falling particles at high CI ──────────────────
+  function buildAsh() {
+    var N = 280;
+    ashPositions = new Float32Array(N * 3);
+    ashVel = new Float32Array(N);
+    for (var i = 0; i < N; i++) {
+      ashPositions[i * 3] = (Math.random() - 0.5) * 50;
+      ashPositions[i * 3 + 1] = Math.random() * 18 + 2;
+      ashPositions[i * 3 + 2] = (Math.random() - 0.5) * 50 - 5;
+      ashVel[i] = 0.4 + Math.random() * 1.2;
+    }
+    ashGeo = new THREE.BufferGeometry();
+    ashGeo.setAttribute("position", new THREE.BufferAttribute(ashPositions, 3));
+    var mat = new THREE.PointsMaterial({
+      color: 0x6a6058,
+      size: 0.08,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    ashParticles = new THREE.Points(ashGeo, mat);
+    scene.add(ashParticles);
+  }
+
+  function buildLights() {
+    var amb = new THREE.AmbientLight(0x8899aa, 0.55);
+    scene.add(amb);
+    var dir = new THREE.DirectionalLight(0xdde8f0, 0.85);
+    dir.position.set(12, 28, 10);
+    scene.add(dir);
+    var fill = new THREE.DirectionalLight(0x445566, 0.25);
+    fill.position.set(-10, 8, -5);
+    scene.add(fill);
+  }
+
+  function buildScene() {
+    buildSky();
+    buildOcean();
+    buildDebris();
+    buildAsh();
+    buildLights();
+  }
+
+  // ── UI binding ───────────────────────────────────────────────────────
+  function bindUI() {
+    slider.addEventListener("input", function () {
+      contamination = parseFloat(slider.value) || 0;
+      state = mapContamination(contamination);
+      applyState(state, false);
+    });
+
+    // Click on sea to dump small waste (raycast onto y=0 plane)
+    renderer.domElement.addEventListener("pointerdown", function (ev) {
+      if (ev.button !== 0) return;
+      var rect = renderer.domElement.getBoundingClientRect();
+      var ndc = new THREE.Vector2(
+        ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+        -((ev.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      var ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      // Intersect y=0 plane
+      var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      var hit = new THREE.Vector3();
+      if (ray.ray.intersectPlane(plane, hit)) {
+        spawnDump(hit.x, hit.z);
+      }
+    });
+  }
+
+  function spawnDump(x, z) {
+    var geos = [
+      new THREE.BoxGeometry(0.2, 0.08, 0.15),
+      new THREE.CylinderGeometry(0.06, 0.07, 0.25, 6),
+      new THREE.IcosahedronGeometry(0.1, 0),
+    ];
+    var n = 4 + Math.floor(Math.random() * 4);
+    for (var i = 0; i < n; i++) {
+      var geo = geos[i % geos.length];
+      var mat = new THREE.MeshStandardMaterial({
+        color: debrisColorFor(i + dumpDebris.length, i),
+        roughness: 0.85,
+        flatShading: true,
+      });
+      var m = new THREE.Mesh(geo, mat);
+      m.position.set(
+        x + (Math.random() - 0.5) * 1.2,
+        0.06,
+        z + (Math.random() - 0.5) * 1.2
+      );
+      m.rotation.set(Math.random(), Math.random() * 6, Math.random() * 0.4);
+      m.scale.setScalar(0.8 + Math.random() * 0.8);
+      dumpGroup.add(m);
+      dumpDebris.push({
+        mesh: m,
+        baseY: m.position.y,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.4 + Math.random() * 0.6,
+        life: 0,
+      });
+    }
+    // Cap dump pool
+    while (dumpDebris.length > 80) {
+      var old = dumpDebris.shift();
+      dumpGroup.remove(old.mesh);
+      old.mesh.geometry.dispose();
+      old.mesh.material.dispose();
+    }
+  }
+
+  // ── Apply mapped state to DOM + scene ────────────────────────────────
+  function applyState(m, initial) {
+    var fmt = formatMetrics(m);
+
+    ciValue.textContent = m.c < 10 ? m.c.toFixed(1) : String(Math.round(m.c));
+    ciValue.className = "";
+    if (m.c >= 80) ciValue.classList.add("danger");
+    else if (m.c >= 50) ciValue.classList.add("warn");
+
+    elMicro.textContent = fmt.microplastic;
+    elLight.textContent = fmt.lightPenetration;
+    elHabit.textContent = fmt.habitability;
+    elAura.textContent = fmt.aura;
+    elYear.textContent = fmt.year;
+
+    elStatus.textContent = m.status;
+    elStatus.className = "status-line";
+    if (m.status === "ELEVATED") elStatus.classList.add("elevated");
+    else if (m.status === "CRITICAL") elStatus.classList.add("critical");
+    else if (m.status === "TERMINAL") elStatus.classList.add("terminal");
+
+    elSys.className = "";
+    if (m.c >= 80) elSys.classList.add("crit");
+    else if (m.c >= 50) elSys.classList.add("warn");
+
+    // Scene uniforms / colours
+    if (oceanMaterial) {
+      oceanMaterial.uniforms.uWaterColor.value.setRGB(
+        m.waterColor[0],
+        m.waterColor[1],
+        m.waterColor[2]
+      );
+      oceanMaterial.uniforms.uSkyReflect.value.setRGB(
+        m.skyColor[0],
+        m.skyColor[1],
+        m.skyColor[2]
+      );
+      oceanMaterial.uniforms.uMurk.value = 1 - m.waterClarity;
+      oceanMaterial.uniforms.uOil.value = m.oilSlick;
+      oceanMaterial.uniforms.uClarity.value = m.waterClarity;
+    }
+
+    if (skyMesh) {
+      var top = m.skyColor;
+      skyMesh.material.uniforms.uTop.value.setRGB(
+        top[0] * 0.55,
+        top[1] * 0.55,
+        top[2] * 0.6
+      );
+      skyMesh.material.uniforms.uHorizon.value.setRGB(
+        m.skyColor[0],
+        m.skyColor[1],
+        m.skyColor[2]
+      );
+      skyMesh.material.uniforms.uBottom.value.setRGB(
+        m.fogColor[0] * 0.7,
+        m.fogColor[1] * 0.7,
+        m.fogColor[2] * 0.7
+      );
+    }
+
+    if (fog) {
+      fog.color.setRGB(m.fogColor[0], m.fogColor[1], m.fogColor[2]);
+      fog.density = m.fogDensity;
+    }
+
+    if (renderer) {
+      renderer.setClearColor(
+        new THREE.Color(m.fogColor[0], m.fogColor[1], m.fogColor[2]),
+        1
+      );
+    }
+
+    // Debris visible instance counts
+    var dens = m.debrisDensity;
+    for (var d = 0; d < debrisMeshes.length; d++) {
+      var entry = debrisMeshes[d];
+      var maxC = entry.meta.length;
+      // Stagger types slightly so density grows organically
+      var typeBias = 0.7 + (d / debrisMeshes.length) * 0.5;
+      var visible = Math.floor(maxC * dens * typeBias);
+      entry.mesh.count = Math.min(maxC, Math.max(0, visible));
+      entry.mesh.material.opacity = 0.55 + dens * 0.4;
+      // Keep debris legible against dark water (instance colours carry variety)
+      var shade = 1 - dens * 0.15;
+      entry.mesh.material.color.setRGB(0.95 * shade, 0.92 * shade, 0.88 * shade);
+    }
+
+    if (ashParticles) {
+      ashParticles.material.opacity = m.particleIntensity * 0.55;
+      ashParticles.visible = m.particleIntensity > 0.02;
+    }
+
+    // Dim ambient feel via directional intensity is updated in animate for smoothness
+    scene.userData.targetAmb = 0.35 + m.waterClarity * 0.35;
+  }
+
+  // ── Animation loop ───────────────────────────────────────────────────
+  var camAngle = 0.15;
+  var camRadius = 15.5;
+  var camHeight = 6.2;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    var dt = Math.min(clock.getDelta(), 0.05);
+    var t = clock.elapsedTime;
+
+    // Ocean time
+    if (oceanMaterial) {
+      oceanMaterial.uniforms.uTime.value = t;
+    }
+
+    // Subtle automatic camera orbit / drift
+    camAngle += dt * 0.028;
+    var bob = Math.sin(t * 0.22) * 0.25;
+    camera.position.x = Math.sin(camAngle) * camRadius * 0.35;
+    camera.position.z = 12 + Math.cos(camAngle * 0.7) * 2.2;
+    camera.position.y = camHeight + bob;
+    camera.lookAt(
+      Math.sin(camAngle * 0.5) * 2.5,
+      0.3 + Math.sin(t * 0.15) * 0.15,
+      -10
+    );
+
+    // Bob & drift instanced debris
+    var dummy = new THREE.Object3D();
+    for (var d = 0; d < debrisMeshes.length; d++) {
+      var entry = debrisMeshes[d];
+      var mesh = entry.mesh;
+      var n = mesh.count;
+      for (var i = 0; i < n; i++) {
+        var md = entry.meta[i];
+        var y = md.baseY + Math.sin(t * md.speed + md.phase) * 0.06;
+        var x = md.x + Math.sin(t * 0.08 + md.phase) * md.drift;
+        var z = md.z + Math.cos(t * 0.06 + md.phase * 0.7) * md.drift * 0.6;
+        // Slow wrap so field feels endless
+        if (z > 30) {
+          md.z -= 60;
+          z = md.z;
+        }
+        dummy.position.set(x, y, z);
+        dummy.rotation.set(
+          md.rotX0 + Math.sin(t * 0.3 + md.phase) * 0.12,
+          md.rotY0 + t * md.rotY,
+          md.rotZ0 + Math.cos(t * 0.25 + md.phase) * 0.1
+        );
+        dummy.scale.set(md.scale[0], md.scale[1], md.scale[2]);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      }
+      if (n > 0) mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    // Dump debris bob
+    for (var j = 0; j < dumpDebris.length; j++) {
+      var dd = dumpDebris[j];
+      dd.life += dt;
+      dd.mesh.position.y =
+        dd.baseY + Math.sin(t * dd.speed + dd.phase) * 0.05;
+      dd.mesh.rotation.y += dt * 0.2;
+    }
+
+    // Ash particles
+    if (ashParticles && ashParticles.visible && ashPositions) {
+      var N = ashVel.length;
+      for (var p = 0; p < N; p++) {
+        ashPositions[p * 3 + 1] -= ashVel[p] * dt * 0.9;
+        ashPositions[p * 3] += Math.sin(t + p) * dt * 0.15;
+        if (ashPositions[p * 3 + 1] < 0.2) {
+          ashPositions[p * 3 + 1] = 12 + Math.random() * 8;
+          ashPositions[p * 3] = (Math.random() - 0.5) * 50;
+          ashPositions[p * 3 + 2] = (Math.random() - 0.5) * 50 - 5;
+        }
+      }
+      ashGeo.attributes.position.needsUpdate = true;
+    }
+
+    renderer.render(scene, camera);
+  }
+})();
+</script>
+</body>
+</html>
