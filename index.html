@@ -1,1 +1,159 @@
-PLACEHOLDER
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SEA STATE — Contamination Index // Live Feed</title>
+<style>
+  :root {
+    --bg: #0a0e12;
+    --panel: rgba(12, 18, 24, 0.82);
+    --panel-border: rgba(80, 110, 120, 0.35);
+    --text: #9aadb8;
+    --text-dim: #5a6a74;
+    --text-bright: #c8d4dc;
+    --teal: #3a7a7a;
+    --teal-dim: #2a5555;
+    --amber: #8a6a3a;
+    --danger: #8a3a3a;
+    --danger-bright: #a84848;
+    --mono: "IBM Plex Mono", "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+    --panel-w: 300px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em;
+  }
+  #app { position: relative; width: 100%; height: 100%; display: flex; }
+  #viewport { flex: 1; position: relative; min-width: 0; background: #060a0e; }
+  #viewport canvas { display: block; width: 100% !important; height: 100% !important; touch-action: none; }
+  #scanlines {
+    pointer-events: none; position: absolute; inset: 0;
+    background: repeating-linear-gradient(to bottom, transparent 0px, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 3px);
+    z-index: 2; mix-blend-mode: multiply;
+  }
+  #hud-corner {
+    position: absolute; left: 16px; bottom: 14px; z-index: 3;
+    color: var(--text-dim); font-size: 10px; line-height: 1.5; text-transform: uppercase; pointer-events: none;
+  }
+  #hud-corner .live { color: var(--teal); }
+  #panel {
+    width: var(--panel-w); flex-shrink: 0; height: 100%;
+    background: var(--panel); border-left: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    display: flex; flex-direction: column; padding: 22px 18px 16px; z-index: 4;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.45);
+  }
+  #panel header { border-bottom: 1px solid var(--panel-border); padding-bottom: 14px; margin-bottom: 18px; }
+  #panel h1 { font-size: 15px; font-weight: 500; color: var(--text-bright); letter-spacing: 0.22em; text-transform: uppercase; }
+  #panel .subtitle { margin-top: 6px; font-size: 10px; color: var(--text-dim); letter-spacing: 0.12em; }
+  .section-label { font-size: 9px; color: var(--text-dim); letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 10px; }
+  .control-block { margin-bottom: 22px; }
+  .index-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .index-label { font-size: 10px; color: var(--text); letter-spacing: 0.1em; text-transform: uppercase; }
+  #ci-value { font-size: 28px; font-weight: 400; color: var(--text-bright); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; line-height: 1; }
+  #ci-value.danger { color: var(--danger-bright); }
+  #ci-value.warn { color: var(--amber); }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    background: linear-gradient(90deg, var(--teal-dim), var(--amber), var(--danger));
+    border-radius: 2px; outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--text-bright); border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--panel-border); cursor: grab;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%; background: var(--text-bright);
+    border: 2px solid var(--bg); cursor: grab;
+  }
+  .range-ends { display: flex; justify-content: space-between; margin-top: 6px; font-size: 9px; color: var(--text-dim); }
+  .metrics { flex: 1; display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--panel-border); padding-top: 16px; overflow: auto; }
+  .metric { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: baseline; }
+  .metric .name { font-size: 9px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; grid-column: 1 / -1; }
+  .metric .val { font-size: 16px; color: var(--text-bright); font-variant-numeric: tabular-nums; }
+  .metric .unit { font-size: 9px; color: var(--text-dim); text-align: right; }
+  .panel-footer { border-top: 1px solid var(--panel-border); padding-top: 14px; margin-top: 12px; }
+  .year-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .year-row .label { font-size: 9px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; }
+  #year-value { font-size: 18px; color: var(--text-bright); letter-spacing: 0.08em; }
+  #regime-value { font-size: 10px; color: var(--text); letter-spacing: 0.08em; text-align: right; max-width: 180px; line-height: 1.5; }
+  .status-block { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .status-line { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--teal); }
+  .status-line.elevated { color: var(--amber); }
+  .status-line.critical { color: #a86848; }
+  .status-line.terminal { color: var(--danger-bright); }
+  #sys-status { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 6px var(--teal); flex-shrink: 0; }
+  #sys-status.warn { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  #sys-status.crit { background: var(--danger-bright); box-shadow: 0 0 8px var(--danger-bright); animation: flicker 1.4s ease-in-out infinite; }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 40% { opacity: 0.35; } 55% { opacity: 0.9; } 70% { opacity: 0.45; } }
+  .sys-caption { font-size: 8px; color: var(--text-dim); letter-spacing: 0.1em; margin-top: 10px; text-transform: uppercase; }
+  #error-banner { display: none; position: absolute; inset: 0; z-index: 10; background: var(--bg); color: var(--danger-bright); padding: 40px; font-size: 13px; line-height: 1.6; }
+  @media (max-width: 900px) {
+    #app { flex-direction: column; }
+    #panel { width: 100%; height: auto; max-height: 42%; border-left: none; border-top: 1px solid var(--panel-border); }
+    #viewport { min-height: 58%; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="viewport">
+    <div id="scanlines"></div>
+    <div id="hud-corner">
+      <div><span class="live">●</span> SEA STATE AUTH // FEED-07</div>
+      <div>SENSOR GRID: ACTIVE · PROC: LOCAL</div>
+      <div>DRAG: ORBIT · R-DRAG / SHIFT-DRAG: PAN · WHEEL: ZOOM · CLICK WATER: DISPENSE SAMPLE</div>
+    </div>
+    <div id="error-banner"></div>
+  </div>
+  <aside id="panel" aria-label="Contamination monitoring panel">
+    <header>
+      <h1>SEA STATE</h1>
+      <div class="subtitle">CONTAMINATION INDEX // LIVE FEED</div>
+    </header>
+    <div class="control-block">
+      <div class="section-label">Primary Control</div>
+      <div class="index-row">
+        <span class="index-label">Contamination Index</span>
+        <span id="ci-value">0</span>
+      </div>
+      <input type="range" id="ci-slider" min="0" max="100" step="0.1" value="0" aria-label="Contamination Index" />
+      <div class="range-ends"><span>0</span><span>100</span></div>
+    </div>
+    <div class="metrics" id="metrics">
+      <div class="section-label">Live Metrics</div>
+      <div class="metric"><span class="name">Particulate & Metal Load</span><span class="val" id="m-particulate">28.0</span><span class="unit">µg/L</span></div>
+      <div class="metric"><span class="name">Nutrient & Process Residue</span><span class="val" id="m-nutrient">0.40</span><span class="unit">mg/L N-eq</span></div>
+      <div class="metric"><span class="name">Photic Depth</span><span class="val" id="m-photic">42.0</span><span class="unit">metres</span></div>
+      <div class="metric"><span class="name">Non-Human Viability</span><span class="val" id="m-viability">96.0</span><span class="unit">%</span></div>
+    </div>
+    <div class="panel-footer">
+      <div class="year-row"><span class="label">Operating Regime</span><span id="regime-value">EARLY AI ENERGY DEMAND</span></div>
+      <div class="year-row"><span class="label">Observation Year</span><span id="year-value">2026</span></div>
+      <div class="status-block">
+        <div>
+          <div class="section-label" style="margin-bottom:4px">System Status</div>
+          <div class="status-line" id="status-line">NOMINAL</div>
+        </div>
+        <div id="sys-status" title="System status indicator"></div>
+      </div>
+      <div class="sys-caption">SSA-MON v4.7 · CLASSIFIED FEED · CC0 MODELS: KHRONOS</div>
+    </div>
+  </aside>
+</div>
+<script src="contamination-map.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="scene.js"></script>
+</body>
+</html>
