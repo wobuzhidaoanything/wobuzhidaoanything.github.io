@@ -6,7 +6,8 @@ Speculative design dashboard for a university Worldbuilding final project: a nea
 
 ## Open locally
 
-Serve the folder (recommended — works with CDN scripts and relative assets):
+Serve the folder over HTTP (required — `scene.js` is an ES module and loads
+Three.js + GLTFLoader via an import map, which browsers refuse from `file://`):
 
 ```bash
 # from this directory
@@ -14,14 +15,13 @@ python3 -m http.server 8080
 # then open http://localhost:8080/
 ```
 
-Or open `index.html` in a browser after Three.js has been cached from the CDN (needs network on first load).
-
 ## Files
 
 | File | Role |
 |------|------|
-| `index.html` | Dashboard UI (panel, metrics, status) + script wiring |
-| `scene.js` | Three.js scene: ocean/sky shaders, camera rig, instanced debris field, invasive biomass, ash fallout |
+| `index.html` | Dashboard UI (panel, metrics, status) + import map / module wiring |
+| `scene.js` | ES module: ocean/sky shaders, camera rig, instanced procedural debris fill, GLB hero debris, invasive biomass, ash fallout |
+| `models/*.glb` | Local GLB waste models (bottle, can, cardboard box, barrel, battery), cloned 15–30× and faded in with the index; procedural debris remains as fill and as fallback if a GLB fails to load |
 | `contamination-map.js` | Pure Contamination Index → metrics / visual parameters (shared with tests) |
 | `test/metrics-check.js` | Node test of the shipped mapping functions |
 

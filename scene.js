@@ -1,24 +1,26 @@
 /**
  * SEA STATE — scene, camera rig, debris simulation.
- * Depends on: THREE (global, r160 UMD), ContaminationMap (global).
+ * ES module. Depends on: three (import map), ContaminationMap (global,
+ * classic script), and optional local GLB debris in models/ (GLTFLoader).
  *
  * Structure:
  *   1. Shared wave model (JS height + generated GLSL, single source of truth)
  *   2. Renderer / scene / camera / monitoring-platform controls
  *   3. Ocean + sky shaders, PMREM environment, lights
  *   4. Procedural debris field (instanced), invasive biomass, ash fallout
+ *   4b. GLB hero debris (models/, cloned, CI-faded)
  *   5. UI binding + state application
  *   6. Animation loop
  */
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
 (function () {
   "use strict";
 
-  if (typeof THREE === "undefined") {
-    showError("Three.js failed to load. Check network/CDN, then reopen offline once cached.");
-    return;
-  }
+  var ContaminationMap = window.ContaminationMap;
   if (typeof ContaminationMap === "undefined") {
-    showError("contamination-map.js failed to load. Serve this folder over HTTP or open with both files present.");
+    showError("contamination-map.js failed to load. Serve this folder over HTTP with both files present.");
     return;
   }
 
@@ -869,12 +871,117 @@
     scene.add(ashParticles);
   }
 
+  // ── 4b. GLB hero debris (models/) ────────────────────────────────────
+  // Realistic waste items loaded from local GLB files, cloned 15–30× and
+  // scattered over the procedural fill. Each stream fades in across a
+  // Contamination Index window (~0.1–0.7). Load failures degrade gracefully
+  // to the procedural field.
+  var GLB_DEFS = [
+    { url: "models/bottle.glb", clones: 26, appear: [0.1, 0.45], target: 0.45, float: 0.55, lift: 0.06, tilt: 0.6, spin: 0.1 },
+    { url: "models/can.glb", clones: 20, appear: [0.16, 0.5], target: 0.16, float: 0.7, lift: 0.02, tilt: 0.9, spin: 0.25 },
+    { url: "models/cardboard_box.glb", clones: 18, appear: [0.22, 0.56], target: 0.42, float: 0.6, lift: 0.08, tilt: 0.5, spin: 0.07 },
+    { url: "models/barrel.glb", clones: 16, appear: [0.3, 0.64], target: 0.62, float: 0.45, lift: 0.14, tilt: 1.1, spin: 0.05 },
+    { url: "models/battery.glb", clones: 15, appear: [0.36, 0.7], target: 0.34, float: 0.5, lift: 0.04, tilt: 0.8, spin: 0.12 },
+  ];
+  var glbSystems = [];
+  var glbGroup;
+
+  function buildGlbDebris() {
+    glbGroup = new THREE.Group();
+    scene.add(glbGroup);
+    var loader = new GLTFLoader();
+    GLB_DEFS.forEach(function (def) {
+      loader.load(
+        def.url,
+        function (gltf) {
+          try {
+            glbSystems.push(makeGlbSystem(def, gltf.scene));
+          } catch (err) {
+            console.warn("SEA STATE: GLB setup failed for " + def.url, err);
+          }
+        },
+        undefined,
+        function (err) {
+          console.warn(
+            "SEA STATE: GLB load failed for " + def.url + " — procedural fill remains.",
+            err
+          );
+        }
+      );
+    });
+  }
+
+  function makeGlbSystem(def, root) {
+    root.updateMatrixWorld(true);
+
+    // One shared fade-able material set per stream
+    var matMap = new Map();
+    var sysMats = [];
+    function sysMaterial(src) {
+      if (matMap.has(src)) return matMap.get(src);
+      var m = src.clone();
+      m.transparent = true;
+      m.opacity = 0;
+      m.userData.baseOpacity = src.opacity != null ? src.opacity : 1;
+      matMap.set(src, m);
+      sysMats.push(m);
+      return m;
+    }
+
+    // Flatten to meshes only (drops Light/Camera nodes authored into files)
+    var template = new THREE.Group();
+    root.traverse(function (o) {
+      if (!o.isMesh) return;
+      var mesh = new THREE.Mesh(
+        o.geometry,
+        Array.isArray(o.material) ? o.material.map(sysMaterial) : sysMaterial(o.material)
+      );
+      mesh.matrix.copy(o.matrixWorld);
+      mesh.matrixAutoUpdate = false;
+      template.add(mesh);
+    });
+
+    // Normalise wildly different authored scales to scene units
+    template.updateMatrixWorld(true);
+    var box = new THREE.Box3().setFromObject(template);
+    var size = box.getSize(new THREE.Vector3());
+    var baseScale = def.target / Math.max(size.x, size.y, size.z, 1e-6);
+    template.scale.setScalar(baseScale);
+
+    var group = new THREE.Group();
+    group.visible = false;
+    glbGroup.add(group);
+
+    var clones = [];
+    for (var i = 0; i < def.clones; i++) {
+      var clone = template.clone();
+      var ang = Math.random() * Math.PI * 2;
+      var rad = 5 + Math.pow(Math.random(), 1.5) * 70;
+      clones.push({
+        obj: clone,
+        x0: Math.cos(ang) * rad,
+        z0: Math.sin(ang) * rad - 8,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.3 + Math.random() * 0.7,
+        drift: 0.2 + Math.random() * 0.5,
+        rotX0: (Math.random() - 0.5) * 2 * def.tilt,
+        rotY0: Math.random() * Math.PI * 2,
+        rotZ0: (Math.random() - 0.5) * 2 * def.tilt,
+        spin: (Math.random() - 0.5) * 2 * def.spin,
+        scaleJit: 0.85 + Math.random() * 0.4,
+      });
+      group.add(clone);
+    }
+    return { def: def, group: group, clones: clones, mats: sysMats, baseScale: baseScale };
+  }
+
   function buildScene() {
     buildSky();
     buildOcean();
     buildLights();
     buildEnv();
     buildDebris();
+    buildGlbDebris();
     buildAsh();
   }
 
@@ -1071,6 +1178,35 @@
       mesh.instanceMatrix.needsUpdate = true;
     }
 
+    // GLB hero debris: CI-driven fade + same wave bobbing as the fill
+    for (var g = 0; g < glbSystems.length; g++) {
+      var sys = glbSystems[g];
+      var gd = sys.def;
+      var fade = smoothstep(gd.appear[0], gd.appear[1], state.t);
+      sys.group.visible = fade > 0.02;
+      if (!sys.group.visible) continue;
+      for (var mi = 0; mi < sys.mats.length; mi++) {
+        var fm = sys.mats[mi];
+        fm.opacity = fm.userData.baseOpacity * fade;
+      }
+      for (var ci = 0; ci < sys.clones.length; ci++) {
+        var cl = sys.clones[ci];
+        var gx = cl.x0 + Math.sin(t * 0.06 + cl.phase) * cl.drift;
+        var gz = cl.z0 + Math.cos(t * 0.05 + cl.phase * 1.3) * cl.drift;
+        var gy =
+          waveHeight(gx, gz, t) * gd.float +
+          gd.lift +
+          Math.sin(t * cl.speed + cl.phase) * 0.04;
+        cl.obj.position.set(gx, gy, gz);
+        cl.obj.rotation.set(
+          cl.rotX0 + Math.sin(t * 0.3 + cl.phase) * 0.1,
+          cl.rotY0 + t * cl.spin,
+          cl.rotZ0 + Math.cos(t * 0.25 + cl.phase) * 0.08
+        );
+        cl.obj.scale.setScalar(sys.baseScale * cl.scaleJit);
+      }
+    }
+
     // Operator-dumped waste bobs too
     for (var j = 0; j < dumpDebris.length; j++) {
       var dd = dumpDebris[j];
@@ -1107,6 +1243,16 @@
     bindUI();
     applyState(state);
     animate();
+    window.__SEA_STATE_BOOTED = true;
+    if (window.__SEA_STATE_BOOT_WATCH) clearTimeout(window.__SEA_STATE_BOOT_WATCH);
+    window.__SEA_STATE = {
+      glbSystems: glbSystems,
+      glbCloneCount: function () {
+        var n = 0;
+        for (var i = 0; i < glbSystems.length; i++) n += glbSystems[i].clones.length;
+        return n;
+      },
+    };
   } catch (err) {
     console.error(err);
     showError("WebGL / scene init failed: " + (err && err.message ? err.message : String(err)));

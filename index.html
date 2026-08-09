@@ -145,8 +145,31 @@
     </div>
   </aside>
 </div>
+<!--
+  ES modules + import map: required for three/addons (GLTFLoader).
+  Modules do not load from file:// — serve over HTTP (see README).
+-->
 <script src="contamination-map.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="scene.js"></script>
+<script>
+  window.__SEA_STATE_BOOT_WATCH = setTimeout(function () {
+    if (!window.__SEA_STATE_BOOTED) {
+      var b = document.getElementById("error-banner");
+      if (b) {
+        b.style.display = "block";
+        b.textContent =
+          "SEA STATE — INSTRUMENT FAULT\n\nModule/CDN load failed. Serve this folder over HTTP (ES modules do not load from file://) and check the network.";
+      }
+    }
+  }, 6000);
+</script>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+</script>
+<script type="module" src="scene.js"></script>
 </body>
 </html>
