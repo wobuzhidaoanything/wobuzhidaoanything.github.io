@@ -1,72 +1,47 @@
-# SEA STATE / CONTAMINATION INDEX
+# DIU-7 // Civic Daily Intake Unit
 
-Speculative design dashboard for a university Worldbuilding final project: a near-future (2040–2075) ocean monitoring instrument in which the sea is a managed waste sink. Drag the **Contamination Index** to watch the water, sky, fog, floating waste and invasive biomass degrade continuously.
+An interactive speculative-worldbuilding artifact set in Singapore in 2074. The Civic Nutrition Network terminal presents one standardized daily food-hydration unit as routine public infrastructure: desirable, clinical and normal within the society that produces it.
 
-**World premise:** AI data centres became the dominant energy consumer; renewables and nuclear could not scale fast enough, so coal and kerosene returned at industrial scale. Food is almost entirely ultra-processed and chemically formulated. Battery production (grid storage, vehicles, AI hardware) exploded. The three systems — energy, food processing, batteries — drive the contamination this instrument reports.
+The procedural Three.js model combines an atmospheric barrier shell, purified hydration reservoir, macronutrient matrix, adaptive additive cartridge, controlled mixing valve and structural distribution spine. Select a component, separate the assembly, or compare it with the increasingly expensive conventional food and potable water it replaces.
 
 ## Open locally
 
-Serve the folder over HTTP (required — `scene.js` is an ES module and loads
-Three.js + GLTFLoader via an import map, which browsers refuse from `file://`):
+The project has no build step. Serve this folder over HTTP so the browser can load its ES modules:
 
 ```bash
-# from this directory
 python3 -m http.server 8080
-# then open http://localhost:8080/
 ```
 
-### Demo & capture
+Then open [http://localhost:8080/](http://localhost:8080/).
+
+## Presentation modes
 
 | URL | Behaviour |
-|-----|-----------|
-| `/?demo=1` | Slow auto-scrub of Contamination Index **0 → Terminal**, then **parks** at CI ≈ 92 (for booth / critique). Manual slider takes over if you drag. |
-| `/?hero=1` | Jump to Terminal still bookmark (CI ≈ 92 + camera preset) for key-image capture. |
+| --- | --- |
+| `/?hero=1` | Opens directly to a poster-ready assembled DIU composition. |
+| `/?demo=1` | Runs a restrained 26-second inspection sequence through component separation and the equivalent meal view. |
 
-Keyboard (when focus is not in a field): **`D`** starts the demo scrub; **`H`** applies the hero bookmark.
+Keyboard shortcuts: **E** toggles exploded view, **M** toggles the equivalent meal, **H** restores the hero composition, and **D** starts the demo. Drag to rotate; use wheel or pinch to zoom.
 
 ## Files
 
 | File | Role |
-|------|------|
-| `index.html` | Minimal app shell (top bar + single right panel) + import map / module wiring |
-| `scene.js` | ES module: ocean/sky shaders, camera rig, instanced procedural debris fill, GLB hero debris, invasive biomass, ash fallout |
-| `models/*.glb` | Local GLB waste models (bottle, can, cardboard box, barrel, battery), cloned 15–30× and faded in with the index; procedural debris remains as fill and as fallback if a GLB fails to load |
-| `contamination-map.js` | Pure Contamination Index → metrics / visual parameters (shared with tests) |
-| `test/metrics-check.js` | Node test of the shipped mapping functions |
-
-## Controls
-
-- **Contamination Index** slider (0–100): primary control; drives metrics, year, regime, status, and 3D degradation.
-- **Drag**: orbit the observation platform.
-- **Right-drag / Shift-drag / two-finger drag**: pan (moves the platform, including vertically).
-- **Wheel / pinch / `+` `-`**: zoom (clamped).
-- **Arrow keys**: orbit / vertical trim.
-- Camera never dips below the waterline and cannot leave the survey sector; a gentle drift resumes ~5 s after you let go.
-- **Click the water**: authorized discard — sector sample (operator industrial dump, not a sandbox toy).
-- Opening card (once on load) frames the managed-sink premise; dismiss or wait for auto-fade.
-- Bottom-left **instrument log** updates with each stage band (`SSA-MON // …`).
-
-## Readouts
-
-All metrics derive continuously from the Contamination Index:
-
-- **Particles** (µg/L) — coal/kerosene ash, black carbon, battery-mineral runoff.
-- **Nutrients** (mg/L) — ultra-processed food industry discharge.
-- **Light depth** (m) — how far light reaches underwater; near-zero at terminal.
-- **Life health** (%) — oxygen / toxicity / habitat composite; collapses non-linearly.
-- **Stage** — premise band (Rising demand → Coal return → Food & batteries → Heavy load → Systemic decay → Terminal) with a short institutional caption per band.
-- **Year** (2026–2075) and **Status** (OK → Elevated → Critical → Terminal).
-
-Floating waste composition shifts by stage (ordinary bottles/film early → battery, solar scrap, food packaging, medical plastics, then biomass). A survey buoy and exclusion ring mark the monitored sector.
+| --- | --- |
+| `index.html` | Static institutional interface, responsive layout and comparison view. |
+| `scene.js` | Three.js renderer, procedural DIU model, product label, lighting, selection and animation. |
+| `world-data.js` | Pure fictional civic, product, component and equivalent-meal records shared with Node tests. |
+| `test/world-data-check.js` | Validates the fictional world and product record. |
+| `test/ui-shell-check.js` | Checks required interface language, controls, modes and obsolete-language removal. |
+| `test/product-model-check.js` | Checks procedural component and interaction hooks. |
 
 ## Verify
 
 ```bash
-node test/metrics-check.js
-node test/ui-shell-check.js
-node test/stage-captions-check.js
+for test_file in test/*.js; do node "$test_file"; done
 ```
 
-## Deploy (GitHub Pages)
+## Deploy with GitHub Pages
 
-Push this repository and enable Pages on the root (or `/docs`). Entry point is `index.html`. No build step.
+Publish the folder from the repository root (or move it to `/docs`) and enable GitHub Pages. `index.html` is the entry point; the module import map resolves Three.js from jsDelivr at runtime.
+
+All nutritional, medical, infrastructure and price content in this project is fictional speculative-design material, not health advice or a real product claim.

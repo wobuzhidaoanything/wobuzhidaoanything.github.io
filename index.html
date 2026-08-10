@@ -2,557 +2,272 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SEA STATE — Contamination Index</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#090b0a" />
+<meta name="description" content="Civic Nutrition Network provisioning terminal for the DIU-7 Civic Daily Intake Unit." />
+<title>DIU-7 // Civic Daily Intake Unit</title>
 <style>
   :root {
-    --bg: #09090b;
-    --panel: rgba(18, 18, 20, 0.82);
-    --panel-solid: #121214;
-    --row: rgba(9, 9, 11, 0.4);
-    --border: rgba(255, 255, 255, 0.08);
-    --border-soft: rgba(255, 255, 255, 0.05);
-    --text: #e4e4e7;
-    --text-dim: #a1a1aa;
-    --text-muted: #71717a;
-    --text-bright: #fafafa;
-    /* Neutral UI accent; semantic status colours remain below. */
-    --accent: #d4d4d8;
-    --accent-soft: rgba(255, 255, 255, 0.12);
-    --ok: #22c55e;
-    --warn: #f59e0b;
-    --danger: #ef4444;
-    --critical: #f97316;
-    --radius: 12px;
-    --radius-sm: 8px;
-    --topbar-h: 48px;
-    --panel-w: 300px;
-    --font: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --bg: #090b0a;
+    --surface: rgba(17, 21, 19, 0.88);
+    --surface-solid: #111512;
+    --surface-raised: #171c19;
+    --line: rgba(221, 231, 222, 0.12);
+    --line-strong: rgba(221, 231, 222, 0.24);
+    --text: #dfe5df;
+    --bright: #f1f4ef;
+    --muted: #8e9a91;
+    --quiet: #626c65;
+    --accent: #b9c8bd;
+    --water: #9bd1d2;
+    --cream: #d9cfb8;
+    --ok: #9ac4a5;
+    --warning: #c9b47b;
+    --topbar: 62px;
+    --left: 232px;
+    --right: 292px;
+    --font: "Helvetica Neue", "Inter", "Segoe UI", sans-serif;
+    --mono: "SFMono-Regular", "Roboto Mono", Consolas, monospace;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html, body {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font);
-    font-size: 13px;
-    line-height: 1.4;
+    font-size: 12px;
+    line-height: 1.45;
     -webkit-font-smoothing: antialiased;
   }
+  button { font: inherit; }
 
-  #app {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
+  #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
 
-  /* ── Top bar ─────────────────────────────────────────────── */
   #topbar {
-    height: var(--topbar-h);
-    flex-shrink: 0;
+    height: var(--topbar);
+    flex: 0 0 var(--topbar);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
-    background: rgba(9, 9, 11, 0.9);
-    border-bottom: 1px solid var(--border-soft);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    z-index: 20;
+    gap: 20px;
+    padding: 0 22px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(9, 11, 10, 0.9);
+    backdrop-filter: blur(14px);
+    z-index: 30;
   }
-
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-  }
-
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .brand-mark {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    background: #e4e4e7;
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-  }
-
-  .brand-mark svg { width: 15px; height: 15px; color: #18181b; }
-
-  .brand-text h1 {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-bright);
-    letter-spacing: -0.01em;
-    line-height: 1.2;
-  }
-  .brand-text p {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 1px;
-  }
-
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-  }
-
-  .meta-chip {
-    font-size: 12px;
-    color: var(--text-dim);
-    font-variant-numeric: tabular-nums;
-  }
-  .meta-chip strong {
-    color: var(--text-bright);
-    font-weight: 600;
-  }
-
-  .status-line {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--ok);
-  }
-  .status-line.elevated { color: var(--warn); }
-  .status-line.critical { color: var(--critical); }
-  .status-line.terminal { color: var(--danger); }
-
-  #sys-status {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--ok);
-    box-shadow: 0 0 6px var(--ok);
-    flex-shrink: 0;
-  }
-  #sys-status.warn {
-    background: var(--warn);
-    box-shadow: 0 0 6px var(--warn);
-  }
-  #sys-status.crit {
-    background: var(--danger);
-    box-shadow: 0 0 8px var(--danger);
-    animation: flicker 1.4s ease-in-out infinite;
-  }
-  @keyframes flicker {
-    0%, 100% { opacity: 1; }
-    40% { opacity: 0.35; }
-    55% { opacity: 0.9; }
-    70% { opacity: 0.45; }
-  }
-
-  .status-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-  }
-
-  /* ── Main / viewport ─────────────────────────────────────── */
-  #body {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-  }
-
-  #main {
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
+    width: 31px; height: 31px;
+    display: grid; place-items: center;
+    border: 1px solid var(--line-strong);
+    color: var(--bright);
+    font: 600 11px/1 var(--mono);
+    letter-spacing: -0.08em;
     position: relative;
-    background: #050508;
   }
-
-  #viewport {
-    position: absolute;
-    inset: 0;
-    background: #050508;
+  .brand-mark::before, .brand-mark::after {
+    content: ""; position: absolute; background: var(--accent); opacity: 0.65;
   }
+  .brand-mark::before { width: 6px; height: 1px; top: -1px; left: -1px; }
+  .brand-mark::after { width: 1px; height: 6px; top: -1px; left: -1px; }
+  .brand-title { color: var(--bright); font-size: 12px; font-weight: 600; letter-spacing: 0.09em; }
+  .brand-subtitle { color: var(--muted); font: 9px/1.4 var(--mono); letter-spacing: 0.05em; margin-top: 2px; }
+  .top-meta { display: flex; align-items: center; gap: 20px; font: 10px/1 var(--mono); letter-spacing: 0.08em; }
+  .year-chip { color: var(--bright); font-size: 13px; }
+  .supply { color: var(--ok); display: flex; align-items: center; gap: 7px; }
+  .supply::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px rgba(154,196,165,.35); }
 
-  #viewport canvas {
-    display: block;
-    width: 100% !important;
-    height: 100% !important;
-    touch-action: none;
-  }
-
-  #hud-corner {
-    position: absolute;
-    left: 14px;
-    bottom: 14px;
-    z-index: 5;
-    pointer-events: none;
-    color: var(--text-muted);
-    font-size: 11px;
-    line-height: 1.5;
-    max-width: min(420px, calc(100% - 340px));
-    text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  #workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left) minmax(0, 1fr) var(--right); }
+  .side-panel {
+    min-height: 0;
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    z-index: 12;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 6px;
   }
-  #hud-corner .hint { opacity: 0.85; }
+  #world-panel { border-right: 1px solid var(--line); }
+  #product-panel { border-left: 1px solid var(--line); }
+  .panel-head { padding: 17px 18px 13px; border-bottom: 1px solid var(--line); }
+  .eyebrow { color: var(--quiet); font: 9px/1.3 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+  .panel-head h2 { color: var(--bright); font-size: 14px; line-height: 1.25; font-weight: 500; letter-spacing: 0.01em; margin-top: 6px; }
+  .panel-head .sub { color: var(--muted); font: 9px/1.5 var(--mono); letter-spacing: 0.06em; margin-top: 4px; text-transform: uppercase; }
+  .readout-list { padding: 4px 18px; }
+  .readout {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+    padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
+  .readout dt { color: var(--quiet); font: 8px/1.35 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; max-width: 58%; }
+  .readout dd { color: var(--bright); font: 500 11px/1.25 var(--mono); text-align: right; }
+  .readout dd.large { font-size: 17px; font-family: var(--font); letter-spacing: -0.02em; }
+  .fiction-note { margin-top: auto; padding: 15px 18px 18px; color: var(--quiet); font: 8px/1.6 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
 
-  #instrument-log {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 10px;
-    letter-spacing: 0.02em;
-    color: rgba(200, 205, 210, 0.78);
-    line-height: 1.4;
-    max-width: 100%;
+  #viewport { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: radial-gradient(circle at 53% 44%, #18201c 0%, #0d110f 42%, #070908 78%); }
+  #viewport::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    background:
+      linear-gradient(rgba(188,204,191,.023) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(188,204,191,.023) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: radial-gradient(circle at center, black, transparent 78%);
   }
+  #viewport::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    box-shadow: inset 0 0 90px rgba(0,0,0,.42);
+  }
+  #viewport canvas { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; touch-action: none; outline: none; }
 
-  #dump-log {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 10px;
-    letter-spacing: 0.02em;
-    color: var(--text-dim);
-    opacity: 0;
-    transition: opacity 0.35s ease;
-    min-height: 1.2em;
-  }
-  #dump-log.visible { opacity: 1; }
+  .viewport-index { position: absolute; z-index: 7; pointer-events: none; font: 8px/1.4 var(--mono); color: rgba(180,194,183,.42); letter-spacing: .12em; text-transform: uppercase; }
+  .viewport-index.top { top: 15px; left: 17px; }
+  .viewport-index.bottom { bottom: 14px; right: 17px; text-align: right; }
+  .measurement-scale { position: absolute; right: 18px; top: 13%; bottom: 19%; width: 21px; z-index: 6; opacity: .34; pointer-events: none; border-right: 1px solid var(--accent); background: repeating-linear-gradient(to bottom, transparent 0 19px, var(--accent) 19px 20px); }
+  .measurement-scale::before, .measurement-scale::after { position: absolute; right: 28px; color: var(--muted); font: 7px/1 var(--mono); letter-spacing: .08em; white-space: nowrap; }
+  .measurement-scale::before { content: "04.5 M"; top: -2px; }
+  .measurement-scale::after { content: "00.0 M"; bottom: -2px; }
 
-  #stage-caption.stage-pulse {
-    animation: stagePulse 0.85s ease-out;
+  #component-tags { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
+  .component-tag {
+    position: absolute; opacity: 0; transform: translate(10px, -50%); transition: opacity .24s ease, transform .24s ease;
+    color: var(--muted); font: 8px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
   }
-  .status-line.status-pulse {
-    animation: statusFlicker 0.7s ease-out;
-  }
-  @keyframes stagePulse {
-    0% { color: var(--text-bright); opacity: 1; }
-    35% { color: var(--text-bright); }
-    100% { color: var(--text-dim); }
-  }
-  @keyframes statusFlicker {
-    0%, 100% { opacity: 1; }
-    25% { opacity: 0.35; }
-    50% { opacity: 1; }
-    70% { opacity: 0.5; }
-  }
+  .component-tag::before { content: ""; display: inline-block; vertical-align: middle; width: 22px; height: 1px; margin-right: 7px; background: currentColor; opacity: .55; }
+  .component-tag.visible { opacity: .78; transform: translate(0, -50%); }
+  .component-tag.selected { color: var(--bright); }
+  .component-tag.visible.selected { opacity: 1; }
 
-  /* Opening card — once on load */
+  #inspection-controls {
+    position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 14;
+    display: flex; align-items: stretch; gap: 8px;
+  }
+  .control-button {
+    min-width: 142px; min-height: 42px; padding: 0 15px;
+    display: inline-flex; align-items: center; justify-content: space-between; gap: 17px;
+    border: 1px solid var(--line-strong); background: rgba(15,19,17,.9); color: var(--text);
+    font: 9px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+    transition: background .18s ease, border-color .18s ease, color .18s ease;
+  }
+  .control-button .key { color: var(--quiet); }
+  .control-button:hover, .control-button:focus-visible { background: #202720; border-color: rgba(220,230,221,.46); color: var(--bright); outline: none; }
+  .control-button.active { background: #d8dfd7; border-color: #d8dfd7; color: #111512; }
+  .control-button.active .key { color: #5f6961; }
+
+  .hero-id {
+    position: absolute; top: 27px; right: 48px; z-index: 6; text-align: right; pointer-events: none;
+  }
+  .hero-id .serial { color: rgba(225,232,226,.74); font: 9px/1 var(--mono); letter-spacing: .22em; }
+  .hero-id .state { margin-top: 7px; color: rgba(133,147,137,.62); font: 8px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+
+  .product-metrics { padding: 5px 17px 11px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; border-bottom: 1px solid var(--line); }
+  .product-metric { padding: 10px 0 8px; border-bottom: 1px solid var(--line); min-width: 0; }
+  .product-metric:nth-last-child(-n+2) { border-bottom: 0; }
+  .product-metric .label { display: block; color: var(--quiet); font: 7px/1.25 var(--mono); letter-spacing: .09em; text-transform: uppercase; }
+  .product-metric .value { display: block; color: var(--bright); font-size: 13px; line-height: 1.2; margin-top: 4px; white-space: nowrap; }
+  .product-metric .value.small { font: 9px/1.4 var(--mono); white-space: normal; }
+  .status-cleared { color: var(--ok) !important; }
+  #selected-component { padding: 15px 18px 18px; min-height: 0; overflow: auto; }
+  .selected-kicker { display: flex; align-items: center; gap: 8px; color: var(--accent); font: 8px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  .selected-kicker::before { content: ""; width: 5px; height: 5px; border: 1px solid currentColor; transform: rotate(45deg); }
+  #component-name { color: var(--bright); font-size: 14px; line-height: 1.25; font-weight: 500; margin-top: 11px; }
+  #component-description { color: var(--text); font-size: 11px; line-height: 1.55; margin-top: 9px; }
+  #component-detail { color: var(--muted); font-size: 10px; line-height: 1.55; margin-top: 8px; }
+  #component-code { display: inline-block; margin-top: 14px; padding: 5px 7px; border: 1px solid var(--line); color: var(--muted); font: 8px/1 var(--mono); letter-spacing: .08em; }
+
+  #equivalent-panel {
+    position: absolute; inset: 0; z-index: 8; pointer-events: none; opacity: 0; visibility: hidden;
+    transition: opacity .42s ease, visibility .42s ease;
+  }
+  #equivalent-panel.visible { opacity: 1; visibility: visible; }
+  .meal-card {
+    position: absolute; width: min(47%, 430px); right: 4%; top: 50%; transform: translateY(-50%);
+    padding: 20px; border: 1px solid var(--line-strong); background: rgba(13,17,15,.82); backdrop-filter: blur(12px);
+  }
+  .meal-card h2 { color: var(--bright); font: 500 14px/1.3 var(--font); margin-top: 6px; letter-spacing: .03em; }
+  .meal-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 18px 0 17px; }
+  .meal-item { min-width: 0; text-align: center; }
+  .meal-icon { height: 52px; position: relative; margin-bottom: 7px; opacity: .72; }
+  .meal-icon::before { content: ""; position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); border: 1px solid var(--accent); }
+  .meal-icon.grains::before { width: 34px; height: 18px; border-radius: 3px 3px 17px 17px; }
+  .meal-icon.protein::before { width: 31px; height: 23px; border-radius: 50% 42% 52% 38%; transform: translateX(-50%) rotate(-10deg); }
+  .meal-icon.vegetables::before { width: 29px; height: 29px; border-radius: 50% 50% 42% 50%; }
+  .meal-icon.vegetables::after { content: ""; position: absolute; left: 50%; bottom: 32px; width: 1px; height: 12px; background: var(--accent); transform: rotate(30deg); }
+  .meal-icon.fruit::before { width: 27px; height: 27px; border-radius: 50%; }
+  .meal-icon.water::before { width: 19px; height: 38px; border-radius: 5px 5px 8px 8px; background: rgba(155,209,210,.08); border-color: var(--water); }
+  .meal-label { color: var(--muted); font: 7px/1.35 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+  .meal-amount { color: var(--text); font: 8px/1.2 var(--mono); margin-top: 3px; }
+  .comparison { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .comparison-block { padding: 13px 10px 13px 0; }
+  .comparison-block + .comparison-block { padding-left: 14px; border-left: 1px solid var(--line); }
+  .comparison-label { color: var(--quiet); font: 7px/1.4 var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+  .comparison-value { color: var(--bright); font-size: 16px; line-height: 1.2; margin-top: 5px; }
+  .comparison-value.accent { color: var(--ok); }
+  .prep-line { display: flex; justify-content: space-between; gap: 14px; padding-top: 12px; color: var(--muted); font: 8px/1.5 var(--mono); }
+  .meal-note { color: var(--quiet); font: 7px/1.5 var(--mono); letter-spacing: .05em; text-transform: uppercase; margin-top: 10px; }
+
   #opening-card {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: rgba(5, 5, 8, 0.72);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    transition: opacity 0.7s ease, visibility 0.7s ease;
+    position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px;
+    background: rgba(6,8,7,.72); backdrop-filter: blur(13px);
+    transition: opacity .6s ease, visibility .6s ease;
   }
-  #opening-card.hidden {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
-  .opening-inner {
-    max-width: 420px;
-    width: 100%;
-    background: rgba(18, 18, 22, 0.94);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 22px 22px 18px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
-  }
-  .opening-kicker {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-  }
-  .opening-premise {
-    font-size: 14px;
-    line-height: 1.5;
-    color: var(--text-bright);
-    font-weight: 500;
-    margin-bottom: 10px;
-  }
-  .opening-hint {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-bottom: 16px;
-    line-height: 1.45;
-  }
-  #opening-dismiss {
-    appearance: none;
-    border: 1px solid var(--border);
-    background: var(--accent-soft);
-    color: var(--text-bright);
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 8px 14px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-  }
-  #opening-dismiss:hover {
-    border-color: rgba(255, 255, 255, 0.22);
-    background: rgba(255, 255, 255, 0.14);
-  }
-  #opening-dismiss:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+  #opening-card.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .opening-inner { width: min(460px, 100%); padding: 28px; border: 1px solid var(--line-strong); background: rgba(15,19,17,.94); box-shadow: 0 28px 80px rgba(0,0,0,.35); }
+  .opening-inner h1 { color: var(--bright); font-size: 17px; font-weight: 500; letter-spacing: .06em; margin-top: 9px; }
+  .opening-status { color: var(--ok); font: 9px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; margin-top: 22px; }
+  .opening-copy { color: var(--text); font-size: 12px; line-height: 1.6; margin-top: 11px; max-width: 380px; }
+  #opening-dismiss { width: 100%; min-height: 43px; margin-top: 22px; border: 1px solid var(--accent); background: var(--accent); color: #111512; font: 9px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+  #opening-dismiss:hover, #opening-dismiss:focus-visible { background: var(--bright); outline: 2px solid rgba(255,255,255,.18); outline-offset: 3px; }
 
-  #error-banner {
-    display: none;
-    position: absolute;
-    inset: 0;
-    z-index: 50;
-    background: var(--bg);
-    color: var(--danger);
-    padding: 48px;
-    font-size: 14px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-  }
+  #error-banner { display: none; position: absolute; inset: 18px; z-index: 50; padding: 18px; border: 1px solid #8f7950; background: rgba(35,29,20,.96); color: #d6c59b; font: 10px/1.6 var(--mono); white-space: pre-wrap; }
+  .mobile-summary { display: none; }
 
-  /* ── Right panel (single card) ───────────────────────────── */
-  #panel {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    bottom: 14px;
-    width: var(--panel-w);
-    z-index: 10;
-    pointer-events: none;
-    overflow: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-  }
+  .hero-mode #world-panel { opacity: .64; }
+  .hero-mode #product-panel { opacity: .82; }
+  .hero-mode .viewport-index, .hero-mode .measurement-scale { opacity: .22; }
+  .reduced-motion *, .reduced-motion *::before, .reduced-motion *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 
-  .panel-card {
-    pointer-events: auto;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+  @media (max-width: 1050px) {
+    :root { --left: 200px; --right: 260px; }
+    .panel-head, .readout-list { padding-left: 14px; padding-right: 14px; }
+    #selected-component { padding-left: 14px; padding-right: 14px; }
+    .meal-card { width: min(54%, 400px); right: 3%; }
   }
-
-  /* Index control */
-  .index-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .index-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-dim);
-  }
-  #ci-value {
-    font-size: 32px;
-    font-weight: 600;
-    color: var(--text-bright);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.03em;
-    line-height: 1;
-  }
-  #ci-value.warn { color: var(--warn); }
-  #ci-value.danger { color: var(--danger); }
-
-  input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 5px;
-    border-radius: 999px;
-    background: linear-gradient(
-      90deg,
-      #a1a1aa 0%,
-      #a1a1aa var(--ci-progress, 0%),
-      #27272a var(--ci-progress, 0%),
-      #27272a 100%
-    );
-    outline: none;
-    cursor: pointer;
-  }
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #e4e4e7;
-    box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 6px rgba(0,0,0,0.35);
-    cursor: grab;
-  }
-  input[type="range"]::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #e4e4e7;
-    box-shadow: 0 0 0 3px var(--accent-soft);
-    cursor: grab;
-  }
-  .range-ends {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 6px;
-    font-size: 10px;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Metrics grid */
-  .metrics {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-
-  .metric {
-    background: var(--row);
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-sm);
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-height: 64px;
-  }
-  .metric .name {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-muted);
-  }
-  .metric .val-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 4px;
-    margin-top: auto;
-  }
-  .metric .val {
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--text-bright);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
-  }
-  .metric .unit {
-    font-size: 10px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
-
-  /* Context footer */
-  .context {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 2px;
-    border-top: 1px solid var(--border-soft);
-  }
-  .ctx-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 12px;
-  }
-  .ctx-row .label {
-    font-size: 11px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
-  #regime-value {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text);
-    text-align: right;
-    line-height: 1.3;
-  }
-  #year-value-panel {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-bright);
-    font-variant-numeric: tabular-nums;
-  }
-  #stage-caption {
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
-
-  /* ── Responsive ──────────────────────────────────────────── */
-  @media (max-width: 900px) {
-    :root { --panel-w: 100%; }
-
-    #topbar { padding: 0 12px; }
-    .brand-text p { display: none; }
-    .meta-chip-year { display: none; }
-
-    #main {
-      display: flex;
-      flex-direction: column;
+  @media (max-width: 780px) {
+    :root { --topbar: 56px; }
+    #topbar { padding: 0 14px; }
+    .brand-title { font-size: 10px; }
+    .brand-subtitle { display: none; }
+    .top-meta { gap: 12px; }
+    #workspace { display: block; position: relative; }
+    .side-panel { display: none; }
+    #viewport { position: absolute; inset: 0; }
+    .mobile-summary {
+      display: flex; position: absolute; z-index: 11; top: 12px; left: 12px; right: 12px;
+      align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
+      border: 1px solid var(--line); background: rgba(13,17,15,.76); backdrop-filter: blur(10px);
     }
-
-    #viewport {
-      position: relative;
-      flex: 1;
-      min-height: 50%;
-    }
-
-    #panel {
-      position: relative;
-      top: auto;
-      right: auto;
-      bottom: auto;
-      width: 100%;
-      max-height: 50%;
-      padding: 0;
-      pointer-events: auto;
-      background: var(--panel-solid);
-      border-top: 1px solid var(--border);
-    }
-
-    .panel-card {
-      border: none;
-      border-radius: 0;
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none;
-      background: transparent;
-      box-shadow: none;
-    }
-
-    #hud-corner {
-      max-width: calc(100% - 24px);
-      font-size: 10px;
-      bottom: 10px;
-      left: 10px;
-    }
+    .mobile-summary strong { color: var(--bright); font: 500 12px/1 var(--font); }
+    .mobile-summary span { color: var(--muted); font: 8px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; }
+    .hero-id { top: 78px; right: 18px; }
+    .measurement-scale { right: 10px; }
+    .meal-card { width: calc(100% - 24px); right: 12px; top: 48%; padding: 16px; }
+    #equivalent-panel.visible + #inspection-controls { bottom: 14px; }
+    #inspection-controls { bottom: 18px; width: calc(100% - 24px); }
+    .control-button { min-width: 0; flex: 1; padding: 0 12px; gap: 7px; }
+    .viewport-index.bottom { display: none; }
   }
-
   @media (max-width: 480px) {
-    .metrics { grid-template-columns: 1fr; }
-    #ci-value { font-size: 26px; }
+    .supply { display: none; }
+    .brand-mark { width: 27px; height: 27px; }
+    .meal-grid { margin: 12px 0; }
+    .meal-icon { height: 40px; }
+    .meal-label { display: none; }
+    .comparison-value { font-size: 13px; }
+    .prep-line { font-size: 7px; }
+    #inspection-controls { display: grid; grid-template-columns: 1fr; gap: 6px; }
+    .control-button { min-height: 38px; }
+    .opening-inner { padding: 22px; }
   }
 </style>
 </head>
@@ -560,131 +275,119 @@
 <div id="app">
   <header id="topbar">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M2 12c2.5-3 5-4.5 7.5-4.5S14.5 9 17 12s5 4.5 7 4.5" />
-          <path d="M2 16c2.5-3 5-4.5 7.5-4.5S14.5 13 17 16s5 4.5 7 4.5" />
-        </svg>
-      </div>
-      <div class="brand-text">
-        <h1>SEA STATE</h1>
-        <p>Ocean monitor</p>
+      <div class="brand-mark" aria-hidden="true">CN</div>
+      <div>
+        <div class="brand-title">CIVIC NUTRITION NETWORK</div>
+        <div class="brand-subtitle">Provisioning Terminal // Singapore Sector 04</div>
       </div>
     </div>
-    <div class="topbar-right">
-      <span class="meta-chip meta-chip-year">Year <strong id="year-value">2026</strong></span>
-      <div class="status-wrap">
-        <span id="sys-status" title="Status"></span>
-        <span class="status-line" id="status-line">OK</span>
-      </div>
+    <div class="top-meta">
+      <span class="year-chip">2074</span>
+      <span class="supply">SUPPLY: NOMINAL</span>
     </div>
   </header>
 
-  <div id="body">
-    <div id="main">
-      <div id="viewport">
-        <div id="hud-corner">
-          <div id="instrument-log" aria-live="polite">SSA-MON // Stage 1 // Rising demand // coastal chemistry nominal</div>
-          <div id="dump-log" aria-live="polite"></div>
-          <div class="hint">Drag orbit · Shift pan · Scroll zoom · Click water: authorized discard</div>
-        </div>
-        <div id="error-banner"></div>
+  <main id="workspace">
+    <aside id="world-panel" class="side-panel" aria-label="Fictional civic infrastructure readouts">
+      <div class="panel-head">
+        <p class="eyebrow">Municipal context</p>
+        <h2>Sector conditions</h2>
+        <p class="sub">Civic supply register // live</p>
       </div>
+      <dl class="readout-list">
+        <div class="readout"><dt>Year</dt><dd class="large">2074</dd></div>
+        <div class="readout"><dt>Region</dt><dd>Singapore<br />Urban Sector 04</dd></div>
+        <div class="readout"><dt>Outdoor agricultural share</dt><dd>8%</dd></div>
+        <div class="readout"><dt>Direct potable network</dt><dd>Restricted</dd></div>
+        <div class="readout"><dt>Controlled agriculture share</dt><dd>92%</dd></div>
+        <div class="readout"><dt>Fresh food index</dt><dd>7.6× baseline</dd></div>
+        <div class="readout"><dt>Standard civic diet</dt><dd>DIU allocation</dd></div>
+      </dl>
+      <p class="fiction-note">Speculative civic register // projected operating conditions</p>
+    </aside>
 
-      <aside id="panel" aria-label="Contamination panel">
-        <div class="panel-card">
-          <div>
-            <div class="index-head">
-              <span class="index-label">Contamination</span>
-              <span id="ci-value">0</span>
-            </div>
-            <input
-              type="range"
-              id="ci-slider"
-              min="0"
-              max="100"
-              step="0.1"
-              value="0"
-              aria-label="Contamination"
-            />
-            <div class="range-ends"><span>Clean</span><span>Terminal</span></div>
-          </div>
+    <section id="viewport" aria-label="Interactive DIU-7 product inspection viewport">
+      <div class="mobile-summary"><strong>DIU-7 // CLASS C</strong><span>2,140 kcal · 2.8 L · 24 h</span></div>
+      <div class="viewport-index top">Specimen 07-C<br />Distribution lot 74.188</div>
+      <div class="viewport-index bottom">Drag to rotate // wheel to inspect<br />Civic object registry 3.1</div>
+      <div class="hero-id"><div class="serial">DIU-7 / 74.188.03</div><div class="state" id="view-state">Assembled unit</div></div>
+      <div class="measurement-scale" aria-hidden="true"></div>
+      <div id="component-tags" aria-hidden="true"></div>
+      <div id="error-banner" role="alert"></div>
 
-          <div class="metrics" id="metrics">
-            <div class="metric">
-              <span class="name">Particles</span>
-              <div class="val-row">
-                <span class="val" id="m-particulate">28.0</span>
-                <span class="unit">µg/L</span>
-              </div>
-            </div>
-            <div class="metric">
-              <span class="name">Nutrients</span>
-              <div class="val-row">
-                <span class="val" id="m-nutrient">0.40</span>
-                <span class="unit">mg/L</span>
-              </div>
-            </div>
-            <div class="metric">
-              <span class="name">Light depth</span>
-              <div class="val-row">
-                <span class="val" id="m-photic">42.0</span>
-                <span class="unit">m</span>
-              </div>
-            </div>
-            <div class="metric">
-              <span class="name">Life health</span>
-              <div class="val-row">
-                <span class="val" id="m-viability">96.0</span>
-                <span class="unit">%</span>
-              </div>
-            </div>
+      <section id="equivalent-panel" aria-hidden="true">
+        <div class="meal-card">
+          <p class="eyebrow">Equivalent provisioning analysis</p>
+          <h2>TRADITIONAL DAILY EQUIVALENT</h2>
+          <div class="meal-grid">
+            <div class="meal-item"><div class="meal-icon grains"></div><div class="meal-label">Grains</div><div class="meal-amount">6 serves</div></div>
+            <div class="meal-item"><div class="meal-icon protein"></div><div class="meal-label">Protein</div><div class="meal-amount">3 serves</div></div>
+            <div class="meal-item"><div class="meal-icon vegetables"></div><div class="meal-label">Vegetables</div><div class="meal-amount">5 serves</div></div>
+            <div class="meal-item"><div class="meal-icon fruit"></div><div class="meal-label">Fruit</div><div class="meal-amount">2 serves</div></div>
+            <div class="meal-item"><div class="meal-icon water"></div><div class="meal-label">Potable water</div><div class="meal-amount">2.8 L</div></div>
           </div>
-
-          <div class="context">
-            <div class="ctx-row">
-              <span class="label">Stage</span>
-              <span id="regime-value">Rising demand</span>
-            </div>
-            <p id="stage-caption">AI-scale energy demand rises; SSA coastal chemistry still reports within nominal bounds.</p>
-            <div class="ctx-row">
-              <span class="label">Year</span>
-              <span id="year-value-panel">2026</span>
-            </div>
+          <div class="comparison">
+            <div class="comparison-block"><div class="comparison-label">Traditional food + potable water</div><div class="comparison-value">S$186.40 / day</div></div>
+            <div class="comparison-block"><div class="comparison-label">Class C DIU allocation</div><div class="comparison-value accent">S$11.20 / day</div></div>
           </div>
+          <div class="prep-line"><span>PREPARATION TIME</span><span>TRADITIONAL 74 MIN // DIU-7 0 MIN</span></div>
+          <p class="meal-note">Conventional food remains available through premium civilian markets.</p>
         </div>
-      </aside>
-    </div>
-  </div>
+      </section>
+
+      <div id="inspection-controls" aria-label="Inspection controls">
+        <button class="control-button" id="exploded-toggle" type="button" aria-pressed="false"><span id="exploded-label">Exploded view</span><span class="key">E</span></button>
+        <button class="control-button" id="meal-toggle" type="button" aria-pressed="false"><span id="meal-label">View equivalent meal</span><span class="key">M</span></button>
+      </div>
+    </section>
+
+    <aside id="product-panel" class="side-panel" aria-label="DIU-7 product readouts">
+      <div class="panel-head">
+        <p class="eyebrow">Registered provision</p>
+        <h2>DIU-7</h2>
+        <p class="sub">Civic Daily Intake Unit</p>
+      </div>
+      <div class="product-metrics">
+        <div class="product-metric"><span class="label">Energy</span><span class="value">2,140 kcal</span></div>
+        <div class="product-metric"><span class="label">Hydration equivalent</span><span class="value">2.8 L</span></div>
+        <div class="product-metric"><span class="label">Protein</span><span class="value">96 g</span></div>
+        <div class="product-metric"><span class="label">Consumption period</span><span class="value">24 h</span></div>
+        <div class="product-metric"><span class="label">Allocation class</span><span class="value">C</span></div>
+        <div class="product-metric"><span class="label">Production facility</span><span class="value">CNF-03</span></div>
+        <div class="product-metric" style="grid-column: 1 / -1"><span class="label">Status</span><span class="value small status-cleared">Cleared for distribution</span></div>
+      </div>
+      <section id="selected-component" aria-live="polite">
+        <div class="selected-kicker">Selected // <span id="component-short">Hydration phase</span></div>
+        <h3 id="component-name">PURIFIED HYDRATION PHASE</h3>
+        <p id="component-description">Central purification output. Reconstituted mineral profile. 1.9 L internal reservoir.</p>
+        <p id="component-detail">The largest chamber communicates the infrastructural convergence of drinking-water and food production.</p>
+        <span id="component-code">H₂O / SG-4 / 1.9 L</span>
+      </section>
+    </aside>
+  </main>
 </div>
 
-<div id="opening-card" role="dialog" aria-modal="true" aria-labelledby="opening-premise">
+<div id="opening-card" role="dialog" aria-modal="true" aria-labelledby="opening-title">
   <div class="opening-inner">
-    <p class="opening-kicker">SSA Survey Sector</p>
-    <p id="opening-premise" class="opening-premise">
-      Managed ocean sink under continuous industrial load. You are an SSA operator on duty. The Contamination Index sets the decade — the sector degrades whether you watch or not.
-    </p>
-    <p class="opening-hint">Drag Contamination Index to advance year and stage. Orbit to survey. Click water for authorized discard (sector sample).</p>
-    <button type="button" id="opening-dismiss">Enter instrument</button>
+    <p class="eyebrow">Civic Nutrition Network</p>
+    <h1 id="opening-title">Daily allocation ready.</h1>
+    <p class="opening-status">DIU-7 // Cleared for distribution</p>
+    <p class="opening-copy">DIU-7 supplies the standard adult hydration and nutrition requirement for one 24-hour cycle.</p>
+    <button id="opening-dismiss" type="button">Inspect unit</button>
   </div>
 </div>
 
-<!--
-  ES modules + import map: required for three/addons (GLTFLoader).
-  Modules do not load from file:// — serve over HTTP (see README).
--->
-<script src="contamination-map.js"></script>
+<script src="world-data.js"></script>
 <script>
-  window.__SEA_STATE_BOOT_WATCH = setTimeout(function () {
-    if (!window.__SEA_STATE_BOOTED) {
-      var b = document.getElementById("error-banner");
-      if (b) {
-        b.style.display = "block";
-        b.textContent =
-          "SEA STATE — INSTRUMENT FAULT\n\nModule/CDN load failed. Serve this folder over HTTP (ES modules do not load from file://) and check the network.";
+  window.__CIVIC_BOOT_WATCH = setTimeout(function () {
+    if (!window.__CIVIC_BOOTED) {
+      var banner = document.getElementById("error-banner");
+      if (banner) {
+        banner.style.display = "block";
+        banner.textContent = "CIVIC NUTRITION NETWORK // DISPLAY FAULT\n\nThe 3D module did not load. Serve this folder over static HTTP and confirm network access to the Three.js module CDN.";
       }
     }
-  }, 6000);
+  }, 7000);
 </script>
 <script type="importmap">
   {
