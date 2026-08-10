@@ -1,5 +1,5 @@
 /**
- * DIU-7 // Civic Daily Intake Unit
+ * DIU-7 | Civic Daily Intake Unit
  * Procedural Three.js product model, inspection controls and presentation modes.
  */
 import * as THREE from "three";
@@ -493,7 +493,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
     ctx.fillStyle = "#f1f4ef";
     ctx.font = "600 34px Arial";
-    ctx.fillText("ONE DAY // FOOD + WATER", 62, 470);
+    ctx.fillText("ONE DAY | FOOD + WATER", 62, 470);
     ctx.beginPath(); ctx.moveTo(62, 510); ctx.lineTo(838, 510); ctx.stroke();
 
     ctx.font = "700 54px Arial";
@@ -503,7 +503,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
     ctx.font = "600 31px monospace";
     ctx.fillText("USE WITHIN 24 HOURS", 62, 920);
-    ctx.fillText("SINGAPORE // 2074", 62, 978);
+    ctx.fillText("SINGAPORE | 2074", 62, 978);
 
     ctx.strokeStyle = pack.accent;
     ctx.strokeRect(62, 1165, 776, 190);
@@ -514,7 +514,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
     ctx.fillStyle = "rgba(241,244,239,0.7)";
     ctx.font = "500 24px monospace";
-    ctx.fillText(pack.code + " // ONE UNIT", 62, 1490);
+    ctx.fillText(pack.code + " | ONE UNIT", 62, 1490);
     if (labelTexture) labelTexture.needsUpdate = true;
   }
 
@@ -838,7 +838,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     var banner = document.getElementById("error-banner");
     if (banner) {
       banner.style.display = "block";
-      banner.textContent = "CIVIC NUTRITION NETWORK // DISPLAY FAULT\n\n" + message;
+      banner.textContent = "CIVIC NUTRITION NETWORK | DISPLAY FAULT\n\n" + message;
     }
   }
 })();

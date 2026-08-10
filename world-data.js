@@ -27,7 +27,7 @@
     id: "DIU-7",
     name: "ONE DAY OF FOOD AND WATER",
     consumptionPeriodH: 24,
-    location: "SINGAPORE // 2074",
+    location: "SINGAPORE | 2074",
     warning: "DO NOT EAT OR DRINK UNTREATED FOOD OR WATER",
   };
 

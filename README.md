@@ -1,4 +1,4 @@
-# DIU-7 // One Day of Food and Water
+# DIU-7 | One Day of Food and Water
 
 An interactive speculative-worldbuilding artifact set in Singapore in 2074. The Daily Food & Water Service presents an opaque, standardized daily unit as normal public infrastructure.
 

@@ -14,7 +14,7 @@ function assert(condition, message) {
 
 console.log("--- Streamlined interface language ---");
 [
-  "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE // 2074", "Food grown indoors",
+  "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "Food grown indoors",
   "Public drinking water", "Fresh food cost", "Standard daily food",
   "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
   "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
