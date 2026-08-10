@@ -15,8 +15,8 @@ function assert(condition, message) {
 console.log("--- Streamlined interface language ---");
 [
   "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "About the item",
-  "Civic Daily Intake Unit", "One sealed handheld serving", "Handheld cartridge",
-  "Food + drinking water", "One adult / 24 h", "Standard civic supply",
+  "Daily Food Intake Unit", "One sealed handheld serving", "Handheld cartridge",
+  "Food + drinking water", "One adult / 24 h", "Standard daily supply",
   "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
   "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
 ].forEach(function (text) {
@@ -37,6 +37,7 @@ console.log("--- Removed clutter and jargon ---");
 [
   /SUPPLY:\s*NOMINAL/i, /HYDRATION PHASE/i, /MACRONUTRIENT MATRIX/i,
   /ALLOCATION CLASS/i, /PRODUCTION FACILITY/i, /SPECIMEN/i, /CIVIC OBJECT REGISTRY/i,
+  /CIVIC DAILY INTAKE/i,
   /DIRECT POTABLE NETWORK/i, /CONTAMINATION INDEX/i
 ].forEach(function (pattern) { assert(!pattern.test(html), pattern + " is absent"); });
 assert(!/measurement-scale/.test(html), "measurement scale removed");

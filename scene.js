@@ -1,5 +1,5 @@
 /**
- * DIU-7 | Civic Daily Intake Unit
+ * DIU-7 | Daily Food Intake Unit
  * Procedural Three.js product model, inspection controls and presentation modes.
  */
 import * as THREE from "three";
@@ -11,7 +11,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 (function () {
   "use strict";
 
-  var Data = window.CivicData;
+  var Data = window.DailyFoodData;
   if (!Data || Data.validateData().length) {
     showError("Fictional product data could not be validated.");
     return;
@@ -128,8 +128,8 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   if (heroMode || demoRequested) dismissOpening();
   if (demoRequested && !reduceMotion) startDemo();
 
-  clearTimeout(window.__CIVIC_BOOT_WATCH);
-  window.__CIVIC_BOOTED = true;
+  clearTimeout(window.__DAILY_FOOD_BOOT_WATCH);
+  window.__DAILY_FOOD_BOOTED = true;
   renderer.setAnimationLoop(render);
 
   function initEnvironment() {
@@ -846,7 +846,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     var banner = document.getElementById("error-banner");
     if (banner) {
       banner.style.display = "block";
-      banner.textContent = "CIVIC NUTRITION NETWORK | DISPLAY FAULT\n\n" + message;
+      banner.textContent = "DAILY FOOD SERVICE | DISPLAY FAULT\n\n" + message;
     }
   }
 })();
