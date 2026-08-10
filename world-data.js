@@ -1,9 +1,9 @@
 /**
- * CIVIC DAILY INTAKE UNIT — fictional world and product data.
+ * DIU-7 — fictional product and world data.
  *
- * This module contains speculative interface content only. It intentionally
- * makes no real nutritional or medical claims. It works in both a browser and
- * Node so the shipped data can be checked without a build step.
+ * Nutrition profiles are speculative interface content, not personal dietary
+ * advice. Baseline values are informed by Singapore adult dietary guidance;
+ * vitamin and mineral profiles are intentionally kept near reference intakes.
  */
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) {
@@ -16,107 +16,159 @@
 
   var WORLD = {
     year: 2074,
-    region: "Singapore Urban Sector 04",
-    outdoorAgriculturalShare: 8,
-    directPotableNetwork: "Restricted",
+    location: "Singapore",
     controlledAgricultureShare: 92,
-    freshFoodIndex: 7.6,
-    standardCivicDiet: "DIU allocation",
-    supplyStatus: "NOMINAL",
+    publicDrinkingWater: "LIMITED",
+    freshFoodPriceMultiplier: 7.6,
+    standardDailyFood: "DIU-7 BASIC PACK",
   };
 
   var PRODUCT = {
     id: "DIU-7",
-    name: "CIVIC DAILY INTAKE UNIT",
-    profile: "STANDARD ADULT // CLASS C",
-    allocationClass: "C",
-    energyKcal: 2140,
-    hydrationEquivalentL: 2.8,
-    internalHydrationL: 1.9,
-    proteinG: 96,
-    carbohydrateG: 262,
-    lipidG: 78,
-    fibreG: 31,
+    name: "ONE DAY OF FOOD AND WATER",
     consumptionPeriodH: 24,
-    productionFacility: "CNF-03",
-    productionFacilityLong: "CENTRAL NUTRITION FACILITY 03",
     location: "SINGAPORE // 2074",
-    status: "Cleared for distribution",
-    warning: "DO NOT SUPPLEMENT WITH UNTREATED FOOD OR WATER",
+    warning: "DO NOT EAT OR DRINK UNTREATED FOOD OR WATER",
   };
+
+  var PACKS = [
+    {
+      id: "basic",
+      code: "DIU-7B",
+      name: "BASIC PACK",
+      shortName: "BASIC",
+      tagline: "Balanced everyday formula for a typical adult.",
+      energyKcal: 2140,
+      proteinG: 60,
+      carbohydrateG: 300,
+      lipidG: 78,
+      fibreG: 30,
+      hydrationL: 2.8,
+      internalWaterL: 1.9,
+      micronutrientLabel: "100% daily vitamin and mineral profile",
+      priceSGD: 11.2,
+      accent: "#9fc6c4",
+    },
+    {
+      id: "performance",
+      code: "DIU-7P",
+      name: "PERFORMANCE PACK",
+      shortName: "PERFORMANCE",
+      tagline: "Higher energy and protein for sustained heavy activity.",
+      energyKcal: 2700,
+      proteinG: 120,
+      carbohydrateG: 350,
+      lipidG: 91,
+      fibreG: 35,
+      hydrationL: 3.2,
+      internalWaterL: 2.2,
+      micronutrientLabel: "100% daily vitamin and mineral profile",
+      priceSGD: 14.8,
+      accent: "#d7b77b",
+    },
+    {
+      id: "nutrition",
+      code: "DIU-7N",
+      name: "NUTRITION PACK",
+      shortName: "NUTRITION",
+      tagline: "Expanded vitamin, mineral and fibre profile.",
+      energyKcal: 2140,
+      proteinG: 60,
+      carbohydrateG: 295,
+      lipidG: 80,
+      fibreG: 35,
+      hydrationL: 2.8,
+      internalWaterL: 1.9,
+      micronutrientLabel: "125% of selected vitamin and mineral reference amounts",
+      priceSGD: 14.4,
+      accent: "#a9c98d",
+    },
+    {
+      id: "premium",
+      code: "DIU-7X",
+      name: "PREMIUM PACK",
+      shortName: "PREMIUM",
+      tagline: "Higher protein with the expanded vitamin and mineral profile.",
+      energyKcal: 2600,
+      proteinG: 110,
+      carbohydrateG: 335,
+      lipidG: 91,
+      fibreG: 35,
+      hydrationL: 3.0,
+      internalWaterL: 2.0,
+      micronutrientLabel: "125% of selected vitamin and mineral reference amounts",
+      priceSGD: 18.6,
+      accent: "#c8b6d8",
+    },
+  ];
 
   var COMPONENTS = [
     {
       id: "shell",
-      shortLabel: "BARRIER SHELL",
-      name: "ATMOSPHERIC BARRIER SHELL",
-      description: "Multilayer polymer enclosure rated for contaminated urban exposure.",
-      detail: "Protects the contents during civic distribution and daily handling. The translucent enclosure is structural rather than decorative.",
-      code: "ABS-7 / SEALED",
+      shortLabel: "OUTER CASE",
+      name: "OUTER PROTECTIVE CASE",
+      description: "Seals the unit against contaminated air and protects it during delivery.",
       exploded: [-1.55, 0.0, 0.58],
     },
     {
       id: "hydration",
-      shortLabel: "HYDRATION PHASE",
-      name: "PURIFIED HYDRATION PHASE",
-      description: "Central purification output. Reconstituted mineral profile. 1.9 L internal reservoir.",
-      detail: "The largest chamber communicates the infrastructural convergence of drinking-water and food production.",
-      code: "H₂O / SG-4 / 1.9 L",
+      shortLabel: "WATER",
+      name: "WATER COMPARTMENT",
+      description: "Stores the purified drinking water used throughout the day.",
       exploded: [-0.3, 0.0, 0.3],
     },
     {
       id: "macro",
-      shortLabel: "NUTRIENT MATRIX",
-      name: "MACRONUTRIENT MATRIX",
-      description: "Algal and microbial protein, carbohydrate substrate, lipid emulsion, fibre and standardized flavour compounds.",
-      detail: "2,140 kcal · Protein 96 g · Carbohydrate 262 g · Lipid 78 g · Fibre 31 g.",
-      code: "MX-C / PEARL 04",
+      shortLabel: "FOOD MIXTURE",
+      name: "DAILY FOOD MIXTURE",
+      description: "Contains the day’s calories, protein, carbohydrates, fats and fibre.",
       exploded: [0.05, 0.0, 0.42],
     },
     {
       id: "additive",
-      shortLabel: "ADDITIVE MODULE",
-      name: "MICRONUTRIENT / ADAPTIVE ADDITIVE MODULE",
-      description: "Electrolyte profile SG-4. Individual supplementation profile synchronized at filling.",
-      detail: "Fictional atmospheric contaminant binding compound: 14 mg. Interface copy is speculative, not health advice.",
-      code: "SG-4 / LOT 74.188",
+      shortLabel: "VITAMINS + MINERALS",
+      name: "VITAMIN AND MINERAL CARTRIDGE",
+      description: "Adds the selected pack’s measured vitamin and mineral profile.",
       exploded: [0.44, 0.02, 0.34],
     },
     {
       id: "valve",
-      shortLabel: "MIXING VALVE",
-      name: "CONTROLLED MIXING VALVE",
-      description: "Combines hydration and nutrient phases at the dispensing point.",
-      detail: "The twist seal and integrated mouthpiece support gradual consumption across one 24-hour cycle.",
-      code: "CV-11 / 24H SEAL",
+      shortLabel: "MOUTHPIECE",
+      name: "MOUTHPIECE AND MIXER",
+      description: "Combines water and food at the mouthpiece as you drink.",
       exploded: [0.88, 0.18, 0.12],
     },
     {
       id: "spine",
-      shortLabel: "STRUCTURAL SPINE",
-      name: "DISTRIBUTION STRUCTURAL SPINE",
-      description: "Rigid handling edge for automated filling, stacking and civic distribution.",
-      detail: "A durable injection-moulded component carries the unit identifier and batch-readable surface.",
-      code: "CNF-03 / LINE 7",
+      shortLabel: "SIDE GRIP",
+      name: "SIDE GRIP AND FRAME",
+      description: "Makes the unit easy to hold, stack and transport.",
       exploded: [0.72, 0.0, -0.45],
     },
   ];
 
   var EQUIVALENT_MEAL = {
-    title: "TRADITIONAL DAILY EQUIVALENT",
+    title: "WHAT DIU-7 REPLACES",
     items: [
-      { id: "grains", label: "Grains / carbohydrates", amount: "6 servings" },
-      { id: "protein", label: "Protein source", amount: "3 servings" },
-      { id: "vegetables", label: "Vegetables", amount: "5 servings" },
-      { id: "fruit", label: "Fruit", amount: "2 servings" },
-      { id: "water", label: "Potable water", amount: "2.8 L" },
+      { id: "grains", label: "Cooked wholegrains", amount: "600 g", organicServes: 6 },
+      { id: "protein", label: "Meat, fish, tofu or beans", amount: "270 g food", organicServes: 3 },
+      { id: "vegetables", label: "Cooked vegetables", amount: "200 g", organicServes: 2 },
+      { id: "fruit", label: "Fresh fruit", amount: "260 g", organicServes: 2 },
+      { id: "water", label: "Drinking water", amount: "2.8 L", organicServes: null },
     ],
+    foodWeightG: 1330,
+    organicServes: 13,
     traditionalCostSGD: 186.4,
-    diuCostSGD: 11.2,
-    traditionalPreparationMinutes: 74,
-    diuPreparationMinutes: 0,
-    note: "Conventional food remains available through premium civilian markets.",
+    note: "Fresh food is still available, but costs much more.",
+    organicServeDefinition: "One standard portion of conventional, non-manufactured food.",
   };
+
+  function getPack(id) {
+    for (var i = 0; i < PACKS.length; i++) {
+      if (PACKS[i].id === id) return PACKS[i];
+    }
+    return PACKS[0];
+  }
 
   function getComponent(id) {
     for (var i = 0; i < COMPONENTS.length; i++) {
@@ -128,12 +180,14 @@
   function validateData() {
     var issues = [];
     if (!PRODUCT.id || !PRODUCT.name) issues.push("product identity missing");
-    if (!(PRODUCT.energyKcal > 0)) issues.push("energy must be positive");
-    if (!(PRODUCT.hydrationEquivalentL > 0)) issues.push("hydration must be positive");
-    if (!(WORLD.year >= 2070)) issues.push("world year outside premise");
-    if (WORLD.outdoorAgriculturalShare + WORLD.controlledAgricultureShare !== 100) {
-      issues.push("agricultural shares must total 100");
-    }
+    if (WORLD.year !== 2074) issues.push("world year must be 2074");
+    if (PACKS.length !== 4) issues.push("four packs required");
+    PACKS.forEach(function (pack) {
+      if (!(pack.energyKcal > 0)) issues.push(pack.id + " energy invalid");
+      if (!(pack.proteinG >= 50 && pack.proteinG <= 120)) issues.push(pack.id + " protein outside profile range");
+      if (!(pack.hydrationL > 0)) issues.push(pack.id + " hydration invalid");
+      if (!(pack.priceSGD > 0)) issues.push(pack.id + " price invalid");
+    });
     if (COMPONENTS.length < 4) issues.push("at least four components required");
     return issues;
   }
@@ -141,8 +195,10 @@
   return {
     WORLD: WORLD,
     PRODUCT: PRODUCT,
+    PACKS: PACKS,
     COMPONENTS: COMPONENTS,
     EQUIVALENT_MEAL: EQUIVALENT_MEAL,
+    getPack: getPack,
     getComponent: getComponent,
     validateData: validateData,
   };

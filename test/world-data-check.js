@@ -4,49 +4,57 @@
 var path = require("path");
 var data = require(path.join(__dirname, "..", "world-data.js"));
 var failures = 0;
-
 function assert(condition, message) {
   if (condition) console.log("PASS: " + message);
   else { console.log("FAIL: " + message); failures++; }
 }
 
-console.log("--- World premise ---");
+console.log("--- Streamlined world facts ---");
 assert(data.WORLD.year === 2074, "year is 2074");
-assert(data.WORLD.region === "Singapore Urban Sector 04", "region is Singapore Sector 04");
-assert(typeof data.WORLD.outdoorAgriculturalShare === "number", "outdoor agriculture is numeric");
-assert(typeof data.WORLD.controlledAgricultureShare === "number", "controlled agriculture is numeric");
-assert(data.WORLD.outdoorAgriculturalShare + data.WORLD.controlledAgricultureShare === 100, "agricultural shares total 100");
-assert(data.WORLD.directPotableNetwork === "Restricted", "direct potable network is restricted");
-assert(data.WORLD.freshFoodIndex > 1, "fresh food index implies premium cost");
+assert(data.WORLD.location === "Singapore", "location is Singapore");
+assert(data.WORLD.controlledAgricultureShare === 92, "indoor-grown food share is 92%");
+assert(data.WORLD.publicDrinkingWater === "LIMITED", "public drinking water is limited");
+assert(data.WORLD.freshFoodPriceMultiplier === 7.6, "fresh food price multiplier is 7.6");
 
-console.log("--- Product record ---");
-assert(data.PRODUCT.id === "DIU-7", "product id is DIU-7");
-assert(data.PRODUCT.name === "CIVIC DAILY INTAKE UNIT", "full product name present");
-assert(data.PRODUCT.allocationClass === "C", "allocation class C");
-assert(data.PRODUCT.energyKcal === 2140, "energy is 2,140 kcal");
-assert(data.PRODUCT.hydrationEquivalentL === 2.8, "hydration equivalent is 2.8 L");
-assert(data.PRODUCT.internalHydrationL === 1.9, "internal hydration phase is 1.9 L");
-assert(data.PRODUCT.proteinG === 96, "protein is 96 g");
-assert(data.PRODUCT.consumptionPeriodH === 24, "consumption period is 24 h");
-assert(data.PRODUCT.productionFacility === "CNF-03", "production facility is CNF-03");
-assert(/UNTREATED FOOD OR WATER/.test(data.PRODUCT.warning), "untreated food and water warning exists");
+console.log("--- Four pack profiles ---");
+assert(Array.isArray(data.PACKS) && data.PACKS.length === 4, "exactly four packs exist");
+var expected = {
+  basic: { kcal: 2140, protein: 60, price: 11.2 },
+  performance: { kcal: 2700, protein: 120, price: 14.8 },
+  nutrition: { kcal: 2140, protein: 60, price: 14.4 },
+  premium: { kcal: 2600, protein: 110, price: 18.6 },
+};
+Object.keys(expected).forEach(function (id) {
+  var pack = data.getPack(id);
+  assert(pack.id === id, id + " pack exists");
+  assert(pack.energyKcal === expected[id].kcal, id + " calories match profile");
+  assert(pack.proteinG === expected[id].protein, id + " protein matches profile");
+  assert(pack.priceSGD === expected[id].price, id + " price matches profile");
+  var macroCalories = pack.proteinG * 4 + pack.carbohydrateG * 4 + pack.lipidG * 9;
+  assert(Math.abs(macroCalories - pack.energyKcal) <= 10, id + " macronutrients approximately match calories");
+  assert(pack.priceSGD < data.EQUIVALENT_MEAL.traditionalCostSGD, id + " costs less than regular food");
+});
+assert(data.getPack("performance").proteinG > data.getPack("basic").proteinG, "performance has more protein than basic");
+assert(/125%/.test(data.getPack("nutrition").micronutrientLabel), "nutrition pack has expanded micronutrient profile");
+assert(data.getPack("premium").proteinG > data.getPack("basic").proteinG, "premium has more protein than basic");
+assert(/125%/.test(data.getPack("premium").micronutrientLabel), "premium has expanded micronutrient profile");
 
-console.log("--- Inspectable architecture ---");
-assert(Array.isArray(data.COMPONENTS) && data.COMPONENTS.length >= 4, "at least four components defined");
+console.log("--- Plain-language components ---");
 ["shell", "hydration", "macro", "additive", "valve", "spine"].forEach(function (id) {
   var component = data.getComponent(id);
   assert(component.id === id, id + " component exists");
-  assert(typeof component.name === "string" && component.name.length > 8, id + " has institutional label");
-  assert(typeof component.description === "string" && component.description.length > 20, id + " has description");
-  assert(Array.isArray(component.exploded) && component.exploded.length === 3, id + " has exploded position");
-  assert(component.exploded.every(function (value) { return typeof value === "number" && Number.isFinite(value); }), id + " exploded position is numeric");
+  assert(typeof component.description === "string" && component.description.length > 15, id + " has a short description");
+  assert(Array.isArray(component.exploded) && component.exploded.length === 3, id + " has an exploded position");
 });
+assert(data.getComponent("hydration").name === "WATER COMPARTMENT", "water compartment uses plain language");
+assert(data.getComponent("macro").name === "DAILY FOOD MIXTURE", "food mixture uses plain language");
 
-console.log("--- Equivalent meal ---");
-assert(data.EQUIVALENT_MEAL.items.length >= 5, "traditional equivalent includes five provision groups");
-assert(data.EQUIVALENT_MEAL.traditionalCostSGD > data.EQUIVALENT_MEAL.diuCostSGD, "traditional meal costs more than DIU allocation");
-assert(data.EQUIVALENT_MEAL.traditionalPreparationMinutes > data.EQUIVALENT_MEAL.diuPreparationMinutes, "traditional preparation takes longer");
-assert(/available|premium/i.test(data.EQUIVALENT_MEAL.note), "traditional food remains available");
+console.log("--- Equivalent regular meal ---");
+assert(data.EQUIVALENT_MEAL.foodWeightG === 1330, "regular food totals 1.33 kg");
+assert(data.EQUIVALENT_MEAL.organicServes === 13, "regular food totals 13 organic serves");
+assert(data.EQUIVALENT_MEAL.items.length === 5, "five regular food and water groups exist");
+assert(data.EQUIVALENT_MEAL.items[1].amount === "270 g food", "protein-source row is clearly food weight, not protein nutrient");
+assert(!/320/.test(JSON.stringify(data)), "obsolete 320 g protein-food figure removed");
 assert(data.validateData().length === 0, "shipped fictional data validates");
 
 console.log("--- Summary ---");

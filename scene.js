@@ -25,13 +25,23 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   var mealToggle = document.getElementById("meal-toggle");
   var mealLabel = document.getElementById("meal-label");
   var equivalentPanel = document.getElementById("equivalent-panel");
-  var viewState = document.getElementById("view-state");
   var tagLayer = document.getElementById("component-tags");
-  var componentShort = document.getElementById("component-short");
   var componentName = document.getElementById("component-name");
   var componentDescription = document.getElementById("component-description");
-  var componentDetail = document.getElementById("component-detail");
-  var componentCode = document.getElementById("component-code");
+  var productOverview = document.getElementById("product-overview");
+  var selectedComponent = document.getElementById("selected-component");
+  var backOverview = document.getElementById("back-overview");
+  var packTitle = document.getElementById("pack-title");
+  var packTagline = document.getElementById("pack-tagline");
+  var metricEnergy = document.getElementById("m-energy");
+  var metricProtein = document.getElementById("m-protein");
+  var metricWater = document.getElementById("m-water");
+  var metricPrice = document.getElementById("m-price");
+  var microSummary = document.getElementById("micro-summary");
+  var equivalentPackName = document.getElementById("equivalent-pack-name");
+  var equivalentPackPrice = document.getElementById("equivalent-pack-price");
+  var mobilePackSelect = document.getElementById("mobile-pack-select");
+  var packButtons = Array.prototype.slice.call(document.querySelectorAll(".pack-button"));
 
   var query = new URLSearchParams(window.location.search);
   var heroMode = query.get("hero") === "1";
@@ -84,7 +94,12 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   var componentGroups = new Map();
   var interactiveMeshes = [];
   var tagElements = new Map();
-  var selectedId = "hydration";
+  var selectedId = null;
+  var activePack = Data.getPack("basic");
+  var labelCanvas = null;
+  var labelContext = null;
+  var labelTexture = null;
+  var accentMaterials = [];
   var hoveredId = null;
   var exploded = false;
   var explosionProgress = 0;
@@ -103,7 +118,8 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   buildDIU();
   buildTags();
   bindInterface();
-  selectComponent("hydration");
+  selectPack("basic");
+  showOverview();
   applyCameraPreset(heroMode);
   onResize();
 
@@ -224,26 +240,23 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
   function buildShell() {
     var group = new THREE.Group();
-    group.name = "Atmospheric Barrier Shell";
+    group.name = "Outer Protective Case";
     var shellMat = physical({
-      color: 0xc6d2c9,
-      roughness: 0.27,
+      color: 0x9ca79f,
+      roughness: 0.36,
       metalness: 0.0,
-      transmission: 0.06,
-      transparent: true,
-      opacity: 0.17,
-      depthWrite: false,
+      transparent: false,
+      opacity: 1,
+      depthWrite: true,
       side: THREE.DoubleSide,
     });
-    var edgeMat = physical({ color: 0xaebbb1, roughness: 0.34, transparent: true, opacity: 0.38, depthWrite: false });
+    var edgeMat = physical({ color: 0x727e75, roughness: 0.42, transparent: false, opacity: 1, depthWrite: true });
 
     var rear = rounded(1.98, 3.55, 0.1, 0.25, shellMat.clone(), 0, -0.13, -0.38);
-    rear.userData.pickThrough = true;
     rear.renderOrder = 2;
     group.add(rear);
 
     var front = rounded(1.98, 3.55, 0.075, 0.25, shellMat, 0, -0.13, 0.43);
-    front.userData.pickThrough = true;
     front.renderOrder = 20;
     group.add(front);
 
@@ -258,7 +271,9 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     shoulderLeft.rotation.z = -0.035;
     group.add(bottomEdge, shoulderLeft);
 
-    var sealDot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 28), standard({ color: 0xb3c1b7, roughness: 0.42 }));
+    var sealMaterial = standard({ color: 0x9fc6c4, roughness: 0.42 });
+    accentMaterials.push(sealMaterial);
+    var sealDot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 28), sealMaterial);
     sealDot.rotation.x = Math.PI / 2;
     sealDot.position.set(-0.74, 1.47, 0.5);
     group.add(sealDot);
@@ -271,7 +286,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
   function buildHydration() {
     var group = new THREE.Group();
-    group.name = "Purified Hydration Phase";
+    group.name = "Water Compartment";
     var chamberMat = physical({
       color: 0x83c5c7,
       roughness: 0.12,
@@ -314,7 +329,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
   function buildMacro() {
     var group = new THREE.Group();
-    group.name = "Macronutrient Matrix";
+    group.name = "Daily Food Mixture";
     var caseMat = physical({ color: 0xd9d1bd, roughness: 0.28, metalness: 0.0, clearcoat: 0.28, clearcoatRoughness: 0.24 });
     var matrix = rounded(0.58, 2.1, 0.5, 0.17, caseMat, 0.48, -0.46, 0.08);
     matrix.castShadow = true;
@@ -331,7 +346,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
   function buildAdditive() {
     var group = new THREE.Group();
-    group.name = "Adaptive Additive Module";
+    group.name = "Vitamin and Mineral Cartridge";
     var casing = rounded(0.52, 0.74, 0.46, 0.09, standard({ color: 0x3b443e, roughness: 0.37, metalness: 0.08 }), 0.48, 0.96, 0.08);
     casing.castShadow = true;
     group.add(casing);
@@ -339,7 +354,9 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     var insert = rounded(0.35, 0.52, 0.04, 0.045, physical({ color: 0xc9d0c9, roughness: 0.32, transparent: true, opacity: 0.82 }), 0.48, 0.96, 0.33);
     group.add(insert);
 
-    var doseLine = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.035), basic({ color: 0xc7b677, transparent: true, opacity: 0.82, side: THREE.DoubleSide }));
+    var doseMaterial = basic({ color: 0x9fc6c4, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+    accentMaterials.push(doseMaterial);
+    var doseLine = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.035), doseMaterial);
     doseLine.position.set(0.48, 1.08, 0.36);
     group.add(doseLine);
     registerComponent("additive", group, new THREE.Vector3(0.48, 1.0, 0.38));
@@ -347,7 +364,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
   function buildValve() {
     var group = new THREE.Group();
-    group.name = "Controlled Mixing Valve";
+    group.name = "Mouthpiece and Mixer";
     var tubeMat = physical({ color: 0xb8c9c2, roughness: 0.18, transparent: true, opacity: 0.65, depthWrite: false });
     var hydrationPath = new THREE.CatmullRomCurve3([
       new THREE.Vector3(-0.34, 1.11, 0.02),
@@ -388,7 +405,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
   function buildSpine() {
     var group = new THREE.Group();
-    group.name = "Distribution Structural Spine";
+    group.name = "Side Grip and Frame";
     var spineMat = standard({ color: 0x252d28, roughness: 0.47, metalness: 0.05 });
     var upper = rounded(0.24, 1.48, 0.48, 0.08, spineMat, 0.92, 0.91, -0.08);
     upper.rotation.z = 0.025;
@@ -436,64 +453,69 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   }
 
   function makeProductLabel() {
-    var canvas = document.createElement("canvas");
-    canvas.width = 900;
-    canvas.height = 1600;
-    var ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "rgba(237,242,235,0.9)";
-    ctx.strokeStyle = "rgba(237,242,235,0.55)";
-    ctx.lineWidth = 2;
-    ctx.font = "600 28px Arial";
-    ctx.letterSpacing = "3px";
-    ctx.fillText("CIVIC NUTRITION AUTHORITY", 58, 92);
-    ctx.beginPath(); ctx.moveTo(58, 122); ctx.lineTo(842, 122); ctx.stroke();
+    labelCanvas = document.createElement("canvas");
+    labelCanvas.width = 900;
+    labelCanvas.height = 1600;
+    labelContext = labelCanvas.getContext("2d");
+    drawProductLabel(activePack);
 
-    ctx.font = "700 126px Arial";
-    ctx.fillText("DIU-7", 50, 285);
-    ctx.font = "600 25px Arial";
-    ctx.fillText("CIVIC DAILY INTAKE UNIT", 58, 338);
-    ctx.font = "500 22px monospace";
-    ctx.fillText("STANDARD ADULT // CLASS C", 58, 397);
-
-    ctx.globalAlpha = 0.82;
-    ctx.font = "500 23px monospace";
-    ctx.fillText("1 UNIT / 24H", 58, 530);
-    ctx.fillText("2,140 kcal", 58, 576);
-    ctx.fillText("HYDRATION EQUIVALENT: 2.8 L", 58, 622);
-    ctx.fillText("CONSUMPTION WINDOW: 24H", 58, 668);
-    ctx.beginPath(); ctx.moveTo(58, 710); ctx.lineTo(842, 710); ctx.stroke();
-
-    ctx.font = "500 20px monospace";
-    ctx.fillText("CENTRAL NUTRITION FACILITY 03", 58, 772);
-    ctx.fillText("SINGAPORE // 2074", 58, 812);
-    ctx.fillText("LOT 74.188.03 // SG-4", 58, 852);
-
-    var bars = [4,2,7,3,2,5,2,8,3,5,2,3,7,2,5,4,8,2,3,5,3,7,2,4,6,2,3,8];
-    var bx = 58;
-    for (var i = 0; i < bars.length; i++) {
-      ctx.fillRect(bx, 932, bars[i], 108);
-      bx += bars[i] + 7;
-    }
-    ctx.font = "500 18px monospace";
-    ctx.fillText("7 41403 20741 8", 58, 1070);
-
-    ctx.globalAlpha = 0.68;
-    ctx.strokeRect(58, 1305, 784, 112);
-    ctx.font = "600 17px monospace";
-    ctx.fillText("DO NOT SUPPLEMENT WITH", 82, 1350);
-    ctx.fillText("UNTREATED FOOD OR WATER", 82, 1383);
-    ctx.font = "500 15px monospace";
-    ctx.fillText("DISPENSE GRADUALLY // CIVIC PROFILE C", 58, 1490);
-
-    var texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    var material = basic({ map: texture, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, alphaTest: 0.025 });
+    labelTexture = new THREE.CanvasTexture(labelCanvas);
+    labelTexture.colorSpace = THREE.SRGBColorSpace;
+    labelTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    var material = basic({ map: labelTexture, transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide });
     var label = new THREE.Mesh(new THREE.PlaneGeometry(1.57, 2.8), material);
     label.position.set(-0.03, -0.12, 0.481);
     label.renderOrder = 32;
     return label;
+  }
+
+  function drawProductLabel(pack) {
+    if (!labelContext || !labelCanvas) return;
+    var ctx = labelContext;
+    ctx.clearRect(0, 0, labelCanvas.width, labelCanvas.height);
+    ctx.fillStyle = "rgba(15,20,17,0.94)";
+    ctx.fillRect(0, 0, labelCanvas.width, labelCanvas.height);
+    ctx.fillStyle = pack.accent;
+    ctx.fillRect(0, 0, 24, labelCanvas.height);
+    ctx.fillStyle = "#f1f4ef";
+    ctx.strokeStyle = "rgba(241,244,239,0.5)";
+    ctx.lineWidth = 3;
+
+    ctx.font = "600 30px Arial";
+    ctx.fillText("DAILY FOOD & WATER SERVICE", 62, 86);
+    ctx.beginPath(); ctx.moveTo(62, 118); ctx.lineTo(838, 118); ctx.stroke();
+
+    ctx.font = "700 142px Arial";
+    ctx.fillText("DIU-7", 54, 300);
+    ctx.fillStyle = pack.accent;
+    ctx.font = "700 42px Arial";
+    ctx.fillText(pack.name, 62, 370);
+
+    ctx.fillStyle = "#f1f4ef";
+    ctx.font = "600 34px Arial";
+    ctx.fillText("ONE DAY // FOOD + WATER", 62, 470);
+    ctx.beginPath(); ctx.moveTo(62, 510); ctx.lineTo(838, 510); ctx.stroke();
+
+    ctx.font = "700 54px Arial";
+    ctx.fillText(pack.energyKcal.toLocaleString("en-US") + " CALORIES", 62, 620);
+    ctx.fillText(pack.proteinG + " G PROTEIN", 62, 705);
+    ctx.fillText(pack.hydrationL.toFixed(1) + " L WATER", 62, 790);
+
+    ctx.font = "600 31px monospace";
+    ctx.fillText("USE WITHIN 24 HOURS", 62, 920);
+    ctx.fillText("SINGAPORE // 2074", 62, 978);
+
+    ctx.strokeStyle = pack.accent;
+    ctx.strokeRect(62, 1165, 776, 190);
+    ctx.fillStyle = "#f1f4ef";
+    ctx.font = "700 28px Arial";
+    ctx.fillText("DO NOT EAT OR DRINK", 90, 1238);
+    ctx.fillText("UNTREATED FOOD OR WATER", 90, 1292);
+
+    ctx.fillStyle = "rgba(241,244,239,0.7)";
+    ctx.font = "500 24px monospace";
+    ctx.fillText(pack.code + " // ONE UNIT", 62, 1490);
+    if (labelTexture) labelTexture.needsUpdate = true;
   }
 
   function buildTags() {
@@ -520,6 +542,17 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
       stopDemoForUser();
       setEquivalent(!equivalentVisible);
     });
+    packButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        stopDemoForUser();
+        selectPack(button.dataset.pack);
+      });
+    });
+    mobilePackSelect.addEventListener("change", function () {
+      stopDemoForUser();
+      selectPack(mobilePackSelect.value);
+    });
+    backOverview.addEventListener("click", showOverview);
     controls.addEventListener("start", stopDemoForUser);
     controls.addEventListener("change", function () {
       userHasInteracted = true;
@@ -574,23 +607,73 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   }
 
   function pickComponent() {
+    if (equivalentVisible) return null;
     raycaster.setFromCamera(pointer, camera);
     var hits = raycaster.intersectObjects(interactiveMeshes, false);
     if (!hits.length) return null;
+    if (!exploded) {
+      for (var i = 0; i < hits.length; i++) {
+        if (hits[i].object.userData.componentId === "shell") return "shell";
+      }
+      return null;
+    }
     return hits[0].object.userData.componentId || null;
   }
 
   function selectComponent(id) {
     selectedId = Data.getComponent(id).id;
     var data = Data.getComponent(selectedId);
-    componentShort.textContent = data.shortLabel;
     componentName.textContent = data.name;
-    componentDescription.textContent = data.description;
-    componentDetail.textContent = data.detail;
-    componentCode.textContent = data.code;
+    componentDescription.textContent = componentCopy(selectedId);
+    productOverview.hidden = true;
+    selectedComponent.hidden = false;
     tagElements.forEach(function (element, tagId) {
       element.classList.toggle("selected", tagId === selectedId);
     });
+  }
+
+  function componentCopy(id) {
+    if (id === "hydration") {
+      return "Stores " + activePack.internalWaterL.toFixed(1) + " L of purified water. The food mixture supplies the rest of the pack’s " + activePack.hydrationL.toFixed(1) + " L water total.";
+    }
+    if (id === "macro") {
+      return "Contains " + activePack.energyKcal.toLocaleString("en-US") + " calories, " + activePack.proteinG + " g protein, " + activePack.carbohydrateG + " g carbohydrate, " + activePack.lipidG + " g fat and " + activePack.fibreG + " g fibre.";
+    }
+    if (id === "additive") return activePack.micronutrientLabel + ".";
+    return Data.getComponent(id).description;
+  }
+
+  function showOverview() {
+    selectedId = null;
+    productOverview.hidden = false;
+    selectedComponent.hidden = true;
+    tagElements.forEach(function (element) { element.classList.remove("selected"); });
+  }
+
+  function selectPack(id) {
+    activePack = Data.getPack(id);
+    document.documentElement.style.setProperty("--accent", activePack.accent);
+    packTitle.textContent = activePack.name;
+    packTagline.textContent = activePack.tagline;
+    metricEnergy.textContent = activePack.energyKcal.toLocaleString("en-US");
+    metricProtein.textContent = activePack.proteinG + " g";
+    metricWater.textContent = activePack.hydrationL.toFixed(1) + " L";
+    metricPrice.textContent = "S$" + activePack.priceSGD.toFixed(2) + " / day";
+    microSummary.textContent = activePack.micronutrientLabel + ".";
+    equivalentPackName.textContent = activePack.name.replace(" PACK", "") + " PACK";
+    equivalentPackPrice.textContent = "S$" + activePack.priceSGD.toFixed(2) + " / day";
+    mobilePackSelect.value = activePack.id;
+    packButtons.forEach(function (button) {
+      var isActive = button.dataset.pack === activePack.id;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    });
+    accentMaterials.forEach(function (material) {
+      material.color.set(activePack.accent);
+      if (material.userData.baseColor) material.userData.baseColor.set(activePack.accent);
+    });
+    drawProductLabel(activePack);
+    if (selectedId) componentDescription.textContent = componentCopy(selectedId);
   }
 
   function setExploded(value, fromDemo) {
@@ -598,8 +681,8 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     if (exploded && equivalentVisible) setEquivalent(false, true);
     explodedToggle.classList.toggle("active", exploded);
     explodedToggle.setAttribute("aria-pressed", String(exploded));
-    explodedLabel.textContent = exploded ? "Assemble" : "Exploded view";
-    viewState.textContent = exploded ? "Component separation" : "Assembled unit";
+    explodedLabel.textContent = exploded ? "Close unit" : "See what’s inside";
+    if (!exploded) showOverview();
     if (!fromDemo) userHasInteracted = true;
   }
 
@@ -610,8 +693,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     equivalentPanel.setAttribute("aria-hidden", String(!equivalentVisible));
     mealToggle.classList.toggle("active", equivalentVisible);
     mealToggle.setAttribute("aria-pressed", String(equivalentVisible));
-    mealLabel.textContent = equivalentVisible ? "Return to unit" : "View equivalent meal";
-    viewState.textContent = equivalentVisible ? "Provisioning equivalent" : (exploded ? "Component separation" : "Assembled unit");
+    mealLabel.textContent = equivalentVisible ? "Back to DIU-7" : "Compare with regular food";
     if (!fromDemo) userHasInteracted = true;
   }
 
@@ -631,7 +713,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   function applyHeroState() {
     setEquivalent(false, true);
     setExploded(false, true);
-    selectComponent("hydration");
+    showOverview();
     applyCameraPreset(true);
     modelRoot.rotation.y = -0.12;
     document.body.classList.add("hero-mode");
@@ -660,7 +742,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     var segment = t < 4 ? 0 : t < 9 ? 1 : t < 13 ? 2 : t < 16 ? 3 : t < 21 ? 4 : t < 25 ? 5 : 6;
     if (segment !== demoSegment) {
       demoSegment = segment;
-      if (segment === 0) { setEquivalent(false, true); setExploded(false, true); selectComponent("hydration"); }
+      if (segment === 0) { setEquivalent(false, true); setExploded(false, true); showOverview(); }
       if (segment === 1) setExploded(true, true);
       if (segment === 2) selectComponent("macro");
       if (segment === 3) setExploded(false, true);
@@ -720,7 +802,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
       var y = (-point.y * 0.5 + 0.5) * rect.height;
       element.style.left = x.toFixed(1) + "px";
       element.style.top = y.toFixed(1) + "px";
-      var shouldShow = (explosionProgress > 0.72 || id === selectedId && hoveredId === id) && !equivalentVisible;
+      var shouldShow = explosionProgress > 0.72 && !equivalentVisible;
       element.classList.toggle("visible", shouldShow && point.z < 1);
     });
   }

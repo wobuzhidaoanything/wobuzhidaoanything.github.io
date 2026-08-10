@@ -7,49 +7,49 @@ var root = path.join(__dirname, "..");
 var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 var scene = fs.readFileSync(path.join(root, "scene.js"), "utf8");
 var failures = 0;
-
 function assert(condition, message) {
   if (condition) console.log("PASS: " + message);
   else { console.log("FAIL: " + message); failures++; }
 }
 
-console.log("--- Required interface language ---");
+console.log("--- Streamlined interface language ---");
 [
-  "DIU-7", "CIVIC DAILY INTAKE UNIT", "CIVIC NUTRITION NETWORK",
-  "STANDARD ADULT", "ALLOCATION CLASS", "2074", "2,140 kcal", "2.8 L",
-  "Cleared for distribution", "Direct potable network", "Controlled agriculture share",
-  "TRADITIONAL DAILY EQUIVALENT", "S$186.40", "S$11.20"
+  "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE // 2074", "Food grown indoors",
+  "Public drinking water", "Fresh food cost", "Standard daily food",
+  "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
+  "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
 ].forEach(function (text) {
   assert(html.toLowerCase().indexOf(text.toLowerCase()) !== -1, "page contains " + text);
 });
+assert((html.match(/class="readout"/g) || []).length === 4, "left panel has only four world facts");
+assert((html.match(/class="product-fact"/g) || []).length === 4, "product overview has only four key facts");
+assert((html.match(/class="pack-button/g) || []).length === 4, "four pack buttons exist");
 
-console.log("--- Controls and state surfaces ---");
+console.log("--- Equivalent food measurements ---");
+["600 g", "270 g food", "200 g", "260 g", "2.8 L", "Organic serves", "1.33 kg", "13"].forEach(function (text) {
+  assert(html.indexOf(text) !== -1, "comparison contains " + text);
+});
+assert(/non-manufactured food/i.test(html), "organic serve is defined");
+
+console.log("--- Removed clutter and jargon ---");
 [
-  "viewport", "world-panel", "product-panel", "selected-component", "component-name",
-  "exploded-toggle", "meal-toggle", "equivalent-panel", "opening-card", "opening-dismiss"
-].forEach(function (id) {
+  /SUPPLY:\s*NOMINAL/i, /HYDRATION PHASE/i, /MACRONUTRIENT MATRIX/i,
+  /ALLOCATION CLASS/i, /PRODUCTION FACILITY/i, /SPECIMEN/i, /CIVIC OBJECT REGISTRY/i,
+  /DIRECT POTABLE NETWORK/i, /CONTAMINATION INDEX/i
+].forEach(function (pattern) { assert(!pattern.test(html), pattern + " is absent"); });
+assert(!/measurement-scale/.test(html), "measurement scale removed");
+assert(/font-size:\s*15px/.test(html), "base interface type is enlarged to 15 px");
+
+console.log("--- Controls, modes and hosting ---");
+["viewport", "world-panel", "product-panel", "product-overview", "selected-component", "exploded-toggle", "meal-toggle", "equivalent-panel", "opening-card", "mobile-pack-select"].forEach(function (id) {
   assert(html.indexOf('id="' + id + '"') !== -1, "has #" + id);
 });
-assert(/Exploded view/i.test(html), "exploded-view control label exists");
-assert(/View equivalent meal/i.test(html), "equivalent-meal control label exists");
-assert(/Inspect unit/i.test(html), "opening action is concise");
-assert(/Daily allocation ready/i.test(html), "opening allocation status exists");
-
-console.log("--- Removed concept ---");
-assert(!/SEA STATE/i.test(html), "obsolete project name absent from page");
-assert(!/Contamination Index/i.test(html), "obsolete index absent from page");
-assert(!/ocean shader|waste dumping|ash fallout|invasive biomass/i.test(scene), "obsolete simulation language absent from scene");
-assert(!/ci-slider|m-particulate|m-photic/i.test(html), "obsolete controls and readouts absent");
-
-console.log("--- Static hosting and modes ---");
+assert(/aria-pressed="false"[^>]*><span id="exploded-label">See what’s inside/.test(html), "unit starts closed");
 assert(/type="importmap"/.test(html), "Three.js import map preserved");
 assert(/type="module" src="scene\.js"/.test(html), "static ES module entry preserved");
-assert(/hero/.test(scene) && /query\.get\("hero"\) === "1"/.test(scene), "hero query parameter recognized");
-assert(/demo/.test(scene) && /query\.get\("demo"\) === "1"/.test(scene), "demo query parameter recognized");
-assert(/setAnimationLoop/.test(scene), "render loop exists");
-assert(/OrbitControls/.test(scene) && /enableDamping = true/.test(scene), "damped orbit controls configured");
-assert(/minDistance/.test(scene) && /maxDistance/.test(scene), "zoom limits configured");
-assert(/ACESFilmicToneMapping/.test(scene), "ACES filmic tone mapping configured");
+assert(/query\.get\("hero"\) === "1"/.test(scene), "hero query parameter recognized");
+assert(/query\.get\("demo"\) === "1"/.test(scene), "demo query parameter recognized");
+assert(/selectPack/.test(scene) && /Data\.getPack/.test(scene), "pack selection is wired");
 
 console.log("--- Responsive shell ---");
 assert(/@media \(max-width: 780px\)/.test(html), "narrow layout breakpoint exists");

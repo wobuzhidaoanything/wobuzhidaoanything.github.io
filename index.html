@@ -4,29 +4,23 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#090b0a" />
-<meta name="description" content="Civic Nutrition Network provisioning terminal for the DIU-7 Civic Daily Intake Unit." />
-<title>DIU-7 // Civic Daily Intake Unit</title>
+<meta name="description" content="Singapore Daily Food & Water Service interface for the DIU-7." />
+<title>DIU-7 // One Day of Food and Water</title>
 <style>
   :root {
     --bg: #090b0a;
-    --surface: rgba(17, 21, 19, 0.88);
-    --surface-solid: #111512;
-    --surface-raised: #171c19;
-    --line: rgba(221, 231, 222, 0.12);
-    --line-strong: rgba(221, 231, 222, 0.24);
+    --panel: rgba(16, 20, 17, 0.92);
+    --line: rgba(221, 231, 222, 0.14);
+    --line-strong: rgba(221, 231, 222, 0.3);
     --text: #dfe5df;
-    --bright: #f1f4ef;
-    --muted: #8e9a91;
-    --quiet: #626c65;
-    --accent: #b9c8bd;
-    --water: #9bd1d2;
-    --cream: #d9cfb8;
-    --ok: #9ac4a5;
-    --warning: #c9b47b;
-    --topbar: 62px;
-    --left: 232px;
-    --right: 292px;
-    --font: "Helvetica Neue", "Inter", "Segoe UI", sans-serif;
+    --bright: #f2f5f0;
+    --muted: #909b93;
+    --quiet: #68736b;
+    --accent: #9fc6c4;
+    --topbar: 64px;
+    --left: 210px;
+    --right: 294px;
+    --font: "Helvetica Neue", "Segoe UI", sans-serif;
     --mono: "SFMono-Regular", "Roboto Mono", Consolas, monospace;
   }
 
@@ -36,332 +30,278 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--font);
-    font-size: 12px;
+    font-size: 15px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
   }
-  button { font: inherit; }
-
+  button, select { font: inherit; }
+  button { cursor: pointer; }
   #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
 
   #topbar {
-    height: var(--topbar);
-    flex: 0 0 var(--topbar);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    padding: 0 22px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(9, 11, 10, 0.9);
-    backdrop-filter: blur(14px);
-    z-index: 30;
+    height: var(--topbar); flex: 0 0 var(--topbar);
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    padding: 0 22px; border-bottom: 1px solid var(--line);
+    background: rgba(9,11,10,.94); z-index: 30;
   }
   .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .brand-mark {
-    width: 31px; height: 31px;
-    display: grid; place-items: center;
-    border: 1px solid var(--line-strong);
-    color: var(--bright);
-    font: 600 11px/1 var(--mono);
-    letter-spacing: -0.08em;
-    position: relative;
+    width: 34px; height: 34px; display: grid; place-items: center;
+    border: 1px solid var(--line-strong); color: var(--bright);
+    font: 700 12px/1 var(--mono); letter-spacing: -.08em;
   }
-  .brand-mark::before, .brand-mark::after {
-    content: ""; position: absolute; background: var(--accent); opacity: 0.65;
-  }
-  .brand-mark::before { width: 6px; height: 1px; top: -1px; left: -1px; }
-  .brand-mark::after { width: 1px; height: 6px; top: -1px; left: -1px; }
-  .brand-title { color: var(--bright); font-size: 12px; font-weight: 600; letter-spacing: 0.09em; }
-  .brand-subtitle { color: var(--muted); font: 9px/1.4 var(--mono); letter-spacing: 0.05em; margin-top: 2px; }
-  .top-meta { display: flex; align-items: center; gap: 20px; font: 10px/1 var(--mono); letter-spacing: 0.08em; }
-  .year-chip { color: var(--bright); font-size: 13px; }
-  .supply { color: var(--ok); display: flex; align-items: center; gap: 7px; }
-  .supply::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px rgba(154,196,165,.35); }
+  .brand-title { color: var(--bright); font-size: 15px; font-weight: 600; letter-spacing: .08em; }
+  .top-location { color: var(--text); font: 12px/1 var(--mono); letter-spacing: .1em; white-space: nowrap; }
 
-  #workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left) minmax(0, 1fr) var(--right); }
+  #workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left) minmax(0,1fr) var(--right); }
   .side-panel {
-    min-height: 0;
-    background: var(--surface);
-    backdrop-filter: blur(12px);
-    z-index: 12;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    min-height: 0; background: var(--panel); z-index: 12; overflow: hidden;
+    display: flex; flex-direction: column;
   }
   #world-panel { border-right: 1px solid var(--line); }
   #product-panel { border-left: 1px solid var(--line); }
-  .panel-head { padding: 17px 18px 13px; border-bottom: 1px solid var(--line); }
-  .eyebrow { color: var(--quiet); font: 9px/1.3 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
-  .panel-head h2 { color: var(--bright); font-size: 14px; line-height: 1.25; font-weight: 500; letter-spacing: 0.01em; margin-top: 6px; }
-  .panel-head .sub { color: var(--muted); font: 9px/1.5 var(--mono); letter-spacing: 0.06em; margin-top: 4px; text-transform: uppercase; }
-  .readout-list { padding: 4px 18px; }
-  .readout {
-    display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
-    padding: 12px 0; border-bottom: 1px solid var(--line);
-  }
-  .readout dt { color: var(--quiet); font: 8px/1.35 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; max-width: 58%; }
-  .readout dd { color: var(--bright); font: 500 11px/1.25 var(--mono); text-align: right; }
-  .readout dd.large { font-size: 17px; font-family: var(--font); letter-spacing: -0.02em; }
-  .fiction-note { margin-top: auto; padding: 15px 18px 18px; color: var(--quiet); font: 8px/1.6 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .panel-head { padding: 22px 18px 17px; border-bottom: 1px solid var(--line); }
+  .eyebrow { color: var(--quiet); font: 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  .panel-head h2 { color: var(--bright); font-size: 18px; line-height: 1.25; font-weight: 500; margin-top: 7px; }
+  .panel-sub { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 6px; }
 
-  #viewport { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: radial-gradient(circle at 53% 44%, #18201c 0%, #0d110f 42%, #070908 78%); }
+  .readout-list { padding: 6px 18px; }
+  .readout { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .readout dt { color: var(--quiet); font: 10px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .readout dd { color: var(--bright); font-size: 16px; line-height: 1.25; margin-top: 5px; }
+  .readout dd strong { font-size: 20px; font-weight: 500; }
+
+  #viewport {
+    position: relative; min-width: 0; min-height: 0; overflow: hidden;
+    background: radial-gradient(circle at 52% 44%, #19201c 0%, #0d110f 43%, #070908 80%);
+  }
   #viewport::before {
-    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
-    background:
-      linear-gradient(rgba(188,204,191,.023) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(188,204,191,.023) 1px, transparent 1px);
-    background-size: 42px 42px;
-    mask-image: radial-gradient(circle at center, black, transparent 78%);
+    content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background: linear-gradient(rgba(188,204,191,.022) 1px, transparent 1px), linear-gradient(90deg, rgba(188,204,191,.022) 1px, transparent 1px);
+    background-size: 48px 48px; mask-image: radial-gradient(circle at center, black, transparent 78%);
   }
-  #viewport::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
-    box-shadow: inset 0 0 90px rgba(0,0,0,.42);
-  }
-  #viewport canvas { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; touch-action: none; outline: none; }
-
-  .viewport-index { position: absolute; z-index: 7; pointer-events: none; font: 8px/1.4 var(--mono); color: rgba(180,194,183,.42); letter-spacing: .12em; text-transform: uppercase; }
-  .viewport-index.top { top: 15px; left: 17px; }
-  .viewport-index.bottom { bottom: 14px; right: 17px; text-align: right; }
-  .measurement-scale { position: absolute; right: 18px; top: 13%; bottom: 19%; width: 21px; z-index: 6; opacity: .34; pointer-events: none; border-right: 1px solid var(--accent); background: repeating-linear-gradient(to bottom, transparent 0 19px, var(--accent) 19px 20px); }
-  .measurement-scale::before, .measurement-scale::after { position: absolute; right: 28px; color: var(--muted); font: 7px/1 var(--mono); letter-spacing: .08em; white-space: nowrap; }
-  .measurement-scale::before { content: "04.5 M"; top: -2px; }
-  .measurement-scale::after { content: "00.0 M"; bottom: -2px; }
+  #viewport::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; box-shadow: inset 0 0 90px rgba(0,0,0,.4); }
+  #viewport canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; touch-action: none; outline: none; }
+  .interaction-hint { position: absolute; z-index: 7; bottom: 18px; right: 18px; color: rgba(180,194,183,.58); font: 10px/1.4 var(--mono); letter-spacing: .07em; text-transform: uppercase; pointer-events: none; }
 
   #component-tags { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
   .component-tag {
-    position: absolute; opacity: 0; transform: translate(10px, -50%); transition: opacity .24s ease, transform .24s ease;
-    color: var(--muted); font: 8px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+    position: absolute; opacity: 0; transform: translate(8px,-50%);
+    transition: opacity .22s ease, transform .22s ease;
+    color: var(--muted); font: 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap;
   }
-  .component-tag::before { content: ""; display: inline-block; vertical-align: middle; width: 22px; height: 1px; margin-right: 7px; background: currentColor; opacity: .55; }
-  .component-tag.visible { opacity: .78; transform: translate(0, -50%); }
+  .component-tag::before { content: ""; display: inline-block; vertical-align: middle; width: 18px; height: 1px; margin-right: 7px; background: currentColor; opacity: .55; }
+  .component-tag.visible { opacity: .82; transform: translate(0,-50%); }
   .component-tag.selected { color: var(--bright); }
   .component-tag.visible.selected { opacity: 1; }
 
   #inspection-controls {
     position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 14;
-    display: flex; align-items: stretch; gap: 8px;
+    display: flex; gap: 9px;
   }
   .control-button {
-    min-width: 142px; min-height: 42px; padding: 0 15px;
-    display: inline-flex; align-items: center; justify-content: space-between; gap: 17px;
-    border: 1px solid var(--line-strong); background: rgba(15,19,17,.9); color: var(--text);
-    font: 9px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+    min-width: 176px; min-height: 48px; padding: 0 17px;
+    display: inline-flex; align-items: center; justify-content: space-between; gap: 16px;
+    border: 1px solid var(--line-strong); background: rgba(14,18,16,.94); color: var(--text);
+    font: 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
     transition: background .18s ease, border-color .18s ease, color .18s ease;
   }
   .control-button .key { color: var(--quiet); }
-  .control-button:hover, .control-button:focus-visible { background: #202720; border-color: rgba(220,230,221,.46); color: var(--bright); outline: none; }
-  .control-button.active { background: #d8dfd7; border-color: #d8dfd7; color: #111512; }
-  .control-button.active .key { color: #5f6961; }
+  .control-button:hover, .control-button:focus-visible { background: #202720; color: var(--bright); border-color: rgba(220,230,221,.5); outline: none; }
+  .control-button.active { background: #dbe2da; border-color: #dbe2da; color: #111512; }
+  .control-button.active .key { color: #626c65; }
 
-  .hero-id {
-    position: absolute; top: 27px; right: 48px; z-index: 6; text-align: right; pointer-events: none;
+  .pack-section { padding: 15px 16px; border-bottom: 1px solid var(--line); }
+  .pack-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .pack-button {
+    min-height: 37px; padding: 0 7px; border: 1px solid var(--line); background: transparent; color: var(--muted);
+    font: 10px/1 var(--mono); letter-spacing: .04em; text-transform: uppercase;
   }
-  .hero-id .serial { color: rgba(225,232,226,.74); font: 9px/1 var(--mono); letter-spacing: .22em; }
-  .hero-id .state { margin-top: 7px; color: rgba(133,147,137,.62); font: 8px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  .pack-button:hover, .pack-button:focus-visible { color: var(--bright); border-color: var(--line-strong); outline: none; }
+  .pack-button.active { color: #101411; background: var(--accent); border-color: var(--accent); }
 
-  .product-metrics { padding: 5px 17px 11px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; border-bottom: 1px solid var(--line); }
-  .product-metric { padding: 10px 0 8px; border-bottom: 1px solid var(--line); min-width: 0; }
-  .product-metric:nth-last-child(-n+2) { border-bottom: 0; }
-  .product-metric .label { display: block; color: var(--quiet); font: 7px/1.25 var(--mono); letter-spacing: .09em; text-transform: uppercase; }
-  .product-metric .value { display: block; color: var(--bright); font-size: 13px; line-height: 1.2; margin-top: 4px; white-space: nowrap; }
-  .product-metric .value.small { font: 9px/1.4 var(--mono); white-space: normal; }
-  .status-cleared { color: var(--ok) !important; }
-  #selected-component { padding: 15px 18px 18px; min-height: 0; overflow: auto; }
-  .selected-kicker { display: flex; align-items: center; gap: 8px; color: var(--accent); font: 8px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
-  .selected-kicker::before { content: ""; width: 5px; height: 5px; border: 1px solid currentColor; transform: rotate(45deg); }
-  #component-name { color: var(--bright); font-size: 14px; line-height: 1.25; font-weight: 500; margin-top: 11px; }
-  #component-description { color: var(--text); font-size: 11px; line-height: 1.55; margin-top: 9px; }
-  #component-detail { color: var(--muted); font-size: 10px; line-height: 1.55; margin-top: 8px; }
-  #component-code { display: inline-block; margin-top: 14px; padding: 5px 7px; border: 1px solid var(--line); color: var(--muted); font: 8px/1 var(--mono); letter-spacing: .08em; }
+  #product-overview, #selected-component { padding: 18px; min-height: 0; overflow: auto; }
+  #product-overview[hidden], #selected-component[hidden] { display: none; }
+  #pack-title, #component-name { color: var(--bright); font-size: 19px; font-weight: 500; line-height: 1.25; }
+  #pack-tagline, #component-description { color: var(--muted); font-size: 14px; line-height: 1.55; margin-top: 8px; }
+  .product-facts { margin-top: 17px; }
+  .product-fact { display: flex; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .product-fact .label { color: var(--quiet); font: 10px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .product-fact .value { color: var(--bright); font-size: 16px; text-align: right; }
+  #micro-summary { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 14px; }
+  .selected-kicker { color: var(--accent); font: 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 11px; }
+  #back-overview { margin-top: 20px; border: 1px solid var(--line-strong); background: transparent; color: var(--text); padding: 10px 12px; font: 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 
-  #equivalent-panel {
-    position: absolute; inset: 0; z-index: 8; pointer-events: none; opacity: 0; visibility: hidden;
-    transition: opacity .42s ease, visibility .42s ease;
-  }
+  #equivalent-panel { position: absolute; inset: 0; z-index: 10; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .38s ease, visibility .38s ease; }
   #equivalent-panel.visible { opacity: 1; visibility: visible; }
   .meal-card {
-    position: absolute; width: min(47%, 430px); right: 4%; top: 50%; transform: translateY(-50%);
-    padding: 20px; border: 1px solid var(--line-strong); background: rgba(13,17,15,.82); backdrop-filter: blur(12px);
+    position: absolute; width: min(55%, 520px); right: 3%; top: 50%; transform: translateY(-50%);
+    padding: 22px; border: 1px solid var(--line-strong); background: rgba(13,17,15,.94); backdrop-filter: blur(12px);
   }
-  .meal-card h2 { color: var(--bright); font: 500 14px/1.3 var(--font); margin-top: 6px; letter-spacing: .03em; }
-  .meal-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 18px 0 17px; }
-  .meal-item { min-width: 0; text-align: center; }
-  .meal-icon { height: 52px; position: relative; margin-bottom: 7px; opacity: .72; }
-  .meal-icon::before { content: ""; position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); border: 1px solid var(--accent); }
-  .meal-icon.grains::before { width: 34px; height: 18px; border-radius: 3px 3px 17px 17px; }
-  .meal-icon.protein::before { width: 31px; height: 23px; border-radius: 50% 42% 52% 38%; transform: translateX(-50%) rotate(-10deg); }
-  .meal-icon.vegetables::before { width: 29px; height: 29px; border-radius: 50% 50% 42% 50%; }
-  .meal-icon.vegetables::after { content: ""; position: absolute; left: 50%; bottom: 32px; width: 1px; height: 12px; background: var(--accent); transform: rotate(30deg); }
-  .meal-icon.fruit::before { width: 27px; height: 27px; border-radius: 50%; }
-  .meal-icon.water::before { width: 19px; height: 38px; border-radius: 5px 5px 8px 8px; background: rgba(155,209,210,.08); border-color: var(--water); }
-  .meal-label { color: var(--muted); font: 7px/1.35 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
-  .meal-amount { color: var(--text); font: 8px/1.2 var(--mono); margin-top: 3px; }
-  .comparison { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .comparison-block { padding: 13px 10px 13px 0; }
-  .comparison-block + .comparison-block { padding-left: 14px; border-left: 1px solid var(--line); }
-  .comparison-label { color: var(--quiet); font: 7px/1.4 var(--mono); letter-spacing: .07em; text-transform: uppercase; }
-  .comparison-value { color: var(--bright); font-size: 16px; line-height: 1.2; margin-top: 5px; }
-  .comparison-value.accent { color: var(--ok); }
-  .prep-line { display: flex; justify-content: space-between; gap: 14px; padding-top: 12px; color: var(--muted); font: 8px/1.5 var(--mono); }
-  .meal-note { color: var(--quiet); font: 7px/1.5 var(--mono); letter-spacing: .05em; text-transform: uppercase; margin-top: 10px; }
+  .meal-card h2 { color: var(--bright); font-size: 19px; font-weight: 500; margin-top: 7px; }
+  .meal-table { width: 100%; border-collapse: collapse; margin-top: 17px; }
+  .meal-table th { color: var(--quiet); font: 10px/1.3 var(--mono); letter-spacing: .07em; text-transform: uppercase; text-align: left; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .meal-table th:nth-child(n+2), .meal-table td:nth-child(n+2) { text-align: right; }
+  .meal-table td { color: var(--text); font-size: 13px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .meal-table td.amount { color: var(--bright); font-family: var(--mono); }
+  .meal-summary { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin-top: 14px; background: var(--line); border: 1px solid var(--line); }
+  .summary-cell { background: #111512; padding: 11px; }
+  .summary-cell span { display: block; color: var(--quiet); font: 9px/1.3 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .summary-cell strong { display: block; color: var(--bright); font-size: 15px; font-weight: 500; margin-top: 4px; }
+  .price-compare { display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .price-block { padding: 13px 12px 13px 0; }
+  .price-block + .price-block { padding-left: 14px; border-left: 1px solid var(--line); }
+  .price-block span { display: block; color: var(--quiet); font: 9px/1.3 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .price-block strong { display: block; color: var(--bright); font-size: 17px; font-weight: 500; margin-top: 5px; }
+  .price-block strong.accent { color: var(--accent); }
+  .meal-note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 12px; }
+  .serve-note { color: var(--quiet); font-size: 11px; line-height: 1.45; margin-top: 7px; }
 
   #opening-card {
     position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px;
-    background: rgba(6,8,7,.72); backdrop-filter: blur(13px);
-    transition: opacity .6s ease, visibility .6s ease;
+    background: rgba(6,8,7,.74); backdrop-filter: blur(13px); transition: opacity .55s ease, visibility .55s ease;
   }
   #opening-card.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
-  .opening-inner { width: min(460px, 100%); padding: 28px; border: 1px solid var(--line-strong); background: rgba(15,19,17,.94); box-shadow: 0 28px 80px rgba(0,0,0,.35); }
-  .opening-inner h1 { color: var(--bright); font-size: 17px; font-weight: 500; letter-spacing: .06em; margin-top: 9px; }
-  .opening-status { color: var(--ok); font: 9px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; margin-top: 22px; }
-  .opening-copy { color: var(--text); font-size: 12px; line-height: 1.6; margin-top: 11px; max-width: 380px; }
-  #opening-dismiss { width: 100%; min-height: 43px; margin-top: 22px; border: 1px solid var(--accent); background: var(--accent); color: #111512; font: 9px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
-  #opening-dismiss:hover, #opening-dismiss:focus-visible { background: var(--bright); outline: 2px solid rgba(255,255,255,.18); outline-offset: 3px; }
-
-  #error-banner { display: none; position: absolute; inset: 18px; z-index: 50; padding: 18px; border: 1px solid #8f7950; background: rgba(35,29,20,.96); color: #d6c59b; font: 10px/1.6 var(--mono); white-space: pre-wrap; }
-  .mobile-summary { display: none; }
-
-  .hero-mode #world-panel { opacity: .64; }
-  .hero-mode #product-panel { opacity: .82; }
-  .hero-mode .viewport-index, .hero-mode .measurement-scale { opacity: .22; }
+  .opening-inner { width: min(470px,100%); padding: 30px; border: 1px solid var(--line-strong); background: rgba(15,19,17,.97); }
+  .opening-inner h1 { color: var(--bright); font-size: 22px; font-weight: 500; margin-top: 9px; }
+  .opening-copy { color: var(--text); font-size: 15px; line-height: 1.6; margin-top: 13px; }
+  #opening-dismiss { width: 100%; min-height: 48px; margin-top: 23px; border: 1px solid var(--accent); background: var(--accent); color: #111512; font: 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  #error-banner { display: none; position: absolute; inset: 18px; z-index: 50; padding: 18px; border: 1px solid #8f7950; background: rgba(35,29,20,.96); color: #d6c59b; font: 12px/1.6 var(--mono); white-space: pre-wrap; }
+  .mobile-pack { display: none; }
   .reduced-motion *, .reduced-motion *::before, .reduced-motion *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 
-  @media (max-width: 1050px) {
-    :root { --left: 200px; --right: 260px; }
-    .panel-head, .readout-list { padding-left: 14px; padding-right: 14px; }
-    #selected-component { padding-left: 14px; padding-right: 14px; }
-    .meal-card { width: min(54%, 400px); right: 3%; }
+  @media (max-width: 1060px) {
+    :root { --left: 188px; --right: 270px; }
+    .panel-head, .readout-list, #product-overview, #selected-component { padding-left: 14px; padding-right: 14px; }
+    .meal-card { width: min(62%, 500px); }
   }
   @media (max-width: 780px) {
-    :root { --topbar: 56px; }
+    :root { --topbar: 58px; }
     #topbar { padding: 0 14px; }
-    .brand-title { font-size: 10px; }
-    .brand-subtitle { display: none; }
-    .top-meta { gap: 12px; }
+    .brand-mark { width: 30px; height: 30px; }
+    .brand-title { font-size: 12px; }
+    .top-location { font-size: 11px; }
     #workspace { display: block; position: relative; }
     .side-panel { display: none; }
     #viewport { position: absolute; inset: 0; }
-    .mobile-summary {
-      display: flex; position: absolute; z-index: 11; top: 12px; left: 12px; right: 12px;
+    .mobile-pack {
+      display: flex; position: absolute; z-index: 12; top: 12px; left: 12px; right: 12px;
       align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
-      border: 1px solid var(--line); background: rgba(13,17,15,.76); backdrop-filter: blur(10px);
+      border: 1px solid var(--line); background: rgba(13,17,15,.9);
     }
-    .mobile-summary strong { color: var(--bright); font: 500 12px/1 var(--font); }
-    .mobile-summary span { color: var(--muted); font: 8px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; }
-    .hero-id { top: 78px; right: 18px; }
-    .measurement-scale { right: 10px; }
-    .meal-card { width: calc(100% - 24px); right: 12px; top: 48%; padding: 16px; }
-    #equivalent-panel.visible + #inspection-controls { bottom: 14px; }
-    #inspection-controls { bottom: 18px; width: calc(100% - 24px); }
-    .control-button { min-width: 0; flex: 1; padding: 0 12px; gap: 7px; }
-    .viewport-index.bottom { display: none; }
+    .mobile-pack label { color: var(--bright); font: 11px/1 var(--mono); letter-spacing: .06em; }
+    .mobile-pack select { min-width: 145px; border: 1px solid var(--line-strong); background: #111512; color: var(--text); padding: 7px; font-size: 12px; }
+    .meal-card { width: calc(100% - 24px); right: 12px; top: 46%; padding: 17px; }
+    .interaction-hint { display: none; }
+    #inspection-controls { bottom: 16px; width: calc(100% - 24px); }
+    .control-button { flex: 1; min-width: 0; padding: 0 12px; }
+    .component-tag { font-size: 9px; }
   }
   @media (max-width: 480px) {
-    .supply { display: none; }
-    .brand-mark { width: 27px; height: 27px; }
-    .meal-grid { margin: 12px 0; }
-    .meal-icon { height: 40px; }
-    .meal-label { display: none; }
-    .comparison-value { font-size: 13px; }
-    .prep-line { font-size: 7px; }
+    .top-location { font-size: 10px; }
     #inspection-controls { display: grid; grid-template-columns: 1fr; gap: 6px; }
-    .control-button { min-height: 38px; }
-    .opening-inner { padding: 22px; }
+    .control-button { min-height: 42px; }
+    .meal-card h2 { font-size: 16px; }
+    .meal-table td { font-size: 11px; padding: 7px 0; }
+    .meal-summary { grid-template-columns: repeat(3,1fr); }
+    .summary-cell { padding: 8px; }
+    .summary-cell strong { font-size: 12px; }
+    .price-block strong { font-size: 14px; }
   }
 </style>
 </head>
 <body>
 <div id="app">
   <header id="topbar">
-    <div class="brand">
-      <div class="brand-mark" aria-hidden="true">CN</div>
-      <div>
-        <div class="brand-title">CIVIC NUTRITION NETWORK</div>
-        <div class="brand-subtitle">Provisioning Terminal // Singapore Sector 04</div>
-      </div>
-    </div>
-    <div class="top-meta">
-      <span class="year-chip">2074</span>
-      <span class="supply">SUPPLY: NOMINAL</span>
-    </div>
+    <div class="brand"><div class="brand-mark" aria-hidden="true">DF</div><div class="brand-title">DAILY FOOD &amp; WATER SERVICE</div></div>
+    <div class="top-location">SINGAPORE // 2074</div>
   </header>
 
   <main id="workspace">
-    <aside id="world-panel" class="side-panel" aria-label="Fictional civic infrastructure readouts">
-      <div class="panel-head">
-        <p class="eyebrow">Municipal context</p>
-        <h2>Sector conditions</h2>
-        <p class="sub">Civic supply register // live</p>
-      </div>
+    <aside id="world-panel" class="side-panel" aria-label="Food system information">
+      <div class="panel-head"><p class="eyebrow">Food in Singapore</p><h2>How food is supplied</h2></div>
       <dl class="readout-list">
-        <div class="readout"><dt>Year</dt><dd class="large">2074</dd></div>
-        <div class="readout"><dt>Region</dt><dd>Singapore<br />Urban Sector 04</dd></div>
-        <div class="readout"><dt>Outdoor agricultural share</dt><dd>8%</dd></div>
-        <div class="readout"><dt>Direct potable network</dt><dd>Restricted</dd></div>
-        <div class="readout"><dt>Controlled agriculture share</dt><dd>92%</dd></div>
-        <div class="readout"><dt>Fresh food index</dt><dd>7.6× baseline</dd></div>
-        <div class="readout"><dt>Standard civic diet</dt><dd>DIU allocation</dd></div>
+        <div class="readout"><dt>Food grown indoors</dt><dd><strong>92%</strong></dd></div>
+        <div class="readout"><dt>Public drinking water</dt><dd>Limited</dd></div>
+        <div class="readout"><dt>Fresh food cost</dt><dd><strong>7.6×</strong> 2026 price</dd></div>
+        <div class="readout"><dt>Standard daily food</dt><dd>DIU-7 Basic Pack</dd></div>
       </dl>
-      <p class="fiction-note">Speculative civic register // projected operating conditions</p>
     </aside>
 
-    <section id="viewport" aria-label="Interactive DIU-7 product inspection viewport">
-      <div class="mobile-summary"><strong>DIU-7 // CLASS C</strong><span>2,140 kcal · 2.8 L · 24 h</span></div>
-      <div class="viewport-index top">Specimen 07-C<br />Distribution lot 74.188</div>
-      <div class="viewport-index bottom">Drag to rotate // wheel to inspect<br />Civic object registry 3.1</div>
-      <div class="hero-id"><div class="serial">DIU-7 / 74.188.03</div><div class="state" id="view-state">Assembled unit</div></div>
-      <div class="measurement-scale" aria-hidden="true"></div>
+    <section id="viewport" aria-label="Interactive DIU-7 product viewer">
+      <div class="mobile-pack">
+        <label for="mobile-pack-select">DIU-7 PACK</label>
+        <select id="mobile-pack-select">
+          <option value="basic">Basic</option>
+          <option value="performance">Performance</option>
+          <option value="nutrition">Nutrition</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+      <div class="interaction-hint">Drag to turn · Scroll to zoom</div>
       <div id="component-tags" aria-hidden="true"></div>
       <div id="error-banner" role="alert"></div>
 
       <section id="equivalent-panel" aria-hidden="true">
         <div class="meal-card">
-          <p class="eyebrow">Equivalent provisioning analysis</p>
-          <h2>TRADITIONAL DAILY EQUIVALENT</h2>
-          <div class="meal-grid">
-            <div class="meal-item"><div class="meal-icon grains"></div><div class="meal-label">Grains</div><div class="meal-amount">6 serves</div></div>
-            <div class="meal-item"><div class="meal-icon protein"></div><div class="meal-label">Protein</div><div class="meal-amount">3 serves</div></div>
-            <div class="meal-item"><div class="meal-icon vegetables"></div><div class="meal-label">Vegetables</div><div class="meal-amount">5 serves</div></div>
-            <div class="meal-item"><div class="meal-icon fruit"></div><div class="meal-label">Fruit</div><div class="meal-amount">2 serves</div></div>
-            <div class="meal-item"><div class="meal-icon water"></div><div class="meal-label">Potable water</div><div class="meal-amount">2.8 L</div></div>
+          <p class="eyebrow">Regular food comparison</p>
+          <h2>WHAT DIU-7 REPLACES</h2>
+          <table class="meal-table">
+            <thead><tr><th>Regular food</th><th>Daily amount</th><th>“Organic” serves</th></tr></thead>
+            <tbody>
+              <tr><td>Cooked wholegrains</td><td class="amount">600 g</td><td>6</td></tr>
+              <tr><td>Meat, fish, tofu or beans</td><td class="amount">270 g food</td><td>3</td></tr>
+              <tr><td>Cooked vegetables</td><td class="amount">200 g</td><td>2</td></tr>
+              <tr><td>Fresh fruit</td><td class="amount">260 g</td><td>2</td></tr>
+              <tr><td>Drinking water</td><td class="amount">2.8 L</td><td>—</td></tr>
+            </tbody>
+          </table>
+          <div class="meal-summary">
+            <div class="summary-cell"><span>Regular food</span><strong>1.33 kg</strong></div>
+            <div class="summary-cell"><span>Drinking water</span><strong>2.8 L</strong></div>
+            <div class="summary-cell"><span>Organic serves</span><strong>13</strong></div>
           </div>
-          <div class="comparison">
-            <div class="comparison-block"><div class="comparison-label">Traditional food + potable water</div><div class="comparison-value">S$186.40 / day</div></div>
-            <div class="comparison-block"><div class="comparison-label">Class C DIU allocation</div><div class="comparison-value accent">S$11.20 / day</div></div>
+          <div class="price-compare">
+            <div class="price-block"><span>Regular food + water</span><strong>S$186.40 / day</strong></div>
+            <div class="price-block"><span id="equivalent-pack-name">Basic Pack</span><strong class="accent" id="equivalent-pack-price">S$11.20 / day</strong></div>
           </div>
-          <div class="prep-line"><span>PREPARATION TIME</span><span>TRADITIONAL 74 MIN // DIU-7 0 MIN</span></div>
-          <p class="meal-note">Conventional food remains available through premium civilian markets.</p>
+          <p class="meal-note">Fresh food is still available, but costs much more.</p>
+          <p class="serve-note">“Organic serve” means one standard portion of conventional, non-manufactured food.</p>
         </div>
       </section>
 
-      <div id="inspection-controls" aria-label="Inspection controls">
-        <button class="control-button" id="exploded-toggle" type="button" aria-pressed="false"><span id="exploded-label">Exploded view</span><span class="key">E</span></button>
-        <button class="control-button" id="meal-toggle" type="button" aria-pressed="false"><span id="meal-label">View equivalent meal</span><span class="key">M</span></button>
+      <div id="inspection-controls" aria-label="Product controls">
+        <button class="control-button" id="exploded-toggle" type="button" aria-pressed="false"><span id="exploded-label">See what’s inside</span><span class="key">E</span></button>
+        <button class="control-button" id="meal-toggle" type="button" aria-pressed="false"><span id="meal-label">Compare with regular food</span><span class="key">M</span></button>
       </div>
     </section>
 
-    <aside id="product-panel" class="side-panel" aria-label="DIU-7 product readouts">
-      <div class="panel-head">
-        <p class="eyebrow">Registered provision</p>
-        <h2>DIU-7</h2>
-        <p class="sub">Civic Daily Intake Unit</p>
+    <aside id="product-panel" class="side-panel" aria-label="DIU-7 pack information">
+      <div class="pack-section">
+        <p class="eyebrow">Choose pack</p>
+        <div class="pack-switch" role="group" aria-label="Choose a DIU-7 pack">
+          <button class="pack-button active" type="button" data-pack="basic" aria-pressed="true">Basic</button>
+          <button class="pack-button" type="button" data-pack="performance" aria-pressed="false">Performance</button>
+          <button class="pack-button" type="button" data-pack="nutrition" aria-pressed="false">Nutrition</button>
+          <button class="pack-button" type="button" data-pack="premium" aria-pressed="false">Premium</button>
+        </div>
       </div>
-      <div class="product-metrics">
-        <div class="product-metric"><span class="label">Energy</span><span class="value">2,140 kcal</span></div>
-        <div class="product-metric"><span class="label">Hydration equivalent</span><span class="value">2.8 L</span></div>
-        <div class="product-metric"><span class="label">Protein</span><span class="value">96 g</span></div>
-        <div class="product-metric"><span class="label">Consumption period</span><span class="value">24 h</span></div>
-        <div class="product-metric"><span class="label">Allocation class</span><span class="value">C</span></div>
-        <div class="product-metric"><span class="label">Production facility</span><span class="value">CNF-03</span></div>
-        <div class="product-metric" style="grid-column: 1 / -1"><span class="label">Status</span><span class="value small status-cleared">Cleared for distribution</span></div>
-      </div>
-      <section id="selected-component" aria-live="polite">
-        <div class="selected-kicker">Selected // <span id="component-short">Hydration phase</span></div>
-        <h3 id="component-name">PURIFIED HYDRATION PHASE</h3>
-        <p id="component-description">Central purification output. Reconstituted mineral profile. 1.9 L internal reservoir.</p>
-        <p id="component-detail">The largest chamber communicates the infrastructural convergence of drinking-water and food production.</p>
-        <span id="component-code">H₂O / SG-4 / 1.9 L</span>
+      <section id="product-overview">
+        <h2 id="pack-title">BASIC PACK</h2>
+        <p id="pack-tagline">Balanced everyday formula for a typical adult.</p>
+        <div class="product-facts">
+          <div class="product-fact"><span class="label">Daily calories</span><span class="value" id="m-energy">2,140</span></div>
+          <div class="product-fact"><span class="label">Protein</span><span class="value" id="m-protein">60 g</span></div>
+          <div class="product-fact"><span class="label">Drinking water</span><span class="value" id="m-water">2.8 L</span></div>
+          <div class="product-fact"><span class="label">Public price</span><span class="value" id="m-price">S$11.20 / day</span></div>
+        </div>
+        <p id="micro-summary">100% daily vitamin and mineral profile.</p>
+      </section>
+      <section id="selected-component" aria-live="polite" hidden>
+        <p class="selected-kicker">Selected part</p>
+        <h2 id="component-name">OUTER PROTECTIVE CASE</h2>
+        <p id="component-description">Seals the unit against contaminated air and protects it during delivery.</p>
+        <button id="back-overview" type="button">Back to pack overview</button>
       </section>
     </aside>
   </main>
@@ -369,11 +309,10 @@
 
 <div id="opening-card" role="dialog" aria-modal="true" aria-labelledby="opening-title">
   <div class="opening-inner">
-    <p class="eyebrow">Civic Nutrition Network</p>
-    <h1 id="opening-title">Daily allocation ready.</h1>
-    <p class="opening-status">DIU-7 // Cleared for distribution</p>
-    <p class="opening-copy">DIU-7 supplies the standard adult hydration and nutrition requirement for one 24-hour cycle.</p>
-    <button id="opening-dismiss" type="button">Inspect unit</button>
+    <p class="eyebrow">Daily Food &amp; Water Service</p>
+    <h1 id="opening-title">Your daily unit is ready.</h1>
+    <p class="opening-copy">DIU-7 contains one day of food and drinking water. Use it gradually over 24 hours.</p>
+    <button id="opening-dismiss" type="button">View DIU-7</button>
   </div>
 </div>
 
@@ -384,18 +323,13 @@
       var banner = document.getElementById("error-banner");
       if (banner) {
         banner.style.display = "block";
-        banner.textContent = "CIVIC NUTRITION NETWORK // DISPLAY FAULT\n\nThe 3D module did not load. Serve this folder over static HTTP and confirm network access to the Three.js module CDN.";
+        banner.textContent = "DIU-7 DISPLAY ERROR\n\nServe this folder over static HTTP and confirm network access to the Three.js module CDN.";
       }
     }
   }, 7000);
 </script>
 <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-    }
-  }
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
 </script>
 <script type="module" src="scene.js"></script>
 </body>
