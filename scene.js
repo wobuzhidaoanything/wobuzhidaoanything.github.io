@@ -1156,7 +1156,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   // ── 5. UI binding + state application ────────────────────────────────
   function setContamination(c, fromDemo) {
     contamination = clamp(Number(c) || 0, 0, 100);
-    if (slider) slider.value = String(contamination);
+    if (slider) {
+      slider.value = String(contamination);
+      slider.style.setProperty("--ci-progress", contamination + "%");
+    }
     state = mapContamination(contamination);
     applyState(state);
     if (!fromDemo && demoActive && !demoParked) {
