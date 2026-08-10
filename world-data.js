@@ -2,8 +2,8 @@
  * DIU-7 — fictional product and world data.
  *
  * Nutrition profiles are speculative interface content, not personal dietary
- * advice. Baseline values are informed by Singapore adult dietary guidance;
- * vitamin and mineral profiles are intentionally kept near reference intakes.
+ * advice. Pack values are fictional; the Singapore baseline readouts use
+ * published SFA and PUB reference figures.
  */
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) {
@@ -17,10 +17,12 @@
   var WORLD = {
     year: 2074,
     location: "Singapore",
-    controlledAgricultureShare: 92,
-    publicDrinkingWater: "LIMITED",
-    freshFoodPriceMultiplier: 7.6,
-    standardDailyFood: "DIU-7 BASIC PACK",
+    baselineYear: 2025,
+    foodImportedShare: 90,
+    localFibreShare: 8,
+    localProteinShare: 25,
+    tapWaterStatus: "SAFE TO DRINK",
+    dailyWaterDemandMgd: 440,
   };
 
   var PRODUCT = {

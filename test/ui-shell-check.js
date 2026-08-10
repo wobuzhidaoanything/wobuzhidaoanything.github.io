@@ -14,8 +14,9 @@ function assert(condition, message) {
 
 console.log("--- Streamlined interface language ---");
 [
-  "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "Food grown indoors",
-  "Public drinking water", "Fresh food cost", "Standard daily food",
+  "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "Current Singapore reference",
+  "Food + water baseline", "Food imported", "Local food supply (2025)",
+  "Tap water", "Water demand today", "SFA and PUB figures",
   "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
   "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
 ].forEach(function (text) {

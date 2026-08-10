@@ -11,6 +11,10 @@ Four selectable profiles share one procedural Three.js product:
 
 The values are fictional product content informed by general Singapore adult dietary guidance. They are not personal nutrition or medical advice.
 
+The left-side baseline readouts are anchored to published Singapore figures: SFA reports that more than 90% of food is imported and that local production supplies about 8% of fibre and 25% of protein consumption; PUB reports that tap water is safe to drink directly and that current water demand is about 440 million gallons per day.
+
+Reference sources: [Singapore Food Statistics 2025](https://www.sfa.gov.sg/news-publications/newsroom/singapore-food-statistics-2025), [PUB water quality](https://www.pub.gov.sg/Public/WaterLoop/Water-Quality), and [PUB water conservation](https://www.pub.gov.sg/Public/WaterLoop/Water-Conservation).
+
 ## Open locally
 
 ```bash
