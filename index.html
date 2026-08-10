@@ -326,21 +326,23 @@
   </div>
 </div>
 
-<script src="world-data.js"></script>
+<script src="world-data.js?v=20260810-1"></script>
 <script>
   window.__DAILY_FOOD_BOOT_WATCH = setTimeout(function () {
-    if (!window.__DAILY_FOOD_BOOTED) {
+    if (!window.__DAILY_FOOD_BOOTED && !window.__CIVIC_BOOTED) {
       var banner = document.getElementById("error-banner");
       if (banner) {
         banner.style.display = "block";
-        banner.textContent = "DIU-7 DISPLAY ERROR\n\nServe this folder over static HTTP and confirm network access to the Three.js module CDN.";
+        banner.textContent = "DIU-7 DISPLAY ERROR\n\nRefresh the page. If opening local files, serve this folder over static HTTP and allow access to the Three.js module CDN.";
       }
     }
-  }, 7000);
+  }, 12000);
+  // Keep the previous boot handle available while older cached modules expire.
+  window.__CIVIC_BOOT_WATCH = window.__DAILY_FOOD_BOOT_WATCH;
 </script>
 <script type="importmap">
   { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
 </script>
-<script type="module" src="scene.js"></script>
+<script type="module" src="scene.js?v=20260810-1"></script>
 </body>
 </html>

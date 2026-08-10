@@ -11,7 +11,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 (function () {
   "use strict";
 
-  var Data = window.DailyFoodData;
+  var Data = window.DailyFoodData || window.CivicData;
   if (!Data || Data.validateData().length) {
     showError("Fictional product data could not be validated.");
     return;
@@ -129,7 +129,14 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   if (demoRequested && !reduceMotion) startDemo();
 
   clearTimeout(window.__DAILY_FOOD_BOOT_WATCH);
+  clearTimeout(window.__CIVIC_BOOT_WATCH);
   window.__DAILY_FOOD_BOOTED = true;
+  window.__CIVIC_BOOTED = true;
+  var bootBanner = document.getElementById("error-banner");
+  if (bootBanner) {
+    bootBanner.style.display = "none";
+    bootBanner.textContent = "";
+  }
   renderer.setAnimationLoop(render);
 
   function initEnvironment() {

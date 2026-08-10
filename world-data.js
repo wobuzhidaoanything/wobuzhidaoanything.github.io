@@ -9,7 +9,10 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = factory();
   } else {
-    root.DailyFoodData = factory();
+    var browserData = factory();
+    root.DailyFoodData = browserData;
+    // Backward-compatible alias for browsers holding a cached scene module.
+    root.CivicData = browserData;
   }
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
