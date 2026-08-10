@@ -44,6 +44,7 @@
     padding: 0 22px; border-bottom: 1px solid var(--line);
     background: rgba(9,11,10,.94); z-index: 30;
   }
+  .top-meta { display: flex; align-items: center; gap: 16px; min-width: 0; }
   .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .brand-mark {
     width: 34px; height: 34px; display: grid; place-items: center;
@@ -52,13 +53,20 @@
   }
   .brand-title { color: var(--bright); font-size: 15px; font-weight: 600; letter-spacing: .08em; }
   .top-location { color: var(--text); font: 12px/1 var(--mono); letter-spacing: .1em; white-space: nowrap; }
+  .context-toggle {
+    min-height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); background: transparent;
+    color: var(--muted); font: 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase;
+  }
+  .context-toggle:hover, .context-toggle:focus-visible { color: var(--bright); border-color: rgba(220,230,221,.5); outline: none; }
 
   #workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left) minmax(0,1fr) var(--right); }
+  #workspace { transition: grid-template-columns .3s ease; }
   .side-panel {
     min-height: 0; background: var(--panel); z-index: 12; overflow: hidden;
     display: flex; flex-direction: column;
   }
   #world-panel { border-right: 1px solid var(--line); }
+  #world-panel { transition: opacity .2s ease, visibility .2s ease; }
   #product-panel { border-left: 1px solid var(--line); }
   .panel-head { padding: 22px 18px 17px; border-bottom: 1px solid var(--line); }
   .eyebrow { color: var(--quiet); font: 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
@@ -70,6 +78,8 @@
   .readout dt { color: var(--quiet); font: 10px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
   .readout dd { color: var(--bright); font-size: 16px; line-height: 1.25; margin-top: 5px; }
   .readout dd strong { font-size: 20px; font-weight: 500; }
+  #app.context-closed #workspace { grid-template-columns: 0 minmax(0,1fr) var(--right); }
+  #app.context-closed #world-panel { opacity: 0; visibility: hidden; pointer-events: none; border-right: 0; }
 
   #viewport {
     position: relative; min-width: 0; min-height: 0; overflow: hidden;
@@ -214,17 +224,17 @@
 <div id="app">
   <header id="topbar">
     <div class="brand"><div class="brand-mark" aria-hidden="true">DF</div><div class="brand-title">DAILY FOOD &amp; WATER SERVICE</div></div>
-    <div class="top-location">SINGAPORE | 2074</div>
+    <div class="top-meta"><button id="context-toggle" class="context-toggle" type="button" aria-controls="world-panel" aria-expanded="true">Hide item info</button><div class="top-location">SINGAPORE | 2074</div></div>
   </header>
 
   <main id="workspace">
-    <aside id="world-panel" class="side-panel" aria-label="2074 Singapore service indicators">
-      <div class="panel-head"><p class="eyebrow">Singapore Sector 04 | 2074</p><h2>Service indicators</h2><p class="panel-sub">Civic food and water provisioning, current cycle.</p></div>
+    <aside id="world-panel" class="side-panel" aria-label="About the DIU-7 item">
+      <div class="panel-head"><p class="eyebrow">About the item</p><h2>Civic Daily Intake Unit</h2><p class="panel-sub">One sealed handheld serving of food and water. Open the mouthpiece and consume gradually over 24 hours.</p></div>
       <dl class="readout-list">
-        <div class="readout"><dt>Controlled food supply</dt><dd><strong>92%</strong></dd></div>
-        <div class="readout"><dt>Outdoor agriculture</dt><dd><strong>8%</strong> of supply</dd></div>
-        <div class="readout"><dt>Potable water treatment</dt><dd><strong>100%</strong> centrally purified</dd></div>
-        <div class="readout"><dt>DIU-7 daily use</dt><dd><strong>84%</strong> of adults</dd></div>
+        <div class="readout"><dt>Format</dt><dd>Handheld cartridge</dd></div>
+        <div class="readout"><dt>Contents</dt><dd>Food + drinking water</dd></div>
+        <div class="readout"><dt>Serving</dt><dd>One adult / 24 h</dd></div>
+        <div class="readout"><dt>Issue</dt><dd>Standard civic supply</dd></div>
       </dl>
     </aside>
 

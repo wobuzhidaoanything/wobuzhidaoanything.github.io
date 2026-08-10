@@ -11,7 +11,7 @@ Four selectable profiles share one procedural Three.js product:
 
 The values are fictional product content informed by general Singapore adult dietary guidance. They are not personal nutrition or medical advice.
 
-The left-side 2074 indicators are fictional projections for this world: 92% controlled food production, 8% outdoor agriculture, 100% centrally purified potable water, and DIU-7 use by 84% of adults. They are design choices, not official forecasts. They extrapolate from real Singapore constraints documented by SFA and PUB.
+The optional left-side item panel describes what DIU-7 is and can be hidden with the top-bar control when presenting the future dashboard on its own. The 2074 indicators are fictional projections for this world, not official forecasts; they extrapolate from real Singapore constraints documented by SFA and PUB.
 
 Research anchors: [Singapore Food Statistics 2025](https://www.sfa.gov.sg/news-publications/newsroom/singapore-food-statistics-2025), [PUB water quality](https://www.pub.gov.sg/Public/WaterLoop/Water-Quality), and [PUB water conservation](https://www.pub.gov.sg/Public/WaterLoop/Water-Conservation).
 

@@ -14,9 +14,9 @@ function assert(condition, message) {
 
 console.log("--- Streamlined interface language ---");
 [
-  "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "Singapore Sector 04 | 2074",
-  "Service indicators", "Controlled food supply", "Outdoor agriculture",
-  "Potable water treatment", "DIU-7 daily use", "Civic food and water provisioning",
+  "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "About the item",
+  "Civic Daily Intake Unit", "One sealed handheld serving", "Handheld cartridge",
+  "Food + drinking water", "One adult / 24 h", "Standard civic supply",
   "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
   "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
 ].forEach(function (text) {
@@ -25,6 +25,7 @@ console.log("--- Streamlined interface language ---");
 assert((html.match(/class="readout"/g) || []).length === 4, "left panel has only four world facts");
 assert((html.match(/class="product-fact"/g) || []).length === 4, "product overview has only four key facts");
 assert((html.match(/class="pack-button/g) || []).length === 4, "four pack buttons exist");
+assert(html.indexOf('id="context-toggle"') !== -1, "item info close control exists");
 
 console.log("--- Equivalent food measurements ---");
 ["600 g", "270 g food", "200 g", "260 g", "2.8 L", "Organic serves", "1.33 kg", "13"].forEach(function (text) {
@@ -45,6 +46,7 @@ console.log("--- Controls, modes and hosting ---");
 ["viewport", "world-panel", "product-panel", "product-overview", "selected-component", "exploded-toggle", "meal-toggle", "equivalent-panel", "opening-card", "mobile-pack-select"].forEach(function (id) {
   assert(html.indexOf('id="' + id + '"') !== -1, "has #" + id);
 });
+assert(/context-closed/.test(scene) && /Show item info/.test(scene), "item info panel can be closed and reopened");
 assert(/aria-pressed="false"[^>]*><span id="exploded-label">See what’s inside/.test(html), "unit starts closed");
 assert(/type="importmap"/.test(html), "Three.js import map preserved");
 assert(/type="module" src="scene\.js"/.test(html), "static ES module entry preserved");
