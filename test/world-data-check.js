@@ -12,12 +12,10 @@ function assert(condition, message) {
 console.log("--- Streamlined world facts ---");
 assert(data.WORLD.year === 2074, "year is 2074");
 assert(data.WORLD.location === "Singapore", "location is Singapore");
-assert(data.WORLD.baselineYear === 2025, "baseline year is 2025");
-assert(data.WORLD.foodImportedShare === 90, "more than 90% of food is imported");
-assert(data.WORLD.localFibreShare === 8, "local fibre supply is 8%");
-assert(data.WORLD.localProteinShare === 25, "local protein supply is 25%");
-assert(data.WORLD.tapWaterStatus === "SAFE TO DRINK", "tap water is safe to drink");
-assert(data.WORLD.dailyWaterDemandMgd === 440, "daily water demand is 440 million gallons");
+assert(data.WORLD.controlledFoodSupplyShare === 92, "controlled food supply is 92%");
+assert(data.WORLD.outdoorAgricultureShare === 8, "outdoor agriculture is 8%");
+assert(data.WORLD.centralPotableTreatmentShare === 100, "potable water is centrally purified");
+assert(data.WORLD.diuAdultCoverageShare === 84, "DIU-7 serves 84% of adults");
 
 console.log("--- Four pack profiles ---");
 assert(Array.isArray(data.PACKS) && data.PACKS.length === 4, "exactly four packs exist");

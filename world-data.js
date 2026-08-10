@@ -2,8 +2,8 @@
  * DIU-7 — fictional product and world data.
  *
  * Nutrition profiles are speculative interface content, not personal dietary
- * advice. Pack values are fictional; the Singapore baseline readouts use
- * published SFA and PUB reference figures.
+ * advice. Pack values and 2074 service indicators are fictional worldbuilding
+ * content, informed by published Singapore food and water constraints.
  */
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) {
@@ -17,12 +17,10 @@
   var WORLD = {
     year: 2074,
     location: "Singapore",
-    baselineYear: 2025,
-    foodImportedShare: 90,
-    localFibreShare: 8,
-    localProteinShare: 25,
-    tapWaterStatus: "SAFE TO DRINK",
-    dailyWaterDemandMgd: 440,
+    controlledFoodSupplyShare: 92,
+    outdoorAgricultureShare: 8,
+    centralPotableTreatmentShare: 100,
+    diuAdultCoverageShare: 84,
   };
 
   var PRODUCT = {
