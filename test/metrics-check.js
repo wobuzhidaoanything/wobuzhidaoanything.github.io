@@ -194,6 +194,35 @@ assert(m100.ashFallout > m0.ashFallout, "ash fallout higher at 100");
 assert(m0.waterClarity > m100.waterClarity, "clarity lower at 100");
 assert(m100.waveAmp < m0.waveAmp, "wave energy choked at terminal");
 
+// Chapter-readable visual scalars (Balanced MVP B1–B4)
+console.log("--- Visual chapters ---");
+var m5 = mapContamination(5);
+var m25 = mapContamination(25);
+var m45 = mapContamination(45);
+var m65 = mapContamination(65);
+var m82 = mapContamination(82);
+var m95 = mapContamination(95);
+// Early clearer / low ash; coal ash readable; late dark water, low sun, high mats, dead swell
+assert(m5.waterClarity > 0.75, "early waterClarity high (got " + m5.waterClarity + ")");
+assert(m5.ashFallout < 0.15, "early ash low (got " + m5.ashFallout + ")");
+assert(m25.ashFallout > m5.ashFallout, "coal band ash rises vs early");
+assert(m25.ashFallout > 0.2, "coal band ash readable (got " + m25.ashFallout + ")");
+assert(m95.waveAmp < 0.35, "terminal waveAmp low (got " + m95.waveAmp + ")");
+assert(m95.waveAmp < m45.waveAmp, "waveAmp lower terminal than mid");
+assert(m95.sunIntensity < 0.35, "terminal sun dim (got " + m95.sunIntensity + ")");
+assert(m95.sunIntensity < m5.sunIntensity, "sun dims over CI");
+assert(m95.matCoverage > 0.7, "terminal mats high (got " + m95.matCoverage + ")");
+assert(m95.matCoverage > m45.matCoverage, "mats rise late");
+assert(m95.waterColor[0] + m95.waterColor[1] + m95.waterColor[2] <
+  m5.waterColor[0] + m5.waterColor[1] + m5.waterColor[2],
+  "terminal water darker (lower RGB sum) than early");
+assert(m82.fogDensity > m5.fogDensity, "fog denser late");
+assert(m65.oilSheen > 0, "heavy band oil sheen present");
+// waterClarity couples to photic collapse
+assert(m95.waterClarity < m5.waterClarity * 0.2, "clarity collapses with photic/terminal");
+assert(typeof m5.instrumentLog === "string" && m5.instrumentLog.indexOf("SSA-MON") === 0,
+  "instrumentLog on map output");
+
 console.log("--- Summary ---");
 if (failed === 0) {
   console.log("ALL PASSED");

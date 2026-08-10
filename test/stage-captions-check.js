@@ -67,6 +67,21 @@ assert(/coal|fossil|ash/.test(allCap), "captions mention coal/fossil/ash");
 assert(/battery|food|packaging/.test(allCap), "captions mention food/battery");
 assert(/sink|terminal|non-recovery|waste/.test(allCap), "captions mention terminal sink");
 
+// Instrument log strip content from shipped map
+console.log("--- Instrument log ---");
+samples.forEach(function (s) {
+  var m = map.mapContamination(s.c);
+  assert(typeof m.instrumentLog === "string" && m.instrumentLog.indexOf("SSA-MON") === 0,
+    "c=" + s.c + " instrumentLog starts with SSA-MON");
+  assert(m.instrumentLog.indexOf(m.regimeLabel) !== -1,
+    "c=" + s.c + " instrumentLog includes regime label");
+  var fmt = map.formatMetrics(m);
+  assert(fmt.instrumentLog === m.instrumentLog, "c=" + s.c + " formatMetrics.instrumentLog matches");
+});
+assert(map.REGIMES.every(function (r) {
+  return typeof r.logTag === "string" && r.logTag.length > 3;
+}), "each regime has logTag");
+
 console.log("--- Summary ---");
 if (failed === 0) {
   console.log("ALL PASSED");

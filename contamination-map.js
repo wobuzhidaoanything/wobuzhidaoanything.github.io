@@ -49,42 +49,48 @@
       id: "EARLY_DEMAND",
       label: "Rising demand",
       caption:
-        "AI energy demand rises; monitoring still reports nominal coastal chemistry.",
+        "AI-scale energy demand rises; SSA coastal chemistry still reports within nominal bounds.",
+      logTag: "coastal chemistry nominal",
     },
     {
       max: 35,
       id: "COAL_RETURN",
       label: "Coal return",
       caption:
-        "Fossil baseload returns at industrial scale; ash fallout reaches open water.",
+        "Fossil baseload returns at industrial scale; ash and black carbon reach the open survey sector.",
+      logTag: "ash fallout readable",
     },
     {
       max: 55,
       id: "FOOD_BATTERY",
       label: "Food & batteries",
       caption:
-        "Ultra-processed food and battery throughput scale; packaging and mineral runoff dominate loads.",
+        "Ultra-processed food and battery–solar throughput scale; packaging and mineral runoff dominate loads.",
+      logTag: "surface films increasing",
     },
     {
       max: 75,
       id: "CHEM_INVASIVE",
       label: "Heavy load",
       caption:
-        "Chemical–metal saturation; early invasive blooms and surface films establish. Medical and solar scrap join the sink.",
+        "Chemical–metal saturation establishes surface films; medical polymers and solar scrap join the sink.",
+      logTag: "oil sheen + brown fog",
     },
     {
       max: 90,
       id: "SYSTEMIC",
       label: "Systemic decay",
       caption:
-        "Oxygen stress and habitat loss compound; light fails in the upper meters.",
+        "Oxygen stress and habitat loss compound; photic light fails within the upper metres.",
+      logTag: "gel mats dominate",
     },
     {
       max: 100,
       id: "TERMINAL",
       label: "Terminal",
       caption:
-        "The sea functions as a managed waste sink; non-recovery conditions prevail.",
+        "The sea functions as a managed waste sink; non-recovery conditions prevail under continuous load.",
+      logTag: "non-recovery conditions",
     },
   ];
 
@@ -149,32 +155,50 @@
     var skyColor = skyColorAt(t);
     var fogColor = fogColorAt(t);
 
-    // Fog density: soft early, stage-readable brown-out by terminal.
-    var fogDensity = lerp(0.006, 0.055, Math.pow(te, 0.82));
+    // Fog density: soft early, stage-readable brown-out by Heavy/Terminal.
+    var fogDensity = lerp(0.0045, 0.068, Math.pow(te, 0.78));
 
-    // Debris density factor 0–1 (drives instance counts / overall fill)
-    var debrisDensity = smoothstep(0.02, 0.15, t) * lerp(0.06, 1, te);
+    // Debris density factor 0–1 — emptier early so late chapters hit harder
+    var debrisDensity =
+      smoothstep(0.04, 0.22, t) * lerp(0.04, 1, Math.pow(te, 1.15));
 
-    // Chemical sheen / oil iridescence (coal-kerosene + process chemicals)
-    var oilSheen = smoothstep(0.52, 0.9, t);
+    // Chemical sheen / oil iridescence (Heavy load band+)
+    var oilSheen = smoothstep(0.52, 0.88, t);
 
-    // Light penetration feel for shader (1 = clear, 0 = black)
-    var waterClarity = 1 - te;
+    // Light penetration feel for shader (1 = clear, 0 = black).
+    // Couple tightly to photic depth so murk reads as the main character.
+    var waterClarity = Math.pow(clamp(photicDepth / 42, 0, 1), 0.72);
 
-    // Airborne ash / black-carbon fallout (coal return begins ~15 / t~0.15)
-    var ashFallout = smoothstep(0.14, 0.82, t);
+    // Airborne ash / black-carbon fallout (readable once coal return begins ~t 0.15)
+    var ashFallout = smoothstep(0.1, 0.55, t);
 
-    // Invasive gelatinous biomass (establishes ~55, dominant by ~95)
-    var invasiveBiomass = smoothstep(0.55, 0.95, t);
+    // Invasive gelatinous biomass (establishes ~55, dominant by terminal)
+    var invasiveBiomass = smoothstep(0.52, 0.92, t);
 
     // Algal-style surface mat / scum coverage (shader foam + debris mats)
-    var matCoverage = smoothstep(0.52, 1.0, t);
+    var matCoverage = smoothstep(0.5, 0.98, t);
 
-    // Surface wave energy: lively early swell, choked under biomass at terminal
-    var waveAmp = lerp(1.15, 0.32, smoothstep(0.48, 1.0, t));
+    // Surface wave energy: lively early swell, near-dead terminal swell
+    var waveAmp = lerp(1.2, 0.16, smoothstep(0.45, 1.0, t));
 
-    // Sunlight attenuation through the haze (darker terminal sky)
-    var sunIntensity = lerp(1, 0.22, te);
+    // Sunlight attenuation through the haze (dim disc by Terminal)
+    var sunIntensity = lerp(1.05, 0.1, Math.pow(te, 0.9));
+
+    // Stage index 1–6 for instrument log strip
+    var stageIndex = 1;
+    for (var si = 0; si < REGIMES.length; si++) {
+      if (regime.id === REGIMES[si].id) {
+        stageIndex = si + 1;
+        break;
+      }
+    }
+    var instrumentLog =
+      "SSA-MON // Stage " +
+      stageIndex +
+      " // " +
+      regime.label +
+      " // " +
+      (regime.logTag || "survey active");
 
     return {
       c: c,
@@ -188,6 +212,7 @@
       regime: regime.id,
       regimeLabel: regime.label,
       regimeCaption: regime.caption,
+      instrumentLog: instrumentLog,
       waterColor: waterColor,
       skyColor: skyColor,
       fogColor: fogColor,
@@ -204,35 +229,40 @@
   }
 
   function waterColorAt(t) {
-    // Clean teal-blue → green → brown-green → near-black toxic
-    // Terminal kept slightly lifted so surface/sheen remain readable
+    // Chapters: clear teal → green → olive-brown → brown-black → near-black
+    // Slightly sharper stage jumps than a single muddy ramp (still continuous).
     var stops = [
-      { t: 0.0, c: [0.045, 0.27, 0.36] },
-      { t: 0.2, c: [0.07, 0.3, 0.29] },
-      { t: 0.5, c: [0.17, 0.27, 0.12] },
-      { t: 0.8, c: [0.13, 0.14, 0.08] },
-      { t: 1.0, c: [0.06, 0.07, 0.045] },
+      { t: 0.0, c: [0.03, 0.32, 0.42] },
+      { t: 0.15, c: [0.04, 0.28, 0.34] },
+      { t: 0.35, c: [0.08, 0.26, 0.18] },
+      { t: 0.55, c: [0.16, 0.22, 0.08] },
+      { t: 0.75, c: [0.12, 0.11, 0.05] },
+      { t: 0.9, c: [0.06, 0.055, 0.035] },
+      { t: 1.0, c: [0.028, 0.03, 0.022] },
     ];
     return sampleStops(stops, t);
   }
 
   function skyColorAt(t) {
     var stops = [
-      { t: 0.0, c: [0.55, 0.68, 0.78] },
-      { t: 0.2, c: [0.58, 0.65, 0.7] },
-      { t: 0.5, c: [0.55, 0.52, 0.38] },
-      { t: 0.8, c: [0.32, 0.28, 0.24] },
-      { t: 1.0, c: [0.14, 0.12, 0.1] },
+      { t: 0.0, c: [0.58, 0.72, 0.84] },
+      { t: 0.15, c: [0.56, 0.66, 0.74] },
+      { t: 0.35, c: [0.52, 0.55, 0.48] },
+      { t: 0.55, c: [0.48, 0.44, 0.32] },
+      { t: 0.75, c: [0.28, 0.24, 0.2] },
+      { t: 0.9, c: [0.16, 0.13, 0.11] },
+      { t: 1.0, c: [0.09, 0.075, 0.065] },
     ];
     return sampleStops(stops, t);
   }
 
   function fogColorAt(t) {
     var stops = [
-      { t: 0.0, c: [0.45, 0.58, 0.65] },
-      { t: 0.5, c: [0.4, 0.38, 0.28] },
-      { t: 0.8, c: [0.25, 0.22, 0.18] },
-      { t: 1.0, c: [0.12, 0.1, 0.08] },
+      { t: 0.0, c: [0.48, 0.62, 0.7] },
+      { t: 0.35, c: [0.42, 0.42, 0.32] },
+      { t: 0.55, c: [0.38, 0.34, 0.24] },
+      { t: 0.75, c: [0.22, 0.18, 0.14] },
+      { t: 1.0, c: [0.09, 0.075, 0.06] },
     ];
     return sampleStops(stops, t);
   }
@@ -272,6 +302,7 @@
       status: m.status,
       regime: m.regimeLabel,
       caption: m.regimeCaption,
+      instrumentLog: m.instrumentLog || "",
     };
   }
 

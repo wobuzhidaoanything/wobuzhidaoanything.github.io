@@ -29,9 +29,22 @@ assert(!/--rail-w/.test(html), "no --rail-w layout token");
 
 // Essential controls + metric DOM ids (scene.js binds these)
 ["ci-slider", "ci-value", "m-particulate", "m-nutrient", "m-photic", "m-viability",
-  "year-value", "year-value-panel", "regime-value", "stage-caption", "status-line"].forEach(function (id) {
+  "year-value", "year-value-panel", "regime-value", "stage-caption", "status-line",
+  "opening-card", "opening-dismiss", "instrument-log", "dump-log"].forEach(function (id) {
   assert(html.indexOf('id="' + id + '"') !== -1, "has #" + id);
 });
+
+// Opening card: world-first managed-sink premise (not toy tutorial only)
+assert(/managed\s+(ocean\s+)?sink|waste sink/i.test(html), "opening card mentions managed sink");
+assert(/SSA operator|on duty/i.test(html), "opening card frames operator duty");
+assert(/Contamination Index/i.test(html), "opening card mentions Contamination Index");
+
+// Dump framed as authorized industrial discard
+assert(/authorized discard/i.test(html), "hint uses authorized discard language");
+assert(html.indexOf("Click water to drop waste") === -1, "toy 'drop waste' hint removed");
+
+// Instrument log strip present with cold SSA voice seed
+assert(/SSA-MON/.test(html), "instrument log strip uses SSA-MON voice");
 
 // Short plain labels — Non-Human Viability replaced
 assert(html.indexOf("Non-Human Viability") === -1, "Non-Human Viability removed");
@@ -75,10 +88,24 @@ assert(parseFloat(String(fmt.particulateMetal).replace(/,/g, "")) > 1000, "parti
 // Scene realism hooks present
 assert(scene.indexOf("uScum") !== -1, "ocean scum uniform wired");
 assert(/matCoverage/.test(scene), "matCoverage applied to scene");
-assert(/N = 720/.test(scene) || /ashFallout \* 0\.9/.test(scene) || /ashFallout \* 0\.85/.test(scene),
+assert(/N = 720/.test(scene) || /ashFallout \* 0\.9/.test(scene) || /ashFallout \* 0\.95/.test(scene) || /ashFallout \* 0\.85/.test(scene),
   "stronger ash response");
 // Status display maps NOMINAL → OK
 assert(scene.indexOf('statusLabel') !== -1 || scene.indexOf('"OK"') !== -1, "status display OK mapping");
+
+// MVP: stage pulse, dump log, demo mode, hero bookmark
+assert(/stage-pulse|pulseStageChange/.test(scene), "stage threshold pulse wired");
+assert(/Authorized discard/.test(scene), "dump log authorized discard copy");
+assert(/demo=1|get\("demo"\)/.test(scene), "demo query param handling");
+assert(/HERO_CI|applyHeroBookmark/.test(scene), "hero camera/CI bookmark");
+assert(/startDemoMode/.test(scene), "demo scrub entry point");
+assert(/familyWeight|\.fade/.test(scene), "debris chapter fade weights");
+assert(/instrumentLog|elInstrumentLog/.test(scene), "instrument log bound in scene");
+
+// Single primary control — no second major range input (count real <input> tags, not CSS)
+var rangeInputs = (html.match(/<input\b[^>]*\btype=["']range["']/gi) || []).length;
+assert(rangeInputs === 1, "exactly one range control (Contamination Index), got " + rangeInputs);
+assert(/id=["']ci-slider["']/.test(html), "primary range is #ci-slider");
 
 // Premise waste families + place-making (design expansion)
 assert(/key:\s*"solar"/.test(scene) || /makeSolarGeo/.test(scene), "solar scrap family");

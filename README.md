@@ -15,6 +15,15 @@ python3 -m http.server 8080
 # then open http://localhost:8080/
 ```
 
+### Demo & capture
+
+| URL | Behaviour |
+|-----|-----------|
+| `/?demo=1` | Slow auto-scrub of Contamination Index **0 → Terminal**, then **parks** at CI ≈ 92 (for booth / critique). Manual slider takes over if you drag. |
+| `/?hero=1` | Jump to Terminal still bookmark (CI ≈ 92 + camera preset) for key-image capture. |
+
+Keyboard (when focus is not in a field): **`D`** starts the demo scrub; **`H`** applies the hero bookmark.
+
 ## Files
 
 | File | Role |
@@ -33,7 +42,9 @@ python3 -m http.server 8080
 - **Wheel / pinch / `+` `-`**: zoom (clamped).
 - **Arrow keys**: orbit / vertical trim.
 - Camera never dips below the waterline and cannot leave the survey sector; a gentle drift resumes ~5 s after you let go.
-- **Click the water**: dispense a small cluster of sample waste at that location.
+- **Click the water**: authorized discard — sector sample (operator industrial dump, not a sandbox toy).
+- Opening card (once on load) frames the managed-sink premise; dismiss or wait for auto-fade.
+- Bottom-left **instrument log** updates with each stage band (`SSA-MON // …`).
 
 ## Readouts
 

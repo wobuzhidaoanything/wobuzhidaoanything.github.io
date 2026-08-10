@@ -195,10 +195,121 @@
     color: var(--text-muted);
     font-size: 11px;
     line-height: 1.5;
-    max-width: min(360px, calc(100% - 340px));
+    max-width: min(420px, calc(100% - 340px));
     text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
   #hud-corner .hint { opacity: 0.85; }
+
+  #instrument-log {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: rgba(200, 205, 210, 0.78);
+    line-height: 1.4;
+    max-width: 100%;
+  }
+
+  #dump-log {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: rgba(245, 200, 120, 0.88);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    min-height: 1.2em;
+  }
+  #dump-log.visible { opacity: 1; }
+
+  #stage-caption.stage-pulse {
+    animation: stagePulse 0.85s ease-out;
+  }
+  .status-line.status-pulse {
+    animation: statusFlicker 0.7s ease-out;
+  }
+  @keyframes stagePulse {
+    0% { color: var(--text-bright); opacity: 1; }
+    35% { color: #c4b5fd; }
+    100% { color: var(--text-dim); }
+  }
+  @keyframes statusFlicker {
+    0%, 100% { opacity: 1; }
+    25% { opacity: 0.35; }
+    50% { opacity: 1; }
+    70% { opacity: 0.5; }
+  }
+
+  /* Opening card — once on load */
+  #opening-card {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(5, 5, 8, 0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: opacity 0.7s ease, visibility 0.7s ease;
+  }
+  #opening-card.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .opening-inner {
+    max-width: 420px;
+    width: 100%;
+    background: rgba(18, 18, 22, 0.94);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 22px 18px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  }
+  .opening-kicker {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .opening-premise {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-bright);
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+  .opening-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    line-height: 1.45;
+  }
+  #opening-dismiss {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--accent-soft);
+    color: var(--text-bright);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  #opening-dismiss:hover {
+    border-color: rgba(139, 92, 246, 0.45);
+    background: rgba(139, 92, 246, 0.28);
+  }
+  #opening-dismiss:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
   #error-banner {
     display: none;
@@ -466,7 +577,9 @@
     <div id="main">
       <div id="viewport">
         <div id="hud-corner">
-          <div class="hint">Drag orbit · Shift pan · Scroll zoom · Click water to drop waste</div>
+          <div id="instrument-log" aria-live="polite">SSA-MON // Stage 1 // Rising demand // coastal chemistry nominal</div>
+          <div id="dump-log" aria-live="polite"></div>
+          <div class="hint">Drag orbit · Shift pan · Scroll zoom · Click water: authorized discard</div>
         </div>
         <div id="error-banner"></div>
       </div>
@@ -526,7 +639,7 @@
               <span class="label">Stage</span>
               <span id="regime-value">Rising demand</span>
             </div>
-            <p id="stage-caption">AI energy demand rises; monitoring still reports nominal coastal chemistry.</p>
+            <p id="stage-caption">AI-scale energy demand rises; SSA coastal chemistry still reports within nominal bounds.</p>
             <div class="ctx-row">
               <span class="label">Year</span>
               <span id="year-value-panel">2026</span>
@@ -535,6 +648,17 @@
         </div>
       </aside>
     </div>
+  </div>
+</div>
+
+<div id="opening-card" role="dialog" aria-modal="true" aria-labelledby="opening-premise">
+  <div class="opening-inner">
+    <p class="opening-kicker">SSA Survey Sector</p>
+    <p id="opening-premise" class="opening-premise">
+      Managed ocean sink under continuous industrial load. You are an SSA operator on duty. The Contamination Index sets the decade — the sector degrades whether you watch or not.
+    </p>
+    <p class="opening-hint">Drag Contamination Index to advance year and stage. Orbit to survey. Click water for authorized discard (sector sample).</p>
+    <button type="button" id="opening-dismiss">Enter instrument</button>
   </div>
 </div>
 

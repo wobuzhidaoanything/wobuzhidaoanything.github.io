@@ -44,6 +44,20 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   var elCaption = document.getElementById("stage-caption");
   var elStatus = document.getElementById("status-line");
   var elSys = document.getElementById("sys-status");
+  var elInstrumentLog = document.getElementById("instrument-log");
+  var elDumpLog = document.getElementById("dump-log");
+  var elOpeningCard = document.getElementById("opening-card");
+  var elOpeningDismiss = document.getElementById("opening-dismiss");
+
+  // Stage-change pulse + demo / hero capture helpers
+  var lastRegimeId = null;
+  var dumpLogTimer = null;
+  var demoActive = false;
+  var demoParked = false;
+  var demoStartT = 0;
+  // Hero still: Terminal band CI for poster/key-image capture
+  var HERO_CI = 92;
+  var HERO_CAM = { theta: 0.42, phi: 1.05, radius: 26, targetY: 0.55 };
 
   function showError(msg) {
     var b = document.getElementById("error-banner");
@@ -804,51 +818,51 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     ],
   };
 
-  // appear [t0, t1] = contamination fraction (c/100) windows so composition
-  // shifts by stage: early ordinary waste → industrial/battery/solar/food →
-  // medical plastics + biomass at high load / terminal.
+  // appear [t0, t1] fade-in; optional fade [t0, t1] fade-out so composition
+  // chapters: early sparse consumer → mid industrial/battery/solar/food →
+  // late gel/mat dominate with fewer "fresh" bottles under Terminal.
   var TYPE_DEFS = [
-    // Early ordinary consumer waste
-    { key: "bottle", make: makeBottleGeo, count: 110, appear: [0.03, 0.48],
+    // Early ordinary consumer waste (emptier; fades late)
+    { key: "bottle", make: makeBottleGeo, count: 90, appear: [0.04, 0.28], fade: [0.55, 0.82],
       float: 0.55, lift: 0.1, scale: [0.8, 1.5], tilt: 0.6, spin: 0.1,
       mat: { transparent: true, opacity: 0.72, roughness: 0.28, metalness: 0.02, envMapIntensity: 1.0 } },
-    { key: "film", make: makeFilmGeo, count: 80, appear: [0.06, 0.5],
+    { key: "film", make: makeFilmGeo, count: 60, appear: [0.06, 0.32], fade: [0.52, 0.8],
       float: 0.85, lift: 0.03, scale: [0.9, 1.8], tilt: 0.25, spin: 0.25,
       mat: { transparent: true, opacity: 0.45, roughness: 0.35, metalness: 0.0, side: THREE.DoubleSide, envMapIntensity: 0.6 } },
-    { key: "container", make: makeContainerGeo, count: 48, appear: [0.12, 0.58],
+    { key: "container", make: makeContainerGeo, count: 40, appear: [0.12, 0.4], fade: [0.6, 0.88],
       float: 0.7, lift: 0.14, scale: [0.8, 1.3], tilt: 0.5, spin: 0.08,
       mat: { roughness: 0.5, metalness: 0.05, envMapIntensity: 0.7 } },
     // Coal return / industrial
-    { key: "drum", make: makeDrumGeo, count: 48, appear: [0.16, 0.72],
+    { key: "drum", make: makeDrumGeo, count: 52, appear: [0.15, 0.42], fade: [0.72, 0.95],
       float: 0.45, lift: 0.16, scale: [0.9, 1.25], tilt: 1.2, spin: 0.05,
       mat: { roughness: 0.55, metalness: 0.6, envMapIntensity: 0.9 } },
-    { key: "net", make: makeNetGeo, count: 36, appear: [0.22, 0.8],
+    { key: "net", make: makeNetGeo, count: 32, appear: [0.2, 0.5], fade: [0.75, 0.98],
       float: 0.8, lift: 0.05, scale: [1.0, 2.2], tilt: 0.4, spin: 0.12,
       mat: { roughness: 0.95, metalness: 0.0, envMapIntensity: 0.3 } },
-    // Food & batteries / solar (mid-band premise waste)
-    { key: "casing", make: makeCasingGeo, count: 78, appear: [0.3, 0.78],
+    // Food & batteries / solar (mid-band; solar/casing persist into terminal)
+    { key: "casing", make: makeCasingGeo, count: 88, appear: [0.28, 0.52],
       float: 0.6, lift: 0.05, scale: [0.8, 1.5], tilt: 0.8, spin: 0.15,
       mat: { roughness: 0.38, metalness: 0.85, envMapIntensity: 1.1 } },
-    { key: "solar", make: makeSolarGeo, count: 55, appear: [0.28, 0.76],
+    { key: "solar", make: makeSolarGeo, count: 72, appear: [0.26, 0.5],
       float: 0.5, lift: 0.02, scale: [0.85, 1.6], tilt: 0.35, spin: 0.08,
       mat: { roughness: 0.22, metalness: 0.55, envMapIntensity: 1.15 } },
-    { key: "foodpack", make: makeFoodpackGeo, count: 70, appear: [0.3, 0.8],
+    { key: "foodpack", make: makeFoodpackGeo, count: 78, appear: [0.28, 0.52], fade: [0.78, 0.98],
       float: 0.75, lift: 0.06, scale: [0.9, 1.7], tilt: 0.55, spin: 0.12,
       mat: { roughness: 0.55, metalness: 0.05, envMapIntensity: 0.55 } },
-    { key: "shard", make: makeShardGeo, count: 70, appear: [0.34, 0.85],
+    { key: "shard", make: makeShardGeo, count: 70, appear: [0.32, 0.6],
       float: 0.7, lift: 0.02, scale: [0.8, 1.8], tilt: 0.9, spin: 0.3,
       mat: { roughness: 0.3, metalness: 0.9, envMapIntensity: 1.1, flatShading: true } },
-    // Heavy load+: medical plastics (abstract), sludge, biomass
-    { key: "medical", make: makeMedicalGeo, count: 65, appear: [0.48, 0.95],
+    // Heavy load+: medical plastics, sludge, biomass dominate late
+    { key: "medical", make: makeMedicalGeo, count: 70, appear: [0.48, 0.72],
       float: 0.8, lift: 0.03, scale: [0.9, 1.8], tilt: 0.4, spin: 0.18,
       mat: { transparent: true, opacity: 0.78, roughness: 0.25, metalness: 0.05, envMapIntensity: 0.9 } },
-    { key: "sludge", make: makeSludgeGeo, count: 65, appear: [0.4, 0.92],
+    { key: "sludge", make: makeSludgeGeo, count: 70, appear: [0.42, 0.7],
       float: 0.9, lift: 0.0, scale: [1.2, 3.0], tilt: 0.4, spin: 0.06,
       mat: { roughness: 0.42, metalness: 0.05, envMapIntensity: 0.35 } },
-    { key: "gel", make: makeGelGeo, count: 50, appear: [0.55, 1.0],
+    { key: "gel", make: makeGelGeo, count: 68, appear: [0.52, 0.78],
       float: 0.75, lift: 0.05, scale: [0.8, 2.4], tilt: 0.3, spin: 0.05, pulse: true,
       mat: { transparent: true, opacity: 0.55, roughness: 0.12, metalness: 0.0, envMapIntensity: 0.7, emissive: 0x0a1406 } },
-    { key: "mat", make: makeMatGeo, count: 26, appear: [0.58, 1.0],
+    { key: "mat", make: makeMatGeo, count: 40, appear: [0.55, 0.82],
       float: 0.35, lift: 0.03, scale: [1.5, 4.2], tilt: 0.05, spin: 0.02,
       mat: { transparent: true, opacity: 0.88, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide, envMapIntensity: 0.2 } },
   ];
@@ -1140,12 +1154,133 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   }
 
   // ── 5. UI binding + state application ────────────────────────────────
+  function setContamination(c, fromDemo) {
+    contamination = clamp(Number(c) || 0, 0, 100);
+    if (slider) slider.value = String(contamination);
+    state = mapContamination(contamination);
+    applyState(state);
+    if (!fromDemo && demoActive && !demoParked) {
+      // Manual control ends auto-scrub so the operator regains the single agency.
+      demoActive = false;
+    }
+  }
+
+  function showDumpLog(line) {
+    if (!elDumpLog) return;
+    elDumpLog.textContent = line;
+    elDumpLog.classList.add("visible");
+    if (dumpLogTimer) clearTimeout(dumpLogTimer);
+    dumpLogTimer = setTimeout(function () {
+      elDumpLog.classList.remove("visible");
+    }, 2800);
+  }
+
+  function pulseStageChange() {
+    if (elCaption) {
+      elCaption.classList.remove("stage-pulse");
+      // reflow so animation restarts on every band change
+      void elCaption.offsetWidth;
+      elCaption.classList.add("stage-pulse");
+    }
+    if (elStatus) {
+      elStatus.classList.remove("status-pulse");
+      void elStatus.offsetWidth;
+      elStatus.classList.add("status-pulse");
+    }
+  }
+
+  function dismissOpeningCard() {
+    if (!elOpeningCard) return;
+    elOpeningCard.classList.add("hidden");
+  }
+
+  function applyHeroBookmark() {
+    setContamination(HERO_CI, true);
+    if (controls) {
+      controls.theta = HERO_CAM.theta;
+      controls.phi = HERO_CAM.phi;
+      controls.radius = HERO_CAM.radius;
+      controls.target.set(0, HERO_CAM.targetY, -4);
+      controls.vTheta = 0;
+      controls.vPhi = 0;
+      controls.vRadius = 0;
+      controls.panVel.set(0, 0, 0);
+      controls.lastInteract = clock.elapsedTime;
+    }
+  }
+
+  function startDemoMode() {
+    demoActive = true;
+    demoParked = false;
+    demoStartT = clock.elapsedTime;
+    setContamination(0, true);
+    dismissOpeningCard();
+  }
+
+  function updateDemo(elapsed) {
+    if (!demoActive || demoParked) return;
+    // Slow scrub 0 → HERO_CI (~28s), then park at Terminal for critique still.
+    var duration = 28;
+    var u = clamp((elapsed - demoStartT) / duration, 0, 1);
+    // Ease slightly so mid chapters linger
+    var eased = u * u * (3 - 2 * u);
+    var c = lerp(0, HERO_CI, eased);
+    setContamination(c, true);
+    if (u >= 1) {
+      demoParked = true;
+      demoActive = false;
+      setContamination(HERO_CI, true);
+    }
+  }
+
   function bindUI() {
-    slider.addEventListener("input", function () {
-      contamination = parseFloat(slider.value) || 0;
-      state = mapContamination(contamination);
-      applyState(state);
+    if (slider) {
+      slider.addEventListener("input", function () {
+        setContamination(parseFloat(slider.value) || 0, false);
+      });
+    }
+
+    if (elOpeningDismiss) {
+      elOpeningDismiss.addEventListener("click", dismissOpeningCard);
+    }
+    // Auto-fade opening card if operator never clicks
+    setTimeout(function () {
+      dismissOpeningCard();
+    }, 9000);
+
+    // Keyboard: D starts demo scrub; H applies hero still bookmark
+    window.addEventListener("keydown", function (e) {
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) {
+        return;
+      }
+      var k = e.key;
+      if (k === "d" || k === "D") {
+        if (!e.repeat) startDemoMode();
+      } else if (k === "h" || k === "H") {
+        if (!e.repeat) {
+          dismissOpeningCard();
+          applyHeroBookmark();
+        }
+      }
     });
+
+    // URL query: ?demo=1 auto-scrub parks at Terminal; ?hero=1 camera+CI bookmark
+    try {
+      var params = new URLSearchParams(window.location.search || "");
+      if (params.get("hero") === "1") {
+        dismissOpeningCard();
+        // Defer one frame so controls exist and layout is settled
+        requestAnimationFrame(function () {
+          applyHeroBookmark();
+        });
+      } else if (params.get("demo") === "1") {
+        requestAnimationFrame(function () {
+          startDemoMode();
+        });
+      }
+    } catch (err) {
+      /* ignore query parse failures */
+    }
 
     controls.onTap = function (clientX, clientY) {
       var rect = renderer.domElement.getBoundingClientRect();
@@ -1164,15 +1299,30 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   }
 
   function spawnDump(x, z) {
-    var geos = [makeBottleGeo(), makeCasingGeo(), makeSludgeGeo()];
+    // Late stages prefer industrial samples over "fresh" consumer bottles
+    var keys;
+    if (state.t > 0.7) keys = ["casing", "solar", "sludge", "gel"];
+    else if (state.t > 0.35) keys = ["casing", "foodpack", "sludge"];
+    else keys = ["bottle", "casing", "sludge"];
+
+    var geoFns = {
+      bottle: makeBottleGeo,
+      casing: makeCasingGeo,
+      sludge: makeSludgeGeo,
+      solar: makeSolarGeo,
+      foodpack: makeFoodpackGeo,
+      gel: makeGelGeo,
+    };
+
     var n = 3 + Math.floor(Math.random() * 4);
     for (var i = 0; i < n; i++) {
-      var key = ["bottle", "casing", "sludge"][i % 3];
-      var palette = PALETTES[key];
+      var key = keys[i % keys.length];
+      var palette = PALETTES[key] || PALETTES.bottle;
       var c = palette[(dumpDebris.length + i) % palette.length];
       var def = TYPE_DEFS.filter(function (d) {
         return d.key === key;
       })[0];
+      if (!def) def = TYPE_DEFS[0];
       var mat = new THREE.MeshStandardMaterial({
         color: new THREE.Color(c[0], c[1], c[2]),
         roughness: def.mat.roughness != null ? def.mat.roughness : 0.7,
@@ -1180,7 +1330,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         transparent: !!def.mat.transparent,
         opacity: def.mat.opacity != null ? def.mat.opacity : 1,
       });
-      var m = new THREE.Mesh(geos[i % 3], mat);
+      var makeGeo = geoFns[key] || makeBottleGeo;
+      var m = new THREE.Mesh(makeGeo(), mat);
       m.position.set(x + (Math.random() - 0.5) * 1.4, 0.08, z + (Math.random() - 0.5) * 1.4);
       m.rotation.set(Math.random() * 0.8, Math.random() * 6, Math.random() * 0.8);
       m.scale.setScalar(0.9 + Math.random() * 0.7);
@@ -1197,6 +1348,17 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       old.mesh.geometry.dispose();
       old.mesh.material.dispose();
     }
+    showDumpLog("Authorized discard — sector sample");
+  }
+
+  /** Family weight: fade-in via appear, optional fade-out via fade window. */
+  function familyWeight(def, t) {
+    var a = def.appear || [0, 1];
+    var w = smoothstep(a[0], a[1], t);
+    if (def.fade && def.fade.length === 2) {
+      w *= 1 - smoothstep(def.fade[0], def.fade[1], t);
+    }
+    return w;
   }
 
   function sunColorAt(t) {
@@ -1227,6 +1389,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     if (elYearPanel) elYearPanel.textContent = fmt.year;
     elRegime.textContent = fmt.regime;
     if (elCaption) elCaption.textContent = fmt.caption || m.regimeCaption || "";
+    if (elInstrumentLog) {
+      elInstrumentLog.textContent = m.instrumentLog || fmt.instrumentLog || "";
+    }
 
     // Short plain status labels (map keeps NOMINAL/… for tests)
     var statusLabel = m.status === "NOMINAL" ? "OK" : m.status;
@@ -1240,19 +1405,26 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     if (m.c >= 80) elSys.classList.add("crit");
     else if (m.c >= 50) elSys.classList.add("warn");
 
+    // Stage band change: brief caption/status pulse after class refresh (chapters, not cutscene)
+    if (lastRegimeId !== null && m.regime !== lastRegimeId) {
+      pulseStageChange();
+    }
+    lastRegimeId = m.regime;
+
     var sun = sunColorAt(m.t);
     var waterLin = lin(m.waterColor);
     var skyLin = lin(m.skyColor);
     var fogLin = lin(m.fogColor);
-    var deep = waterLin.clone().multiplyScalar(0.4);
+    var deep = waterLin.clone().multiplyScalar(0.35);
 
-    // Ocean
+    // Ocean — murk/clarity push harder so photic collapse is the main character
+    var murk = 1 - m.waterClarity;
     oceanMaterial.uniforms.uWaterColor.value.copy(waterLin);
     oceanMaterial.uniforms.uDeepColor.value.copy(deep);
     oceanMaterial.uniforms.uSkyReflect.value.copy(skyLin);
     oceanMaterial.uniforms.uFogColor.value.copy(fogLin);
     oceanMaterial.uniforms.uFogDensity.value = m.fogDensity;
-    oceanMaterial.uniforms.uMurk.value = 1 - m.waterClarity;
+    oceanMaterial.uniforms.uMurk.value = Math.pow(murk, 0.85);
     oceanMaterial.uniforms.uOil.value = m.oilSheen;
     oceanMaterial.uniforms.uClarity.value = m.waterClarity;
     oceanMaterial.uniforms.uScum.value = m.matCoverage;
@@ -1261,9 +1433,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     currentWaveAmp = m.waveAmp;
 
     // Sky
-    skyMaterial.uniforms.uTop.value.copy(skyLin).multiplyScalar(0.55);
+    skyMaterial.uniforms.uTop.value.copy(skyLin).multiplyScalar(0.5);
     skyMaterial.uniforms.uHorizon.value.copy(skyLin);
-    skyMaterial.uniforms.uBottom.value.copy(fogLin).multiplyScalar(0.7);
+    skyMaterial.uniforms.uBottom.value.copy(fogLin).multiplyScalar(0.65);
     skyMaterial.uniforms.uSunColor.value.copy(sun);
     skyMaterial.uniforms.uSunGlow.value = m.sunIntensity;
 
@@ -1273,33 +1445,31 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     renderer.setClearColor(fogLin, 1);
 
     sunLight.color.copy(sun);
-    sunLight.intensity = 2.6 * m.sunIntensity;
-    hemiLight.color.copy(skyLin).multiplyScalar(0.9);
+    sunLight.intensity = 2.8 * m.sunIntensity;
+    hemiLight.color.copy(skyLin).multiplyScalar(0.85);
     hemiLight.groundColor.copy(deep);
-    hemiLight.intensity = 0.35 + m.waterClarity * 0.3;
+    hemiLight.intensity = 0.28 + m.waterClarity * 0.35;
 
-    // Debris visibility per waste stream (staggered by appear window + density)
+    // Debris: chapter composition via appear/fade weights + overall density
     for (var d = 0; d < debrisSystems.length; d++) {
       var sys = debrisSystems[d];
-      var a = sys.def.appear;
-      var band = smoothstep(a[0], a[1], m.t);
-      // Overall density still ramps; band decides *which* families dominate
-      var dens = lerp(0.55, 1, m.debrisDensity);
+      var band = familyWeight(sys.def, m.t);
+      var dens = lerp(0.35, 1, m.debrisDensity);
       var vis = Math.floor(sys.def.count * band * dens);
       sys.mesh.count = Math.max(0, Math.min(sys.def.count, vis));
     }
 
-    // Ash fallout — stronger dirty atmosphere at mid/high CI
-    ashParticles.material.opacity = m.ashFallout * 0.9;
-    ashParticles.material.size = 0.1 + m.ashFallout * 0.14;
-    ashParticles.visible = m.ashFallout > 0.02;
+    // Ash fallout — stronger dirty atmosphere once coal return is readable
+    ashParticles.material.opacity = m.ashFallout * 0.95;
+    ashParticles.material.size = 0.11 + m.ashFallout * 0.16;
+    ashParticles.visible = m.ashFallout > 0.015;
     // Exposure pulls down with sun intensity so terminal reads dimmer
-    renderer.toneMappingExposure = lerp(1.12, 0.72, 1 - m.sunIntensity);
+    renderer.toneMappingExposure = lerp(1.14, 0.58, 1 - m.sunIntensity);
 
     // Environment reflections: regenerate only when the coarse band changes
-    var band = Math.floor(m.c / 10);
-    if (band !== lastEnvBand) {
-      lastEnvBand = band;
+    var envBand = Math.floor(m.c / 10);
+    if (envBand !== lastEnvBand) {
+      lastEnvBand = envBand;
       refreshEnv(m.skyColor, sun, m.sunIntensity);
     }
   }
@@ -1309,6 +1479,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     requestAnimationFrame(animate);
     var dt = Math.min(clock.getDelta(), 0.05);
     var t = clock.elapsedTime;
+
+    updateDemo(t);
 
     oceanMaterial.uniforms.uTime.value = t;
     controls.update(dt, t);
@@ -1426,6 +1598,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         for (var i = 0; i < glbSystems.length; i++) n += glbSystems[i].clones.length;
         return n;
       },
+      setContamination: setContamination,
+      startDemoMode: startDemoMode,
+      applyHeroBookmark: applyHeroBookmark,
+      HERO_CI: HERO_CI,
     };
   } catch (err) {
     console.error(err);
