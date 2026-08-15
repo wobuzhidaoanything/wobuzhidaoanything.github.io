@@ -98,11 +98,15 @@
   .component-tag {
     position: absolute; opacity: 0; transform: translate(8px,-50%);
     transition: opacity .22s ease, transform .22s ease;
-    color: var(--muted); font: 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap;
+    padding: 5px 8px; background: #000; color: #fff;
+    font: 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap;
   }
-  .component-tag::before { content: ""; display: inline-block; vertical-align: middle; width: 18px; height: 1px; margin-right: 7px; background: currentColor; opacity: .55; }
-  .component-tag.visible { opacity: .82; transform: translate(0,-50%); }
-  .component-tag.selected { color: var(--bright); }
+  .component-tag::before {
+    content: ""; position: absolute; right: 100%; top: 50%; width: 18px; height: 1px;
+    margin-right: 7px; background: #fff; opacity: .8;
+  }
+  .component-tag.visible { opacity: 1; transform: translate(0,-50%); }
+  .component-tag.selected { color: #fff; }
   .component-tag.visible.selected { opacity: 1; }
 
   #inspection-controls {
@@ -263,7 +267,7 @@
               <tr><td>Meat, fish, tofu or beans</td><td class="amount">270 g food</td><td>3</td></tr>
               <tr><td>Cooked vegetables</td><td class="amount">200 g</td><td>2</td></tr>
               <tr><td>Fresh fruit</td><td class="amount">260 g</td><td>2</td></tr>
-              <tr><td>Drinking water</td><td class="amount">2.8 L</td><td>—</td></tr>
+              <tr><td>Drinking water</td><td class="amount">2.8 L</td><td>, </td></tr>
             </tbody>
           </table>
           <div class="meal-summary">
