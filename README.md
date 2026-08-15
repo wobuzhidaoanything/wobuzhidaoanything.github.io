@@ -4,10 +4,10 @@ An interactive speculative-worldbuilding artifact set in Singapore in 2074. The 
 
 Four selectable profiles share one procedural Three.js product:
 
-- **Basic:** 2,140 calories, 60 g protein, 2.8 L water — S$11.20/day
-- **Performance:** 2,700 calories, 120 g protein, 3.2 L water — S$14.80/day
-- **Nutrition:** 2,140 calories, 60 g protein, expanded vitamin/mineral profile — S$14.40/day
-- **Premium:** 2,600 calories, 110 g protein, expanded vitamin/mineral profile — S$18.60/day
+- **Basic:** 2,140 calories, 60 g protein, 2.8 L water , S$11.20/day
+- **Performance:** 2,700 calories, 120 g protein, 3.2 L water , S$14.80/day
+- **Nutrition:** 2,140 calories, 60 g protein, expanded vitamin/mineral profile , S$14.40/day
+- **Premium:** 2,600 calories, 110 g protein, expanded vitamin/mineral profile , S$18.60/day
 
 The values are fictional product content informed by general Singapore adult dietary guidance. They are not personal nutrition or medical advice.
 

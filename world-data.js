@@ -1,5 +1,5 @@
 /**
- * DIU-7 — fictional product and world data.
+ * DIU-7 , fictional product and world data.
  *
  * Nutrition profiles are speculative interface content, not personal dietary
  * advice. Pack values and 2074 service indicators are fictional worldbuilding
