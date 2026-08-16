@@ -15,37 +15,6 @@ The optional left-side item panel describes what DIU-7 is and can be hidden with
 
 Research anchors: [Singapore Food Statistics 2025](https://www.sfa.gov.sg/news-publications/newsroom/singapore-food-statistics-2025), [PUB water quality](https://www.pub.gov.sg/Public/WaterLoop/Water-Quality), and [PUB water conservation](https://www.pub.gov.sg/Public/WaterLoop/Water-Conservation).
 
-## Open locally
-
-```bash
-python3 -m http.server 8080
-```
-
-Then open [http://localhost:8080/](http://localhost:8080/).
-
-## Presentation modes
-
-| URL | Behaviour |
-| --- | --- |
-| `/?hero=1` | Opens directly to the assembled poster composition. |
-| `/?demo=1` | Runs the optional inspection and regular-food comparison sequence. |
-
-Keyboard shortcuts: **E** opens or closes the unit, **M** opens the regular-food comparison, **H** restores the hero composition, and **D** starts the demo. Drag to turn; use wheel or pinch to zoom.
-
-## Files
-
-| File | Role |
-| --- | --- |
-| `index.html` | Streamlined interface, pack selector, regular-food comparison and responsive layout. |
-| `scene.js` | Three.js renderer, opaque procedural model, dynamic bottle label, lighting and interactions. |
-| `world-data.js` | Fictional world, pack, component and equivalent-food records. |
-| `test/*.js` | Node checks for pack data, required interface content and model behavior. |
-
-## Verify
-
-```bash
-for test_file in test/*.js; do node "$test_file"; done
-```
 
 ## Deploy with GitHub Pages
 
