@@ -20,10 +20,10 @@ assert(data.WORLD.diuAdultCoverageShare === 84, "DIU-7 serves 84% of adults");
 console.log("--- Four pack profiles ---");
 assert(Array.isArray(data.PACKS) && data.PACKS.length === 4, "exactly four packs exist");
 var expected = {
-  basic: { kcal: 2140, protein: 60, price: 11.2 },
-  performance: { kcal: 2700, protein: 120, price: 14.8 },
-  nutrition: { kcal: 2140, protein: 60, price: 14.4 },
-  premium: { kcal: 2600, protein: 110, price: 18.6 },
+  basic: { kcal: 2140, protein: 60, price: 22.1 },
+  performance: { kcal: 2700, protein: 120, price: 29.2 },
+  nutrition: { kcal: 2400, protein: 70, price: 28.41 },
+  premium: { kcal: 2600, protein: 110, price: 36.7 },
 };
 Object.keys(expected).forEach(function (id) {
   var pack = data.getPack(id);
@@ -36,7 +36,12 @@ Object.keys(expected).forEach(function (id) {
   assert(pack.priceSGD < data.EQUIVALENT_MEAL.traditionalCostSGD, id + " costs less than regular food");
 });
 assert(data.getPack("performance").proteinG > data.getPack("basic").proteinG, "performance has more protein than basic");
-assert(/125%/.test(data.getPack("nutrition").micronutrientLabel), "nutrition pack has expanded micronutrient profile");
+assert(/90%/.test(data.getPack("basic").micronutrientLabel), "basic pack supplies 90% daily vitamins and minerals");
+assert(/110%/.test(data.getPack("nutrition").micronutrientLabel), "nutrition pack supplies 110% daily vitamins and minerals");
+assert(/higher vitamin needs are covered/i.test(data.getPack("nutrition").tagline), "nutrition description covers people with higher vitamin needs");
+assert(data.getPack("nutrition").energyKcal > data.getPack("basic").energyKcal, "nutrition has more calories than basic");
+assert(data.getPack("nutrition").energyKcal < data.getPack("premium").energyKcal, "nutrition has fewer calories than premium");
+assert(data.getPack("nutrition").energyKcal < data.getPack("performance").energyKcal, "nutrition has fewer calories than performance");
 assert(data.getPack("premium").proteinG > data.getPack("basic").proteinG, "premium has more protein than basic");
 assert(/125%/.test(data.getPack("premium").micronutrientLabel), "premium has expanded micronutrient profile");
 

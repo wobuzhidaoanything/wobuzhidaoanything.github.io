@@ -101,10 +101,6 @@
     padding: 5px 8px; background: #000; color: #fff;
     font: 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap;
   }
-  .component-tag::before {
-    content: ""; position: absolute; right: 100%; top: 50%; width: 18px; height: 1px;
-    margin-right: 7px; background: #fff; opacity: .8;
-  }
   .component-tag.visible { opacity: 1; transform: translate(0,-50%); }
   .component-tag.selected { color: #fff; }
   .component-tag.visible.selected { opacity: 1; }
@@ -133,6 +129,12 @@
   }
   .pack-button:hover, .pack-button:focus-visible { color: var(--bright); border-color: var(--line-strong); outline: none; }
   .pack-button.active { color: #101411; background: var(--accent); border-color: var(--accent); }
+  #buy-button {
+    width: 100%; min-height: 42px; margin-top: 10px; border: 1px solid var(--accent);
+    background: transparent; color: var(--accent); font: 11px/1 var(--mono);
+    letter-spacing: .09em; text-transform: uppercase;
+  }
+  #buy-button:hover, #buy-button:focus-visible { background: var(--accent); color: #101411; outline: none; }
 
   #product-overview, #selected-component { padding: 18px; min-height: 0; overflow: auto; }
   #product-overview[hidden], #selected-component[hidden] { display: none; }
@@ -233,12 +235,10 @@
 
   <main id="workspace">
     <aside id="world-panel" class="side-panel" aria-label="About the DIU-7 item">
-      <div class="panel-head"><p class="eyebrow">About the item</p><h2>Daily Food Intake Unit</h2><p class="panel-sub">One sealed handheld serving of food and water. Open the mouthpiece and consume gradually over 24 hours.</p></div>
+      <div class="panel-head"><p class="eyebrow">About the item</p><h2>Daily Food Intake Unit</h2><p class="panel-sub">One day of sealed handheld supply, including food and water. Nutrients and energy vary by pack; consume gradually over 24 hours.</p></div>
       <dl class="readout-list">
-        <div class="readout"><dt>Format</dt><dd>Handheld cartridge</dd></div>
         <div class="readout"><dt>Contents</dt><dd>Food + drinking water</dd></div>
         <div class="readout"><dt>Serving</dt><dd>One adult / 24 h</dd></div>
-        <div class="readout"><dt>Issue</dt><dd>Standard daily supply</dd></div>
       </dl>
     </aside>
 
@@ -277,7 +277,7 @@
           </div>
           <div class="price-compare">
             <div class="price-block"><span>Regular food + water</span><strong>S$186.40 / day</strong></div>
-            <div class="price-block"><span id="equivalent-pack-name">Basic Pack</span><strong class="accent" id="equivalent-pack-price">S$11.20 / day</strong></div>
+            <div class="price-block"><span id="equivalent-pack-name">Basic Pack</span><strong class="accent" id="equivalent-pack-price">S$22.10 / day</strong></div>
           </div>
           <p class="meal-note">Fresh food is still available, but costs much more.</p>
           <p class="serve-note">“Organic serve” means one standard portion of conventional, non-manufactured food.</p>
@@ -299,6 +299,7 @@
           <button class="pack-button" type="button" data-pack="nutrition" aria-pressed="false">Nutrition</button>
           <button class="pack-button" type="button" data-pack="premium" aria-pressed="false">Premium</button>
         </div>
+        <button id="buy-button" type="button">Buy pack</button>
       </div>
       <section id="product-overview">
         <h2 id="pack-title">BASIC PACK</h2>
@@ -307,9 +308,9 @@
           <div class="product-fact"><span class="label">Daily calories</span><span class="value" id="m-energy">2,140</span></div>
           <div class="product-fact"><span class="label">Protein</span><span class="value" id="m-protein">60 g</span></div>
           <div class="product-fact"><span class="label">Drinking water</span><span class="value" id="m-water">2.8 L</span></div>
-          <div class="product-fact"><span class="label">Public price</span><span class="value" id="m-price">S$11.20 / day</span></div>
+          <div class="product-fact"><span class="label">Public price</span><span class="value" id="m-price">S$22.10 / day</span></div>
         </div>
-        <p id="micro-summary">100% daily vitamin and mineral profile.</p>
+        <p id="micro-summary">90% daily vitamin and mineral profile.</p>
       </section>
       <section id="selected-component" aria-live="polite" hidden>
         <p class="selected-kicker">Selected part</p>
@@ -330,7 +331,7 @@
   </div>
 </div>
 
-<script src="world-data.js?v=20260810-1"></script>
+<script src="world-data.js?v=20260817-1"></script>
 <script>
   window.__DAILY_FOOD_BOOT_WATCH = setTimeout(function () {
     if (!window.__DAILY_FOOD_BOOTED && !window.__CIVIC_BOOTED) {
@@ -347,6 +348,6 @@
 <script type="importmap">
   { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
 </script>
-<script type="module" src="scene.js?v=20260810-1"></script>
+<script type="module" src="scene.js?v=20260817-1"></script>
 </body>
 </html>

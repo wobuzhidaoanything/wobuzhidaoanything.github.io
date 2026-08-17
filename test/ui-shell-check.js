@@ -15,17 +15,19 @@ function assert(condition, message) {
 console.log("--- Streamlined interface language ---");
 [
   "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "About the item",
-  "Daily Food Intake Unit", "One sealed handheld serving", "Handheld cartridge",
-  "Food + drinking water", "One adult / 24 h", "Standard daily supply",
+  "Daily Food Intake Unit", "One day of sealed handheld supply", "Nutrients and energy vary",
+  "Food + drinking water", "One adult / 24 h", "Buy pack",
   "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
   "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
 ].forEach(function (text) {
   assert(html.toLowerCase().indexOf(text.toLowerCase()) !== -1, "page contains " + text);
 });
-assert((html.match(/class="readout"/g) || []).length === 4, "left panel has only four world facts");
+assert((html.match(/class="readout"/g) || []).length === 2, "left panel has only contents and serving facts");
 assert((html.match(/class="product-fact"/g) || []).length === 4, "product overview has only four key facts");
 assert((html.match(/class="pack-button/g) || []).length === 4, "four pack buttons exist");
 assert(html.indexOf('id="context-toggle"') !== -1, "item info close control exists");
+assert(/pack-switch[\s\S]*id="buy-button"/.test(html), "buy button stays directly below the pack chooser");
+assert(!/\.component-tag::before/.test(html), "exploded-view label pointing lines are removed");
 
 console.log("--- Equivalent food measurements ---");
 ["600 g", "270 g food", "200 g", "260 g", "2.8 L", "Organic serves", "1.33 kg", "13"].forEach(function (text) {
