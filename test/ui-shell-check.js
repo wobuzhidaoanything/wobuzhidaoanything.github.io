@@ -15,7 +15,7 @@ function assert(condition, message) {
 console.log("--- Streamlined interface language ---");
 [
   "DAILY FOOD &amp; WATER SERVICE", "SINGAPORE | 2074", "About the item",
-  "Daily Food Intake Unit", "One day of sealed handheld supply", "Nutrients and energy vary",
+  "Daily Intake Unit (Food and Water)", "One day of sealed handheld supply", "Nutrients and energy vary",
   "Food + drinking water", "One adult / 24 h", "Buy pack",
   "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
   "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
