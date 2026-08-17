@@ -25,7 +25,7 @@ console.log("--- Streamlined interface language ---");
 assert((html.match(/class="readout"/g) || []).length === 2, "left panel has only contents and serving facts");
 assert((html.match(/class="product-fact"/g) || []).length === 4, "product overview has only four key facts");
 assert((html.match(/class="pack-button/g) || []).length === 4, "four pack buttons exist");
-assert(html.indexOf('id="context-toggle"') !== -1, "item info close control exists");
+assert(!/context-toggle|context-closed|Hide item info|Show item info/.test(html + scene), "item information cannot be hidden");
 assert(/pack-switch[\s\S]*id="buy-button"/.test(html), "buy button stays directly below the pack chooser");
 assert(!/\.component-tag::before/.test(html), "exploded-view label pointing lines are removed");
 
@@ -51,7 +51,6 @@ console.log("--- Controls, modes and hosting ---");
 ["viewport", "world-panel", "product-panel", "product-overview", "selected-component", "exploded-toggle", "meal-toggle", "equivalent-panel", "opening-card", "mobile-pack-select"].forEach(function (id) {
   assert(html.indexOf('id="' + id + '"') !== -1, "has #" + id);
 });
-assert(/context-closed/.test(scene) && /Show item info/.test(scene), "item info panel can be closed and reopened");
 assert(/aria-pressed="false"[^>]*><span id="exploded-label">See what’s inside/.test(html), "unit starts closed");
 assert(/type="importmap"/.test(html), "Three.js import map preserved");
 assert(/type="module" src="scene\.js\?v=/.test(html), "versioned static ES module entry preserved");
@@ -64,7 +63,9 @@ assert(/selectPack/.test(scene) && /Data\.getPack/.test(scene), "pack selection 
 
 console.log("--- Responsive shell ---");
 assert(/@media \(max-width: 780px\)/.test(html), "narrow layout breakpoint exists");
-assert(/\.side-panel \{ display: none; \}/.test(html), "side panels collapse on narrow screens");
+assert(/#world-panel \{[\s\S]*?display: grid;/.test(html), "item information remains visible on narrow screens");
+assert(/#product-panel \{ display: none; \}/.test(html), "only the product panel collapses on narrow screens");
+assert(!/\.side-panel \{ display: none; \}/.test(html), "shared side-panel rule never hides item information");
 assert(/touch-action: none/.test(html), "touch rotation remains enabled");
 assert(/overflow: hidden/.test(html), "page prevents horizontal scrolling");
 

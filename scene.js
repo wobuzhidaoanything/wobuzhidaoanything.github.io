@@ -18,8 +18,6 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   }
 
   var viewport = document.getElementById("viewport");
-  var app = document.getElementById("app");
-  var contextToggle = document.getElementById("context-toggle");
   var openingCard = document.getElementById("opening-card");
   var openingDismiss = document.getElementById("opening-dismiss");
   var explodedToggle = document.getElementById("exploded-toggle");
@@ -548,12 +546,6 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   }
 
   function bindInterface() {
-    contextToggle.addEventListener("click", function () {
-      var closed = app.classList.toggle("context-closed");
-      contextToggle.setAttribute("aria-expanded", String(!closed));
-      contextToggle.textContent = closed ? "Show item info" : "Hide item info";
-    });
-
     openingDismiss.addEventListener("click", function () {
       dismissOpening();
       renderer.domElement.focus();
