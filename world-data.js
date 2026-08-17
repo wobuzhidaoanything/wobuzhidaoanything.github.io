@@ -59,9 +59,9 @@
       shortName: "PERFORMANCE",
       tagline: "Higher energy and protein for sustained heavy activity.",
       energyKcal: 2700,
-      proteinG: 120,
+      proteinG: 145,
       carbohydrateG: 350,
-      lipidG: 91,
+      lipidG: 80,
       fibreG: 35,
       hydrationL: 3.2,
       internalWaterL: 2.2,
@@ -153,17 +153,32 @@
   var EQUIVALENT_MEAL = {
     title: "WHAT DIU-7 REPLACES",
     items: [
-      { id: "grains", label: "Cooked wholegrains", amount: "600 g", organicServes: 6 },
-      { id: "protein", label: "Meat, fish, tofu or beans", amount: "270 g food", organicServes: 3 },
-      { id: "vegetables", label: "Cooked vegetables", amount: "200 g", organicServes: 2 },
-      { id: "fruit", label: "Fresh fruit", amount: "260 g", organicServes: 2 },
-      { id: "water", label: "Drinking water", amount: "2.8 L", organicServes: null },
+      { id: "grains", label: "Cooked wholegrains" },
+      { id: "protein", label: "Lean protein equivalent" },
+      { id: "vegetables", label: "Cooked vegetables" },
+      { id: "fruit", label: "Fresh fruit" },
+      { id: "water", label: "Drinking water" },
     ],
-    foodWeightG: 1330,
-    organicServes: 13,
+    profiles: {
+      basic: {
+        amounts: { grains: "550 g", protein: "240 g", vegetables: "180 g", fruit: "234 g", water: "2.8 L" },
+        foodWeightG: 1204,
+      },
+      performance: {
+        amounts: { grains: "700 g", protein: "580 g", vegetables: "200 g", fruit: "260 g", water: "3.2 L" },
+        foodWeightG: 1740,
+      },
+      nutrition: {
+        amounts: { grains: "600 g", protein: "280 g", vegetables: "220 g", fruit: "286 g", water: "2.8 L" },
+        foodWeightG: 1386,
+      },
+      premium: {
+        amounts: { grains: "650 g", protein: "440 g", vegetables: "250 g", fruit: "325 g", water: "3.0 L" },
+        foodWeightG: 1665,
+      },
+    },
     traditionalCostSGD: 186.4,
     note: "Fresh food is still available, but costs much more.",
-    organicServeDefinition: "One standard portion of conventional, non-manufactured food.",
   };
 
   function getPack(id) {
@@ -180,6 +195,10 @@
     return COMPONENTS[0];
   }
 
+  function getEquivalentMeal(id) {
+    return EQUIVALENT_MEAL.profiles[id] || EQUIVALENT_MEAL.profiles.basic;
+  }
+
   function validateData() {
     var issues = [];
     if (!PRODUCT.id || !PRODUCT.name) issues.push("product identity missing");
@@ -187,7 +206,7 @@
     if (PACKS.length !== 4) issues.push("four packs required");
     PACKS.forEach(function (pack) {
       if (!(pack.energyKcal > 0)) issues.push(pack.id + " energy invalid");
-      if (!(pack.proteinG >= 50 && pack.proteinG <= 120)) issues.push(pack.id + " protein outside profile range");
+      if (!(pack.proteinG >= 50 && pack.proteinG <= 150)) issues.push(pack.id + " protein outside profile range");
       if (!(pack.hydrationL > 0)) issues.push(pack.id + " hydration invalid");
       if (!(pack.priceSGD > 0)) issues.push(pack.id + " price invalid");
     });
@@ -203,6 +222,7 @@
     EQUIVALENT_MEAL: EQUIVALENT_MEAL,
     getPack: getPack,
     getComponent: getComponent,
+    getEquivalentMeal: getEquivalentMeal,
     validateData: validateData,
   };
 });

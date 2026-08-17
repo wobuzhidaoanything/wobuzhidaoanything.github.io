@@ -42,6 +42,15 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
   var microSummary = document.getElementById("micro-summary");
   var equivalentPackName = document.getElementById("equivalent-pack-name");
   var equivalentPackPrice = document.getElementById("equivalent-pack-price");
+  var equivalentAmounts = {
+    grains: document.getElementById("equivalent-grains"),
+    protein: document.getElementById("equivalent-protein"),
+    vegetables: document.getElementById("equivalent-vegetables"),
+    fruit: document.getElementById("equivalent-fruit"),
+    water: document.getElementById("equivalent-water"),
+  };
+  var equivalentFoodWeight = document.getElementById("equivalent-food-weight");
+  var equivalentWaterTotal = document.getElementById("equivalent-water-total");
   var mobilePackSelect = document.getElementById("mobile-pack-select");
   var packButtons = Array.prototype.slice.call(document.querySelectorAll(".pack-button"));
 
@@ -667,6 +676,7 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 
   function selectPack(id) {
     activePack = Data.getPack(id);
+    var equivalentMeal = Data.getEquivalentMeal(activePack.id);
     document.documentElement.style.setProperty("--accent", activePack.accent);
     packTitle.textContent = activePack.name;
     packTagline.textContent = activePack.tagline;
@@ -677,6 +687,11 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     microSummary.textContent = activePack.micronutrientLabel + ".";
     equivalentPackName.textContent = activePack.name.replace(" PACK", "") + " PACK";
     equivalentPackPrice.textContent = "S$" + activePack.priceSGD.toFixed(2) + " / day";
+    Object.keys(equivalentAmounts).forEach(function (itemId) {
+      equivalentAmounts[itemId].textContent = equivalentMeal.amounts[itemId];
+    });
+    equivalentFoodWeight.textContent = (equivalentMeal.foodWeightG / 1000).toFixed(2) + " kg";
+    equivalentWaterTotal.textContent = equivalentMeal.amounts.water;
     mobilePackSelect.value = activePack.id;
     packButtons.forEach(function (button) {
       var isActive = button.dataset.pack === activePack.id;

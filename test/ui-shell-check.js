@@ -30,10 +30,12 @@ assert(/pack-switch[\s\S]*id="buy-button"/.test(html), "buy button stays directl
 assert(!/\.component-tag::before/.test(html), "exploded-view label pointing lines are removed");
 
 console.log("--- Equivalent food measurements ---");
-["600 g", "270 g food", "200 g", "260 g", "2.8 L", "Organic serves", "1.33 kg", "13"].forEach(function (text) {
+["550 g", "240 g", "180 g", "234 g", "2.8 L", "1.20 kg"].forEach(function (text) {
   assert(html.indexOf(text) !== -1, "comparison contains " + text);
 });
-assert(/non-manufactured food/i.test(html), "organic serve is defined");
+assert(!/Organic serves|serve-note|270 g food/i.test(html), "serves information and food suffix are removed");
+assert((html.match(/<th>/g) || []).length === 2, "comparison table has only two columns");
+assert(/getEquivalentMeal/.test(scene) && /equivalentFoodWeight/.test(scene), "comparison amounts update with pack selection");
 
 console.log("--- Removed clutter and jargon ---");
 [

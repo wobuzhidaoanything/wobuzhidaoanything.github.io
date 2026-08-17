@@ -21,7 +21,7 @@ console.log("--- Four pack profiles ---");
 assert(Array.isArray(data.PACKS) && data.PACKS.length === 4, "exactly four packs exist");
 var expected = {
   basic: { kcal: 2140, protein: 60, price: 22.1 },
-  performance: { kcal: 2700, protein: 120, price: 29.2 },
+  performance: { kcal: 2700, protein: 145, price: 29.2 },
   nutrition: { kcal: 2400, protein: 70, price: 28.41 },
   premium: { kcal: 2600, protein: 110, price: 36.7 },
 };
@@ -36,6 +36,7 @@ Object.keys(expected).forEach(function (id) {
   assert(pack.priceSGD < data.EQUIVALENT_MEAL.traditionalCostSGD, id + " costs less than regular food");
 });
 assert(data.getPack("performance").proteinG > data.getPack("basic").proteinG, "performance has more protein than basic");
+assert(data.getPack("performance").proteinG === 145, "performance provides 2 g protein per kg for a 72.5 kg adult");
 assert(/90%/.test(data.getPack("basic").micronutrientLabel), "basic pack supplies 90% daily vitamins and minerals");
 assert(/110%/.test(data.getPack("nutrition").micronutrientLabel), "nutrition pack supplies 110% daily vitamins and minerals");
 assert(/higher vitamin needs are covered/i.test(data.getPack("nutrition").tagline), "nutrition description covers people with higher vitamin needs");
@@ -56,11 +57,23 @@ assert(data.getComponent("hydration").name === "WATER COMPARTMENT", "water compa
 assert(data.getComponent("macro").name === "DAILY FOOD MIXTURE", "food mixture uses plain language");
 
 console.log("--- Equivalent regular meal ---");
-assert(data.EQUIVALENT_MEAL.foodWeightG === 1330, "regular food totals 1.33 kg");
-assert(data.EQUIVALENT_MEAL.organicServes === 13, "regular food totals 13 organic serves");
 assert(data.EQUIVALENT_MEAL.items.length === 5, "five regular food and water groups exist");
-assert(data.EQUIVALENT_MEAL.items[1].amount === "270 g food", "protein-source row is clearly food weight, not protein nutrient");
-assert(!/320/.test(JSON.stringify(data)), "obsolete 320 g protein-food figure removed");
+var equivalentExpected = {
+  basic: { grains: "550 g", protein: "240 g", vegetables: "180 g", fruit: "234 g", water: "2.8 L", weight: 1204 },
+  performance: { grains: "700 g", protein: "580 g", vegetables: "200 g", fruit: "260 g", water: "3.2 L", weight: 1740 },
+  nutrition: { grains: "600 g", protein: "280 g", vegetables: "220 g", fruit: "286 g", water: "2.8 L", weight: 1386 },
+  premium: { grains: "650 g", protein: "440 g", vegetables: "250 g", fruit: "325 g", water: "3.0 L", weight: 1665 },
+};
+Object.keys(equivalentExpected).forEach(function (id) {
+  var profile = data.getEquivalentMeal(id);
+  var expectedMeal = equivalentExpected[id];
+  ["grains", "protein", "vegetables", "fruit", "water"].forEach(function (itemId) {
+    assert(profile.amounts[itemId] === expectedMeal[itemId], id + " " + itemId + " comparison amount matches");
+  });
+  assert(profile.foodWeightG === expectedMeal.weight, id + " comparison food weight matches");
+});
+assert(!/organicServes|organicServeDefinition/.test(JSON.stringify(data)), "serves data is removed entirely");
+assert(!/\d+ g food/.test(JSON.stringify(data)), "daily gram amounts omit the unnecessary food suffix");
 assert(data.validateData().length === 0, "shipped fictional data validates");
 
 console.log("--- Summary ---");
