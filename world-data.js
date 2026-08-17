@@ -151,10 +151,10 @@
   ];
 
   var EQUIVALENT_MEAL = {
-    title: "WHAT DIU-7 REPLACES",
+    title: "APPROXIMATE WHOLE-FOOD MASS REPLACED",
     items: [
       { id: "grains", label: "Cooked wholegrains" },
-      { id: "protein", label: "Lean protein equivalent" },
+      { id: "protein", label: "Cooked lean-protein equivalent" },
       { id: "vegetables", label: "Cooked vegetables" },
       { id: "fruit", label: "Fresh fruit" },
       { id: "water", label: "Drinking water" },

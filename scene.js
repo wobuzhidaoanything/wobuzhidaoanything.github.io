@@ -680,9 +680,9 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
     equivalentPackName.textContent = activePack.name.replace(" PACK", "") + " PACK";
     equivalentPackPrice.textContent = "S$" + activePack.priceSGD.toFixed(2) + " / day";
     Object.keys(equivalentAmounts).forEach(function (itemId) {
-      equivalentAmounts[itemId].textContent = equivalentMeal.amounts[itemId];
+      equivalentAmounts[itemId].textContent = (itemId === "water" ? "" : "≈") + equivalentMeal.amounts[itemId];
     });
-    equivalentFoodWeight.textContent = (equivalentMeal.foodWeightG / 1000).toFixed(2) + " kg";
+    equivalentFoodWeight.textContent = "≈" + (equivalentMeal.foodWeightG / 1000).toFixed(2) + " kg";
     equivalentWaterTotal.textContent = equivalentMeal.amounts.water;
     mobilePackSelect.value = activePack.id;
     packButtons.forEach(function (button) {

@@ -18,7 +18,8 @@ console.log("--- Streamlined interface language ---");
   "Daily Intake Unit (Food and Water)", "One day of sealed handheld supply", "Nutrients and energy vary",
   "Food + drinking water", "One adult / 24 h", "Buy pack",
   "BASIC PACK", "PERFORMANCE", "NUTRITION", "PREMIUM", "Daily calories",
-  "Drinking water", "Public price", "See what’s inside", "Compare with regular food"
+  "Drinking water", "Public price", "See what’s inside", "Compare with regular food",
+  "Daily Intake Unit Store", "Choose your daily pack", "Purchase one sealed day", "Browse packs"
 ].forEach(function (text) {
   assert(html.toLowerCase().indexOf(text.toLowerCase()) !== -1, "page contains " + text);
 });
@@ -30,12 +31,15 @@ assert(/pack-switch[\s\S]*id="buy-button"/.test(html), "buy button stays directl
 assert(!/\.component-tag::before/.test(html), "exploded-view label pointing lines are removed");
 
 console.log("--- Equivalent food measurements ---");
-["550 g", "240 g", "180 g", "234 g", "2.8 L", "1.20 kg"].forEach(function (text) {
+["≈550 g", "≈240 g", "≈180 g", "≈234 g", "2.8 L", "≈1.20 kg"].forEach(function (text) {
   assert(html.indexOf(text) !== -1, "comparison contains " + text);
 });
 assert(!/Organic serves|serve-note|270 g food/i.test(html), "serves information and food suffix are removed");
 assert((html.match(/<th>/g) || []).length === 2, "comparison table has only two columns");
 assert(/getEquivalentMeal/.test(scene) && /equivalentFoodWeight/.test(scene), "comparison amounts update with pack selection");
+assert(/APPROXIMATE WHOLE-FOOD MASS REPLACED/.test(html), "comparison is framed as an approximate mass replacement");
+assert(/not recommended portion sizes/i.test(html), "comparison distinguishes equivalents from portion advice");
+assert(/1 DIU-7 unit/.test(html), "comparison shows the physical compression equation");
 
 console.log("--- Removed clutter and jargon ---");
 [
