@@ -1,4 +1,4 @@
-// Where designs live. With `npm start` they're files on this device (designs/ folder,
+// Where designs live. With `npm start` they're files on this device (userdata/ folder,
 // shared with AI agents through MCP). Opened any other way, the browser's storage is used.
 import { migrate, normalize } from './design.js';
 
@@ -20,9 +20,14 @@ const ls = {
 };
 
 async function json(url, opts) {
-  const r = await fetch(url, { cache: 'no-store', ...opts, headers: { 'content-type': 'application/json', ...(opts?.headers || {}) } });
+  let r;
+  try {
+    r = await fetch(url, { cache: 'no-store', ...opts, headers: { 'content-type': 'application/json', ...(opts?.headers || {}) } });
+  } catch {
+    throw Object.assign(new Error('Roomcraft’s local server isn’t reachable'), { offline: true });
+  }
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(j.error || `HTTP ${r.status}`), j);
   return j;
 }
 
@@ -41,7 +46,11 @@ function serverStore() {
     getActive: async () => (await json('api/active')).id,
     setActive: (id) => json('api/active', { method: 'PUT', body: JSON.stringify({ id }) }),
     load: async (id) => migrate(await json(`api/designs/${encodeURIComponent(id)}`)),
-    save: async (d) => (await json(`api/designs/${encodeURIComponent(d.id)}`, { method: 'PUT', body: JSON.stringify(d) })).updatedAt,
+    // `base`: the version this change started from (the server refuses to overwrite newer work)
+    save: async (d, base) => (await json(`api/designs/${encodeURIComponent(d.id)}`, { method: 'PUT', body: JSON.stringify(d), headers: base ? { 'x-base': base } : {} })).updatedAt,
+    history: async (id) => (await json(`api/history/${encodeURIComponent(id)}`)).versions,
+    version: async (id, v) => migrate(await json(`api/history/${encodeURIComponent(id)}?version=${encodeURIComponent(v)}`)),
+    keep: (d) => json(`api/history/${encodeURIComponent(d.id)}`, { method: 'POST', body: JSON.stringify(d) }),
     remove: (id) => json(`api/designs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     loadLibrary: () => json('api/library'),
     saveLibrary: (lib) => json('api/library', { method: 'PUT', body: JSON.stringify(lib) }),

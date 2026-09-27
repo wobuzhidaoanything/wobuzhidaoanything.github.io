@@ -254,11 +254,48 @@ export function openingGaps(floor, id) {
 }
 
 /**
+ * Close tiny gaps (up to 3 cm) where walls were meant to meet but don't quite: a wall end near
+ * another wall's end joins it; a wall end just short of (or just past) another wall's side
+ * lands on it. Without this, rooms aren't found because the outline isn't closed.
+ * Returns how many ends were moved.
+ */
+export function healGaps(floor, tol = 0.03) {
+  let n = 0;
+  for (const w of floor.walls) {
+    for (const k of ['a', 'b']) {
+      const p = w[k];
+      // Already exactly joined to another wall's end? Leave it.
+      if (floor.walls.some((o) => o !== w && (same(o.a, p, 1e-4) || same(o.b, p, 1e-4)))) continue;
+      let best = null;
+      for (const o of floor.walls) {
+        if (o === w) continue;
+        for (const q of [o.a, o.b]) {
+          const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          if (d > 1e-4 && d <= tol && (!best || d < best.d)) best = { d, to: q.slice() };
+        }
+      }
+      if (!best)
+        for (const o of floor.walls) {
+          if (o === w) continue;
+          const c = closestOnSegment(p, o.a, o.b);
+          if (c.dist > 1e-4 && c.dist <= tol && c.t > 0.001 && c.t < 0.999 && (!best || c.dist < best.d)) best = { d: c.dist, to: c.q };
+        }
+      if (best && len({ a: k === 'a' ? best.to : w.a, b: k === 'b' ? best.to : w.b }) >= MIN_WALL) {
+        moveEnd(floor, w, k, best.to);
+        n++;
+      }
+    }
+  }
+  return n;
+}
+
+/**
  * Tidy a floor after edits: drop zero-length and duplicate walls, merge straight runs split
  * earlier, keep openings inside their walls without overlaps. Returns what changed.
  */
 export function cleanFloor(floor) {
-  const report = { removedWalls: 0, merged: 0, droppedOpenings: [] };
+  const report = { removedWalls: 0, merged: 0, droppedOpenings: [], healed: 0 };
+  report.healed = healGaps(floor);
   // Zero-length walls (e.g. a recess pushed back flush). Remember where they were: straight
   // runs are only re-merged there, so corners the user added on purpose are kept.
   const collapsed = [];

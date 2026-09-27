@@ -566,6 +566,10 @@ export class Viewer {
           group.add(m);
           if (this.editMode) this.ghost(rec, true);
           rec.loading = false;
+          // Very detailed store models slow everything down: say so once per model
+          let tris = 0;
+          m.traverse((o) => o.isMesh && (tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3));
+          if (tris > 400000) this.cb.onHeavyModel?.(item, tris);
           this.updateSelection();
         })
         .catch((err) => {

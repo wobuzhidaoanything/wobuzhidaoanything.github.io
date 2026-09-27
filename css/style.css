@@ -469,3 +469,7 @@ table.qty td em { font-style: normal; color: var(--muted); }
 .north-arrow circle { fill: rgba(255,255,255,.9); stroke: var(--line-strong); }
 .north-arrow path { fill: #d14343; }
 .north-arrow text { font-size: 7px; font-weight: 700; fill: var(--text); }
+
+.save-banner { position: fixed; left: 50%; top: 62px; transform: translateX(-50%); z-index: 60; background: #fdf3f2; color: #8a2d26; border: 1px solid #f3d6d3; border-radius: 10px; padding: 9px 14px; font-size: 13px; box-shadow: var(--shadow); max-width: 640px; }
+.history-list { max-height: 55vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.history-list .design-row { display: flex; align-items: center; gap: 8px; }

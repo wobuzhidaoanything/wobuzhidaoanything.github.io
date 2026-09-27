@@ -393,7 +393,12 @@ export function buildHouse(design, { roof = false } = {}) {
         const b = new Brush(mergeGeometries(cutters.map((c) => { c.deleteAttribute('uv'); c.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(c.attributes.position.count * 2), 2)); return c; })));
         a.updateMatrixWorld();
         b.updateMatrixWorld();
-        geo = evaluator.evaluate(a, b, SUBTRACTION).geometry;
+        try {
+          geo = evaluator.evaluate(a, b, SUBTRACTION).geometry;
+        } catch (err) {
+          // Very unusual geometry can defeat the cut-out maths: keep solid walls rather than fail
+          console.warn('Could not cut doors/windows into the walls on', floor.name, err);
+        }
       }
       geo = boxUV(geo, 1.5);
       // Finishes per wall side: split the wall mesh into material groups (paint, tiles, wallpaper…)

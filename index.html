@@ -234,6 +234,13 @@
     <div class="actions"><button class="btn primary" id="planPdf">Download PDF</button><button class="btn" id="planPng">Download PNG</button><span class="spacer"></span><button class="btn" data-close>Close</button></div>
   </dialog>
 
+  <dialog id="historyDialog" class="dialog">
+    <div class="dlg-head"><h3>Version history</h3></div>
+    <p class="muted">Earlier versions of this design, saved automatically on this computer. Restoring one keeps the current version here too.</p>
+    <div id="historyList" class="history-list"></div>
+    <div class="actions"><span class="spacer"></span><button class="btn" data-close>Close</button></div>
+  </dialog>
+
   <dialog id="qtyDialog" class="dialog wide">
     <div class="dlg-head"><h3>Quantities &amp; costs</h3></div>
     <p class="muted">How much floor, paint and skirting each room needs (doors and windows taken off, flooring with 10% extra for cuts), and the furniture in it.</p>
@@ -286,6 +293,7 @@
   <input type="file" id="dxfFile" accept=".dxf" hidden>
   <div class="drop-overlay" id="dropOverlay" hidden><div>Drop links to import</div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="save-banner" id="saveBanner" role="alert" hidden></div>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

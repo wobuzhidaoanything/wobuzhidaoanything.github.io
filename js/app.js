@@ -84,17 +84,52 @@ function tidy(floor = floorNow()) {
 // ---------- saving & undo ----------
 
 let saveTimer, libTimer, lastSaved = null, lastLibSave = 0;
-function scheduleSave() {
+function scheduleSave(delay = 400) {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    try {
-      lastSaved = await store.save(design);
-      design.updatedAt = lastSaved;
-    } catch (err) {
-      toast(`Couldn't save: ${err.message}`);
-    }
-  }, 400);
+  saveTimer = setTimeout(saveNow, delay);
 }
+
+/**
+ * Save now. Never loses work: if the server is down it keeps retrying (with a banner); if an
+ * agent or another window saved a newer version meanwhile, that version is shown and yours is
+ * kept in History.
+ */
+async function saveNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  try {
+    lastSaved = await store.save(design, store.kind === 'device' ? lastSaved : undefined);
+    design.updatedAt = lastSaved;
+    if (!$('#saveBanner').hidden) {
+      $('#saveBanner').hidden = true;
+      toast('Saved. Everything is up to date again.');
+    }
+  } catch (err) {
+    if (err.conflict && err.current) {
+      const mine = structuredClone(design);
+      await store.keep?.(mine).catch(() => {});
+      design = err.current;
+      lastSaved = design.updatedAt;
+      viewer.setDesign(design, { force: true });
+      resetHistory();
+      renderAll();
+      toast(`${design.updatedBy === 'agent' ? 'Your AI agent' : 'Another window'} changed this design at the same time. Showing that version; yours is kept in History (Designs → History).`, { action: ['History', () => openHistory(design.id)] });
+    } else {
+      $('#saveBanner').hidden = false;
+      $('#saveBanner').textContent = err.offline ? 'Not saved yet: Roomcraft’s server isn’t running. Start it again with npm start; your changes are kept here and will save automatically.' : `Not saved yet (${err.message}). Retrying…`;
+      scheduleSave(3000);
+    }
+  }
+}
+
+// Leaving the page: save anything pending right away
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && saveTimer && saveNow());
+window.addEventListener('beforeunload', (e) => {
+  if (saveTimer || !$('#saveBanner').hidden) {
+    saveNow();
+    e.preventDefault();
+  }
+});
 function scheduleLibrarySave() {
   clearTimeout(libTimer);
   libTimer = setTimeout(() => {
@@ -1301,6 +1336,7 @@ async function renderDesignList() {
         ${d.id === design.id ? '<span class="pill">Open</span>' : '<button class="btn small primary" data-open>Open</button>'}
         <button class="btn small ghost" data-dup>Duplicate</button>
         <button class="btn small ghost" data-rename>Rename</button>
+        ${store.history ? '<button class="btn small ghost" data-hist title="Earlier versions, saved automatically">History</button>' : ''}
         <button class="btn small ghost danger" data-del ${list.length < 2 ? 'disabled' : ''}>Delete</button>
       </div></div>`)
     .join('');
@@ -1310,6 +1346,7 @@ async function renderDesignList() {
       await openDesign(id);
       $('#designsDialog').close();
     });
+    $('[data-hist]', row)?.addEventListener('click', () => openHistory(row.dataset.id));
     $('[data-dup]', row).onclick = async () => {
       const d = id === design.id ? JSON.parse(JSON.stringify(design)) : await store.load(id);
       d.id = uid('d');
@@ -1392,6 +1429,40 @@ async function exportAs(kind) {
     download(`${fileName(design.name)}.glb`, URL.createObjectURL(blob));
     toast(`Saved ${fileName(design.name)}.glb (${(blob.size / 1e6).toFixed(1)} MB). In Blender: File → Import → glTF 2.0.`);
   }
+}
+
+// ---------- version history ----------
+
+async function openHistory(id) {
+  const dlg = $('#historyDialog');
+  const list = await store.history(id).catch(() => []);
+  const when = (s) => (s ? new Date(s).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '?');
+  $('#historyList').innerHTML = list.length
+    ? list.map((v) => `<div class="design-row" data-v="${esc(v.file)}"><div><b>${esc(when(v.savedAt))}</b><div class="muted">${v.by === 'agent' ? 'saved by your AI agent' : 'saved by you'} · ${v.floors} floor${v.floors === 1 ? '' : 's'}, ${v.rooms} rooms, ${v.items} items</div></div><span class="spacer"></span><button class="btn small" data-restore>Restore</button><button class="btn small ghost" data-copy>Open as copy</button></div>`).join('')
+    : '<p class="muted">No earlier versions yet. Roomcraft keeps one every couple of minutes while you work, and one every time an AI agent changes the design.</p>';
+  $$('#historyList [data-v]').forEach((row) => {
+    const load = () => store.version(id, row.dataset.v);
+    $('[data-restore]', row).onclick = async () => {
+      const d = await load();
+      if (id !== design.id) await openDesign(id);
+      await saveNow(); // the current state goes into History first
+      design = { ...d, id, updatedAt: lastSaved };
+      viewer.setDesign(design, { force: true });
+      commit();
+      dlg.close();
+      $('#designsDialog')?.close?.();
+      toast('Restored that version. The one before it is in History too.', { undo: true });
+    };
+    $('[data-copy]', row).onclick = async () => {
+      const d = await load();
+      const copy = { ...d, id: uid('d'), name: `${d.name} (${when(d.updatedAt)})` };
+      await store.save(copy);
+      dlg.close();
+      await openDesign(copy.id);
+      toast(`Opened “${copy.name}” as a separate design.`);
+    };
+  });
+  dlg.showModal();
 }
 
 // ---------- sun study ----------
@@ -1793,6 +1864,12 @@ async function boot() {
       ui.pointer = [x, z];
       $('#coords').textContent = `x ${x.toFixed(2)} m · z ${z.toFixed(2)} m`;
     },
+    onHeavyModel: (item, tris) => {
+      ui.heavyWarned ||= new Set();
+      if (ui.heavyWarned.has(item.id)) return;
+      ui.heavyWarned.add(item.id);
+      toast(`“${item.name}” is a very detailed 3D model (${Math.round(tris / 1000)}k triangles) and may slow things down.`, { action: ['Use simple shape', () => ((item.useModel = false), commit({ lib: true, rebuild: false }))] });
+    },
     onLocked: (what) => toast(what === 'wall' ? 'This wall is locked. Unlock it in the wall panel to move it.' : 'This item is locked. Press L or use Unlock in the panel to move it.'),
     editable: () => ui.editing,
     onModelError: (item) => toast(`Couldn't load the 3D model for “${item.name}”, showing a generated one.`),
@@ -1863,7 +1940,11 @@ async function boot() {
   // Live updates from AI agents (or another window) editing the same files.
   store.subscribe(async (ev) => {
     if (ev.type === 'agent') return chat.handle(ev);
-    if (ev.type === 'design' && ev.id === design.id && ev.updatedAt !== lastSaved) {
+    if (ev.type === 'design' && ev.id === design.id && ev.updatedAt !== lastSaved && saveTimer) {
+      // Changed elsewhere while you have unsaved changes: saving runs the conflict check
+      // (shows their version, keeps yours in History) instead of silently dropping yours.
+      saveNow();
+    } else if (ev.type === 'design' && ev.id === design.id && ev.updatedAt !== lastSaved) {
       const d = await store.load(design.id);
       if (d.updatedAt === lastSaved) return;
       design = d;
@@ -2110,6 +2191,7 @@ function wireUI() {
     } else if (k === 'e' && !mod) setEditing(!ui.editing);
     else if (k === 'c' && !mod && !e.shiftKey) chat?.toggle();
     else if (k === 'g' && !mod) setDisplay('grid', !viewer.display.grid);
+    else if (k === 'f' && !mod && viewer.view !== 'walk' && viewer.view !== 'elevation') viewer.frameHouse(true);
     else if (k === 'm' && !mod) setTool(ui.tool === 'measure' ? null : 'measure');
     else if (k === 'p' && !mod && viewer.view !== 'elevation') setTool(ui.tool === 'paint' ? null : 'paint');
     else if (ui.editing && !mod && !e.shiftKey && { v: 1, w: 1, d: 1, n: 1, o: 1, s: 1 }[k]) {

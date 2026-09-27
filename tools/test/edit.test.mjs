@@ -167,3 +167,19 @@ test('a recess whose edge lands on an interior T-junction keeps both rooms', () 
   assert.equal(f.rooms.length, 2);
   assert.ok(f.rooms.every((r) => r.points.every((p, i, a) => { const q = a[(i + 1) % a.length], o = a[(i + a.length - 1) % a.length]; return Math.abs((p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0])) > 1e-6; })), 'no collinear points');
 });
+
+test('tiny gaps between walls are closed so rooms are found (gap healing)', () => {
+  const f = house();
+  // An interior wall that stops 2 cm short of the back wall and overshoots the front by 1 cm
+  f.walls.push({ id: 'i', a: [6, 0.02], b: [6, 8.01], thickness: 0.12 });
+  // And a corner that's 2 cm off
+  const right = f.walls.find((w) => w.a[0] === 10 && w.b[0] === 10);
+  right.a = [10.02, 0];
+  const r = cleanFloor(f);
+  assert.ok(r.healed >= 3, JSON.stringify(r));
+  const i = f.walls.find((w) => w.id === 'i');
+  near(i.a[1], 0);
+  near(i.b[1], 8);
+  syncRooms(f);
+  assert.equal(f.rooms.length, 2);
+});

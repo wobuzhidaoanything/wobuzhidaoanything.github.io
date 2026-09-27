@@ -75,14 +75,72 @@ export function getDesign(id) {
   return migrate(d);
 }
 
-export function saveDesign(d, { by = 'app' } = {}) {
+/** Thrown when a save is based on an older version than the one on disk (someone else saved). */
+export class ConflictError extends Error {
+  constructor(current) {
+    super('This design was changed elsewhere since you opened it.');
+    this.current = current;
+  }
+}
+
+/**
+ * Save a design. `base` = the updatedAt the change was based on: if the file on disk has moved
+ * on since (an agent or another window saved), a ConflictError is thrown instead of overwriting.
+ * The version being replaced is kept in the design's history.
+ */
+export function saveDesign(d, { by = 'app', base } = {}) {
   d = normalize(d);
   safeId(d.id);
   delete d.inventory; // models live in the shared library
+  const prev = readJSON(file(d.id));
+  if (prev && base && prev.updatedAt && prev.updatedAt !== base) throw new ConflictError(migrate(prev));
+  if (prev) keepHistory(prev, { force: prev.updatedBy !== by });
   d.updatedAt = new Date().toISOString();
   d.updatedBy = by;
+  fs.mkdirSync(DIR, { recursive: true }); // even if the folder was removed while running
   writeJSON(file(d.id), d);
   return d;
+}
+
+// ---------- version history (userdata/.state/history/<id>/<time>.json) ----------
+
+const HISTORY = path.join(STATE, 'history');
+const KEEP = 40, EVERY_MS = 120000;
+const histDir = (id) => path.join(HISTORY, safeId(id));
+
+/** Keep a copy of a design version: at most every 2 minutes, or always when `force` (e.g. a different editor). */
+export function keepHistory(d, { force = false } = {}) {
+  const dir = histDir(d.id);
+  fs.mkdirSync(dir, { recursive: true });
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+  const last = files.at(-1);
+  if (!force && last && Date.now() - fs.statSync(path.join(dir, last)).mtimeMs < EVERY_MS) return null;
+  const name = `${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  writeJSON(path.join(dir, name), d);
+  for (const f of files.slice(0, Math.max(0, files.length + 1 - KEEP))) fs.rmSync(path.join(dir, f), { force: true });
+  return name;
+}
+
+export function listHistory(id) {
+  const dir = histDir(id);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .sort()
+    .reverse()
+    .map((f) => {
+      const d = readJSON(path.join(dir, f));
+      return d && { file: f, savedAt: d.updatedAt, by: d.updatedBy, name: d.name, floors: d.floors?.length || 0, rooms: d.floors?.reduce((s, x) => s + (x.rooms?.length || 0), 0) || 0, items: d.floors?.reduce((s, x) => s + (x.placed?.length || 0), 0) || 0 };
+    })
+    .filter(Boolean);
+}
+
+export function getHistory(id, name) {
+  if (!/^[\w-]+\.json$/.test(name)) throw new Error('Invalid version');
+  const d = readJSON(path.join(histDir(id), name));
+  if (!d) throw new Error('No such version');
+  return migrate(d);
 }
 
 export function deleteDesign(id) {

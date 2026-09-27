@@ -122,9 +122,22 @@ async function api(req, res, url) {
     if (method === 'PUT') {
       const d = JSON.parse(await body(req));
       if (d.id !== id) throw new Error('id mismatch');
-      return send(res, 200, { ok: true, updatedAt: store.saveDesign(d, { by: 'app' }).updatedAt });
+      try {
+        return send(res, 200, { ok: true, updatedAt: store.saveDesign(d, { by: 'app', base: req.headers['x-base'] || undefined }).updatedAt });
+      } catch (err) {
+        if (err instanceof store.ConflictError) return send(res, 409, { ok: false, conflict: true, error: err.message, current: err.current });
+        throw err;
+      }
     }
     if (method === 'DELETE') return store.deleteDesign(id), send(res, 200, { ok: true });
+  }
+  if (what === 'history' && id) {
+    if (method === 'GET') {
+      const v = url.searchParams.get('version');
+      return send(res, 200, v ? store.getHistory(id, v) : { versions: store.listHistory(id) });
+    }
+    // Keep a given version (e.g. your side of a conflict) in the history
+    if (method === 'POST') return send(res, 200, { ok: true, file: store.keepHistory(JSON.parse(await body(req)), { force: true }) });
   }
   if (what === 'active') {
     if (method === 'GET') return send(res, 200, { id: store.getActive() });
