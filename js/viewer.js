@@ -919,7 +919,13 @@ export class Viewer {
     if (view !== 'elevation') this.elevGroup?.clear();
     if (view === 'walk') this.cb.onWalk?.(true);
     else if (prev === 'walk') this.cb.onWalk?.(false);
-    if (view === '3d' && prev === 'walk') this.frameHouse(true);
+    if (view === '3d' && prev === 'walk') {
+      // Start the orbit from where you were standing (the walker moved the camera itself),
+      // then glide out to the house
+      const p = this.persp.position, d = this.persp.getWorldDirection(new THREE.Vector3());
+      this.orbit.setLookAt(p.x, p.y, p.z, p.x + d.x, p.y + d.y, p.z + d.z, false);
+      this.frameHouse(true);
+    }
     this.persp.fov = view === 'walk' ? 70 : 45;
     this.persp.updateProjectionMatrix();
     this.applyFloorVisibility();

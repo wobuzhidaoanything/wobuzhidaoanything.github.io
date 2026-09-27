@@ -89,6 +89,12 @@ function daylightSky() {
  * or null if cancelled via `signal`.
  */
 export async function renderPhoto(viewer, { samples = 300, onProgress, signal } = {}) {
+  // Finish any camera glide first (e.g. just after leaving the walk-through), so the photo
+  // is taken from where the camera is going, not from somewhere on the way
+  if (viewer.view !== 'walk') {
+    for (let i = 0; i < 60 && viewer.controls.update(0.5); i++);
+    viewer.camera.updateMatrixWorld();
+  }
   const hide = [];
   viewer.scene.traverse((o) => {
     if ((o.userData.helper || o === viewer.overlay || o.isCSS2DObject) && o.visible) {

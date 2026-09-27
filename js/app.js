@@ -2176,7 +2176,8 @@ function wireUI() {
       if (viewer.view === 'walk' && !document.pointerLockElement) setView('3d');
       else if (ui.tool) setTool(null);
       else viewer.select(null);
-    } else if (viewer.view === 'walk') return;
+    } else if (['1', '2', '3', '4'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'walk', 4: 'split' }[k]);
+    else if (viewer.view === 'walk') return;
     else if (mod && k === 'd' && sel?.type === 'item') (e.preventDefault(), duplicate(sel.id));
     else if (mod && k === 'd' && sel?.type === 'items') (e.preventDefault(), copyItems(), pasteItems({ offset: true }));
     else if (mod && k === 'c' && viewer.selectedItems().length) (e.preventDefault(), copyItems());
