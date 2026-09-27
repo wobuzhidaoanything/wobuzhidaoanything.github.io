@@ -1,21 +1,39 @@
-# DIU-7 | One Day of Food and Water
+# Roomcraft
 
-An interactive speculative-worldbuilding artifact set in Singapore in 2074. The Daily Food & Water Service presents an opaque, standardized daily unit as normal public infrastructure.
+Free 3D room planner that runs on GitHub Pages. Build a room of any shape, drop in furniture from any
+store link, pick its colour, and see it to scale.
 
-Four selectable profiles share one procedural Three.js product:
+- **Any room shape:** rectangle, L, T, U presets, or drag corners and add new ones. Set wall lengths, ceiling
+  height, floor type and colours, and add doors and windows.
+- **Furniture from links:** paste or drag product links (IKEA, Amazon, Wayfair, Shopify stores, anything
+  with product data). The link reader worker pulls dimensions, colour options and 3D models.
+- **Real-looking models:** uses the store's 3D model when there is one. Otherwise a detailed model is
+  generated for the type (sofa with cushions and chaise, bed with bedding, bookcase with books,
+  wardrobe, dresser, tables, chairs, lamps, plants, rugs, TV, mirror, curtains…) at the exact size,
+  with fabric, wood and metal materials.
+- **Easy to arrange:** drag to move, drag the blue dot to rotate, items snap flush to walls and sit on
+  tables and rugs. 3D, plan and walk-through views, undo/redo, screenshots, export/import.
 
-- **Basic:** 2,140 calories, 60 g protein, 2.8 L water, 90% daily vitamins and minerals, S$22.10/day
-- **Performance:** 2,700 calories, 145 g protein, 3.2 L water, S$29.20/day
-- **Nutrition:** 2,400 calories, 70 g protein, 110% daily vitamins and minerals, S$28.41/day
-- **Premium:** 2,600 calories, 110 g protein, expanded vitamin/mineral profile, S$36.70/day
+## Changing things by asking Claude
 
-The values are fictional product content informed by general Singapore adult dietary guidance. They are not personal nutrition or medical advice.
+Describe what you want in the Claude Code chat ("add a 200 cm oak dining table by the window",
+"make the room an L shape, 5 by 4 m"). Claude edits `data/project.json` and bumps its `version`.
+The next time you open the site it offers **Load it**, which merges those changes with your own
+imported items. To hand your current layout to Claude, use **⋮ → Export project** and share the file.
 
-The optional left-side item panel describes what DIU-7 is and can be hidden with the top-bar control when presenting the future dashboard on its own. The 2074 indicators are fictional projections for this world, not official forecasts; they extrapolate from real Singapore constraints documented by SFA and PUB.
+## Structure
 
-Research anchors: [Singapore Food Statistics 2025](https://www.sfa.gov.sg/news-publications/newsroom/singapore-food-statistics-2025), [PUB water quality](https://www.pub.gov.sg/Public/WaterLoop/Water-Quality), and [PUB water conservation](https://www.pub.gov.sg/Public/WaterLoop/Water-Conservation).
+```
+index.html          page shell (three.js via import map, no build step)
+css/style.css
+js/app.js           state, inventory, import, inspector, undo, persistence
+js/viewer.js        three.js scene, interaction, camera modes
+js/room.js          polygon room, walls with openings
+js/models.js        parametric furniture generators
+js/materials.js     procedural textures and materials
+shared/colors.js    colour-name → hex (used by site and worker)
+data/project.json   the project Claude edits
+worker/             Cloudflare Worker that reads product links (see worker/README.md)
+```
 
-
-## Deploy with GitHub Pages
-
-The project has no build step. Publish this folder from the repository root; `index.html` is the entry point and Three.js loads through the existing import map.
+Run locally with any static server, e.g. `npx http-server .`, then open http://localhost:8080.
