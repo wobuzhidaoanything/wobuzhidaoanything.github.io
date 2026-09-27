@@ -14,20 +14,29 @@ store link, pick its colour, and see it to scale.
 - **Easy to arrange:** drag to move, drag the blue dot to rotate, items snap flush to walls and sit on
   tables and rugs. 3D, plan and walk-through views, undo/redo, screenshots, export/import.
 
-## AI modeller (free with OpenRouter)
+## Run it (one command)
 
-Click **Ask AI**, paste an OpenRouter key (stored only in your browser) and pick a model. Free models are
-listed first, loaded live from OpenRouter. Describe furniture ("an IKEA KIVIK 3-seat sofa with all its colours")
-and it creates the model in your inventory with real dimensions and colour options, or checks and corrects
-existing items. It can **only** create and check inventory models. It never sees or changes your room; you
-place items yourself.
+```bash
+npm start
+```
 
-## Changing things by asking Claude
+This installs what's needed on first run, serves the site at http://127.0.0.1:5173, opens your browser, and
+reads pasted product links locally, so there's no worker to deploy. Needs Node.js 18.17+.
 
-Describe what you want in the Claude Code chat ("add a 200 cm oak dining table by the window",
-"make the room an L shape, 5 by 4 m"). Claude edits `data/project.json` and bumps its `version`.
-The next time you open the site it offers **Load it**, which merges those changes with your own
-imported items. To hand your current layout to Claude, use **⋮ → Export project** and share the file.
+## AI agents (MCP)
+
+`tools/mcp-server.mjs` lets any MCP-capable agent read product links, add furniture models, and **see
+renders of them** before marking them verified. Config files for Claude Code, Cursor, VS Code, Gemini CLI,
+OpenCode and Grok are committed, so it's picked up after `git pull`. Setup for every agent (including
+Codex and Windsurf) and the CLI alternative: [docs/MCP.md](docs/MCP.md).
+
+## Editing the layout with an AI agent
+
+The house layout is `data/project.json`. Any coding agent (Claude Code, Codex, Cursor…) can
+`git pull`, edit that file, bump its `version`, and push. [AGENTS.md](AGENTS.md) explains the format
+and coordinates. Open the site afterwards and it offers **Load it**, which merges the changes with any
+items you imported yourself. To hand your current layout to an agent, use **⋮ → Export project** and
+commit the file as `data/project.json`.
 
 ## Structure
 
@@ -35,14 +44,15 @@ imported items. To hand your current layout to Claude, use **⋮ → Export proj
 index.html          page shell (three.js via import map, no build step)
 css/style.css
 js/app.js           state, inventory, import, inspector, undo, persistence
-js/chat.js          AI modeller panel (OpenRouter), inventory-only actions
 js/viewer.js        three.js scene, interaction, camera modes
 js/room.js          polygon room, walls with openings
 js/models.js        parametric furniture generators
 js/materials.js     procedural textures and materials
 shared/colors.js    colour-name → hex (used by site and worker)
-data/project.json   the project Claude edits
-worker/             Cloudflare Worker that reads product links (see worker/README.md)
+data/project.json   the house layout (edited by you or an AI agent, see AGENTS.md)
+tools/              npm start server, MCP server, CLI, headless renderer
+preview.html        render page used by the tools
+docs/MCP.md         agent setup guides
+worker/             optional Cloudflare Worker link reader for a hosted copy (see worker/README.md)
 ```
 
-Run locally with any static server, e.g. `npx http-server .`, then open http://localhost:8080.

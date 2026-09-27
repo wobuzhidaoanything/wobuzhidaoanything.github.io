@@ -11,6 +11,16 @@ import { buildRoom, bounds, centroid, pointInPolygon, walls, closestOnSegment } 
 const STACK_BASES = new Set(['table', 'desk', 'coffeetable', 'sidetable', 'nightstand', 'dresser', 'sideboard', 'tvstand', 'bookshelf', 'rug', 'wardrobe']);
 const DEG = Math.PI / 180;
 
+/** 'webgl2', 'webgl' or null: what this browser can render with. */
+export function webglSupport() {
+  try {
+    const c = document.createElement('canvas');
+    if (c.getContext('webgl2')) return 'webgl2';
+    if (c.getContext('webgl') || c.getContext('experimental-webgl')) return 'webgl';
+  } catch {}
+  return null;
+}
+
 function makeLabel(className) {
   const el = document.createElement('div');
   el.className = className;
@@ -30,7 +40,7 @@ export class Viewer {
     this.assetProxy = null;
     this.keys = new Set();
 
-    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false }));
+    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }));
     r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;

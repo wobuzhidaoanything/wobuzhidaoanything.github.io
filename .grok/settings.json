@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "roomcraft": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["tools/mcp-server.mjs"]
+    }
+  }
+}

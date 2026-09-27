@@ -1,10 +1,9 @@
-import { Viewer } from './viewer.js';
+import { Viewer, webglSupport } from './viewer.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
 import { ROOM_PRESETS, signedArea, bounds, centroid, pointInPolygon, walls, nearestWall } from './room.js';
 import { colorFromName } from '../shared/colors.js';
 import { guessCategory } from '../worker/src/scrape.js';
 import { WORKER_URL } from './config.js';
-import { initChat } from './chat.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -68,8 +67,10 @@ function restore(i) {
   renderAll();
 }
 
+// When the site runs via `npm start`, the local server reads links itself (no worker needed).
+let localReader = null;
 function workerUrl() {
-  return (store.get(LS_WORKER) || WORKER_URL || '').replace(/\/+$/, '');
+  return (store.get(LS_WORKER) || WORKER_URL || localReader || '').replace(/\/+$/, '');
 }
 
 // ---------- lookups ----------
@@ -125,6 +126,7 @@ function renderInventory() {
         <div class="thumb" style="${i.image ? `background-image:url('${esc(i.image)}')` : ''}">${i.image ? '' : iconFor(i.category)}</div>
         <div>
           <div class="nm">${esc(i.name)}</div>
+          ${i.verified === false ? '<div class="badge-unverified" title="Added by an AI agent and not yet checked against a render">Unverified</div>' : ''}
           <div class="sz ${missing ? 'missing' : ''}">${missing ? '⚠ Size needed · ' : ''}${cm(dimsOf(i).w)} × ${cm(dimsOf(i).d)} × ${cm(dimsOf(i).h)} cm${inRoom ? ` · ${inRoom} in room` : ''}</div>
           <div class="swatches">${(i.colors || []).slice(0, 10).map((c) => `<button class="sw ${c.name === pick ? 'on' : ''}" data-color="${esc(c.name)}" title="${esc(c.name)}" style="background:${esc(c.hex)}"></button>`).join('')}${i.colors?.length > 10 ? `<span class="hint">+${i.colors.length - 10}</span>` : ''}</div>
         </div>
@@ -761,24 +763,6 @@ async function importUrls(urls) {
   renderQueue();
 }
 
-/** Read one link into the inventory (used by the AI chat). */
-async function importOne(url) {
-  const existing = state.inventory.find((i) => i.url === url);
-  if (existing) return existing;
-  const base = workerUrl();
-  let item;
-  if (base) {
-    const res = await fetch(`${base}/scrape?url=${encodeURIComponent(url)}`);
-    const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
-    if (!data.ok) throw new Error(data.error || 'Could not read the page.');
-    item = itemFromProduct(data.product);
-  } else {
-    item = guessFromUrl(url);
-    item.needsDims = true;
-  }
-  state.inventory.unshift(item);
-  return item;
-}
 
 // ---------- misc UI ----------
 
@@ -875,6 +859,14 @@ async function boot() {
   state = normalizeProject(local || repoProject);
   if (local?.meta) state.meta = local.meta;
 
+  try {
+    const h = await fetch('health', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null));
+    if (h?.service === 'roomcraft-local') localReader = location.origin;
+  } catch {}
+  if (!webglSupport()) {
+    $('#loading').innerHTML = '<div class="webgl-error"><b>3D view unavailable</b>This browser has WebGL turned off or unsupported.<br>Enable hardware acceleration, or try Chrome, Edge, Firefox or Safari.</div>';
+    return;
+  }
   $('#loading').remove();
   viewer = new Viewer($('#stage'), {
     onSelect: () => renderInspector(),
@@ -914,18 +906,7 @@ async function boot() {
 
   wireUI();
   // Handy for debugging from the browser console.
-  // The AI chat only gets inventory access: it can create and correct item models, not the room.
-  const chat = initChat({
-    state: () => state,
-    commit: () => commit(),
-    importUrl: importOne,
-    uid,
-    colorFromName,
-    guessCategory,
-    DEFAULT_DIMS,
-    categories: Object.keys(CATEGORY_LABELS),
-  });
-  window.roomcraft = { viewer, get state() { return state; }, commit, addToRoom, chat };
+  window.roomcraft = { viewer, get state() { return state; }, commit, addToRoom };
 }
 
 function wireUI() {

@@ -1,0 +1,20 @@
+{
+  "name": "roomcraft",
+  "private": true,
+  "type": "module",
+  "description": "3D room planner (plain HTML/CSS/JS + three.js/WebGL) with an MCP server for AI agents",
+  "scripts": {
+    "start": "node tools/start.mjs",
+    "link": "node tools/cli.mjs read",
+    "render": "node tools/cli.mjs render",
+    "mcp": "node tools/mcp-server.mjs",
+    "test": "node --test worker/test/*.test.mjs tools/test/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.56.1",
+    "three": "0.170.0"
+  },
+  "engines": {
+    "node": ">=18.17"
+  }
+}

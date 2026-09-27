@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Edited by Claude when you ask for changes in chat. Units: metres, rotation in degrees (0 = facing +z / the camera).",
+  "note": "House layout and furniture inventory. See AGENTS.md for the format. Units: metres, rotation in degrees (0 = facing +z).",
   "room": {
     "points": [[0, 0], [4.2, 0], [4.2, 3.6], [0, 3.6]],
     "height": 2.6,

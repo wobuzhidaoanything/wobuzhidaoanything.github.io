@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Roomcraft preview</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    html, body { height: 100%; }
+    #stage { position: fixed; inset: 0; }
+    .tag { position: fixed; left: 16px; top: 14px; z-index: 5; background: rgba(255,255,255,.94); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; box-shadow: var(--shadow); max-width: 70%; }
+    .tag b { display: block; font-size: 15px; }
+    .tag .row { display: flex; gap: 6px; align-items: center; margin-top: 3px; color: var(--muted); }
+    .tag .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
+    .view { position: fixed; right: 16px; top: 14px; z-index: 5; font-size: 12px; color: var(--muted); background: rgba(255,255,255,.9); border-radius: 8px; padding: 4px 8px; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="stage"></div>
+  <div class="tag" id="tag" hidden></div>
+  <div class="view" id="viewName"></div>
+  <script type="module" src="js/preview.js"></script>
+</body>
+</html>
