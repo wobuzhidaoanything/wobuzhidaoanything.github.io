@@ -56,7 +56,16 @@ async function itemMode(itemId) {
 
   let model = buildParametric({ category: item.category, dims, color, accent: item.accent, name: item.name, seed: item.id });
   let source = 'generated';
-  if (item.modelUrl && item.useModel !== false) {
+  if (item.component && item.useModel !== false) {
+    try {
+      const { itemComponentModel } = await import('./r3f-host.js');
+      model = await itemComponentModel(item, dims, color);
+      source = 'R3F component';
+    } catch (err) {
+      source = `generated (component failed: ${err.message || err})`;
+      api.componentError = String(err.message || err);
+    }
+  } else if (item.modelUrl && item.useModel !== false) {
     try {
       const gltf = await new GLTFLoader().loadAsync(proxy(item.modelUrl));
       fitModel(gltf.scene, dims);

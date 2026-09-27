@@ -16,7 +16,7 @@ const MCP_JSON = path.join(STATE_DIR, 'mcp.json');
 
 const SYSTEM = [
   'You are the AI assistant inside Roomcraft, a 3D house planner running on this computer. The user talks to you from a chat panel in the app.',
-  'Work only through the roomcraft MCP tools (read_link, add_item, update_item, render_item, verify_item, save_model_file, list_models, get_design, write_design, render_design, place_item, stair_info, export_glb). Do not edit files in the repository.',
+  'Work only through the roomcraft MCP tools (read_link, add_item, update_item, write_model_component, get_model_component, render_item, verify_item, save_model_file, list_models, get_design, write_design, render_design, place_item, stair_info, export_glb). Do not edit files in the repository.',
   'Always look at renders with your own vision before saying something is done, and compare them with product photos or floor plans.',
   'The app updates live when you save. Keep replies short and plain (a few sentences, no headings); the user sees them in a small panel.',
 ].join(' ');
@@ -63,7 +63,7 @@ const RUNNERS = {
   },
 };
 
-const TOOL_NAMES = new Set(['read_link', 'list_models', 'add_item', 'update_item', 'render_item', 'verify_item', 'save_model_file', 'list_designs', 'get_design', 'write_design', 'render_design', 'stair_info', 'place_item', 'export_glb']);
+const TOOL_NAMES = new Set(['read_link', 'list_models', 'add_item', 'update_item', 'write_model_component', 'get_model_component', 'render_item', 'verify_item', 'save_model_file', 'list_designs', 'get_design', 'write_design', 'render_design', 'stair_info', 'place_item', 'export_glb']);
 
 const withSystem = (prompt, session) => (session ? prompt : `${SYSTEM}\n\n${prompt}`);
 
@@ -202,6 +202,7 @@ function modelPrompt({ url, itemId, name }) {
     itemId ? `A quick draft is already in the library as item "${itemId}"${name ? ` (${name})` : ''}. Improve that item with update_item; do not add a duplicate.` : 'Add it with add_item (from_url).',
     '1. read_link: study every product photo and the description. Find the real overall width, depth and height in cm (check the description and dimension text, and sanity-check them against the photos).',
     '2. Set the right category, dimensions, colour options with realistic hex values and any accent (legs/frame) colour. If the store has a real 3D model file (model_url), use save_model_file.',
+    '   If the generated shape for the category cannot look like the product (unusual shape, curves, special base or arms), build it as a React Three Fiber component with write_model_component (read docs/R3F-MODELS.md for the rules).',
     '3. render_item and compare the renders with the photos: shape, proportions, colours. Fix with update_item and render again until it matches.',
     '4. verify_item with notes on what you compared.',
     'Finish with one short line saying what the model now looks like and anything you could not match.',

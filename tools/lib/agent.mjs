@@ -26,8 +26,8 @@ const cm = (m) => Math.round(m * 1000) / 10;
 
 /** Fingerprint of everything that affects how a model looks. */
 export function itemHash(item) {
-  const { name, category, dims, colors, accent, modelUrl, useModel } = item;
-  return crypto.createHash('sha1').update(JSON.stringify({ name, category, dims, colors, accent, modelUrl, useModel })).digest('hex').slice(0, 12);
+  const { name, category, dims, colors, accent, modelUrl, useModel, component, componentVersion } = item;
+  return crypto.createHash('sha1').update(JSON.stringify({ name, category, dims, colors, accent, modelUrl, useModel, component, componentVersion })).digest('hex').slice(0, 12);
 }
 function readRenders() {
   try {
@@ -149,6 +149,33 @@ export function updateItem(args) {
     item.verified = false;
     return { item };
   });
+}
+
+/**
+ * Save a model written as a React Three Fiber component (userdata/models/<id>.jsx) and use it
+ * for the item. The code is compiled first, so syntax errors and bad imports come back as errors.
+ */
+export async function writeModelComponent({ id, code }) {
+  const { compileSource, componentPath } = await import('./r3f.mjs');
+  if (!store.getLibrary().items?.some((i) => i.id === id)) throw new Error(`No model "${id}". Create it first with add_item, then write its component.`);
+  await compileSource(String(code || ''), `${id}.jsx`);
+  const f = componentPath(id);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, code);
+  const version = crypto.createHash('sha1').update(code).digest('hex').slice(0, 10);
+  return withLibrary((lib) => {
+    const item = lib.items.find((i) => i.id === id);
+    Object.assign(item, { component: `models/${id}.jsx`, componentVersion: version, useModel: true, verified: false });
+    return { item, file: path.relative(process.cwd(), f) };
+  });
+}
+
+/** The component source of an item, if it has one. */
+export async function readModelComponent(id) {
+  const { componentPath } = await import('./r3f.mjs');
+  const f = componentPath(id);
+  if (!fs.existsSync(f)) return null;
+  return fs.readFileSync(f, 'utf8');
 }
 
 /** Download a .glb into userdata/models/ (served at /models/…) so the model has a permanent local copy. */

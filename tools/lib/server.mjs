@@ -9,6 +9,7 @@ import { scrapeProduct } from '../../worker/src/scrape.js';
 import * as store from './store.mjs';
 import { agentStatus, autoSetup, removeAgent } from './agents.mjs';
 import * as runner from './runner.mjs';
+import * as r3f from './r3f.mjs';
 
 export { ROOT };
 
@@ -204,6 +205,21 @@ export function startServer({ port = 5173, host = '127.0.0.1', quiet = false } =
         const f = path.normalize(path.join(base, decodeURIComponent(vendor[2])));
         if (!f.startsWith(base + path.sep) || !fs.existsSync(f)) return send(res, 404, 'Not found', 'text/plain');
         return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)] || 'application/octet-stream', 'public, max-age=3600');
+      }
+      // React Three Fiber runtime and model components (see r3f.mjs)
+      const rt = url.pathname.match(/^\/r3f\/([\w.-]+\.js)$/);
+      if (rt) {
+        const f = await r3f.runtimeFile(rt[1]);
+        return f ? send(res, 200, fs.readFileSync(f), MIME['.js'], 'public, max-age=86400') : send(res, 404, 'Not found', 'text/plain');
+      }
+      const comp = url.pathname.match(/^\/r3f-model\/([\w-]+)\.js$/);
+      if (comp) {
+        try {
+          return send(res, 200, await r3f.compileComponent(comp[1]), MIME['.js']);
+        } catch (err) {
+          // A module that throws when imported, so the app shows the reason and keeps the generated model
+          return send(res, 200, `throw new Error(${JSON.stringify(err.code === 'ENOENT' ? `No component file for ${comp[1]}` : err.message)});`, MIME['.js']);
+        }
       }
       // Your downloaded models and finish textures (userdata/models, userdata/textures)
       const own = url.pathname.match(/^\/(models|textures)\/([\w.-]+)$/);

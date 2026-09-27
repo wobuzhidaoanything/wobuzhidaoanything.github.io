@@ -468,7 +468,7 @@ export class Viewer {
         if (!item) continue;
         seen.add(p.id);
         const color = item.colors?.find((c) => c.name === p.color) || (p.color?.startsWith?.('#') ? { name: p.color, hex: p.color } : item.colors?.[0]);
-        const sig = JSON.stringify([item.category, item.dims, color?.hex, item.accent, item.modelUrl, item.name, item.useModel]);
+        const sig = JSON.stringify([item.category, item.dims, color?.hex, item.accent, item.modelUrl, item.name, item.useModel, item.component, item.componentVersion]);
         let rec = this.items.get(p.id);
         if (!rec || rec.sig !== sig) {
           rec?.group.removeFromParent();
@@ -501,7 +501,26 @@ export class Viewer {
     group.add(model);
     const rec = { group, sig, dims, loading: false };
     if (this.editMode) queueMicrotask(() => this.ghost(rec, true));
-    if (item.modelUrl && item.useModel !== false) {
+    if (item.component && item.useModel !== false) {
+      // A model written as a React Three Fiber component (userdata/models/<id>.jsx)
+      rec.loading = true;
+      import('./r3f-host.js')
+        .then((h) => h.itemComponentModel(item, dims, color))
+        .then((m) => {
+          if (this.items.get(p.id) !== rec) return;
+          m.traverse((o) => o.isMesh && o.geometry.computeBoundsTree?.());
+          model.removeFromParent();
+          group.add(m);
+          if (this.editMode) this.ghost(rec, true);
+          rec.loading = false;
+          this.updateSelection();
+        })
+        .catch((err) => {
+          rec.loading = false;
+          console.warn('Model component failed, keeping the generated model', err);
+          this.cb.onModelError?.(item, err);
+        });
+    } else if (item.modelUrl && item.useModel !== false) {
       rec.loading = true;
       this.loadModel(item.modelUrl)
         .then((scene) => {

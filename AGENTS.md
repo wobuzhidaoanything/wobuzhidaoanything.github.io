@@ -17,8 +17,9 @@ same operations exist on the command line: `node tools/cli.mjs` (run it without 
 
 | Task | Tools |
 | --- | --- |
-| Read a product link | `read_link` (returns the product photo as an image) |
+| Read a product link | `read_link` (returns up to 6 product photos and the description) |
 | Create or fix a furniture model | `add_item` (use `from_url`), `update_item`, `render_item`, `verify_item`, `save_model_file` |
+| Model an unusual shape in code | `write_model_component`, `get_model_component`: a React Three Fiber component, see [docs/R3F-MODELS.md](docs/R3F-MODELS.md) |
 | Look at / edit a house | `list_designs`, `get_design`, `write_design`, `render_design`, `stair_info`, `place_item` |
 | Export for Blender | `export_glb` |
 

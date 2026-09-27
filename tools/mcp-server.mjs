@@ -5,7 +5,7 @@
 import readline from 'node:readline';
 import {
   readLink, listModels, addItem, updateItem, verifyItem, renderItemImages, saveModelFile, CATEGORIES,
-  listDesigns, getDesign, writeDesign, renderDesignImages, exportGLB, stairInfo, placeItem,
+  listDesigns, getDesign, writeDesign, renderDesignImages, exportGLB, stairInfo, placeItem, writeModelComponent, readModelComponent
 } from './lib/agent.mjs';
 import { recordConnection } from './lib/agents.mjs';
 
@@ -66,6 +66,20 @@ const TOOLS = [
       },
       required: ['id'],
     },
+  },
+  {
+    name: 'write_model_component',
+    description: `Build a model's 3D shape as a React Three Fiber component when the generated shape for its category can't match the product (unusual shapes, curves, details) and there's no store 3D file. Pass the full JSX source; it's saved as userdata/models/<id>.jsx and replaces the generated shape. Rules: \`export default function Model({ width, depth, height, color, colorName, accent })\` (metres, colours as #hex); build at that real size with the bottom at y = 0, centred on x/z, front facing +z; imports only from react, three, @react-three/fiber and @react-three/drei (e.g. RoundedBox, Cylinder, Torus, Extrude/Lathe via three); use meshStandardMaterial / meshPhysicalMaterial with the given colours; no textures from the internet, no animation. Returns renders. ${VISION_RULE} See docs/R3F-MODELS.md in the repo for examples.`,
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Existing library model id (create it first with add_item)' }, code: { type: 'string', description: 'Complete .jsx source' } },
+      required: ['id', 'code'],
+    },
+  },
+  {
+    name: 'get_model_component',
+    description: "Read the current React Three Fiber component source of a model (if it has one), to improve it with write_model_component.",
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   },
   {
     name: 'render_item',
@@ -175,6 +189,14 @@ async function callTool(name, args = {}) {
     case 'update_item': {
       const { item } = updateItem(args);
       return withRenders(`Updated ${item.id}. Status: UNVERIFIED until you check the renders.`, item.id);
+    }
+    case 'write_model_component': {
+      const { item } = await writeModelComponent(args);
+      return withRenders(`Saved the component for ${item.id} (userdata/models/${item.id}.jsx); it now replaces the generated shape. Status: UNVERIFIED until you check the renders. If a render says the component failed, fix the error and write it again.`, item.id);
+    }
+    case 'get_model_component': {
+      const code = await readModelComponent(args.id);
+      return [text(code ?? `${args.id} has no component yet (it uses the generated shape${'' }). Write one with write_model_component.`)];
     }
     case 'render_item': {
       const { shots } = await renderItemImages(args.id, { color: args.color, views: args.views?.length ? args.views : undefined });

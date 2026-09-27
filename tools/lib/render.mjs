@@ -57,7 +57,7 @@ async function capture(query, views) {
   try {
     await page.goto(`${srv.url}/preview.html?${query}`);
     await page.waitForFunction(() => window.preview && (window.preview.ready || window.preview.error), null, { timeout: 60000 });
-    const err = await page.evaluate(() => window.preview.error);
+    const err = await page.evaluate(() => window.preview.error || (window.preview.componentError && `the model component failed: ${window.preview.componentError}`));
     if (err) throw new Error(err);
     const out = [];
     for (const view of views) {
