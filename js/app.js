@@ -3,6 +3,9 @@ import { Walker } from './walk.js';
 import { Tools } from './tools.js';
 import { initChat } from './chat.js';
 import { Measure } from './measure.js';
+import { Paint } from './paint.js';
+import { FINISHES, FINISH_NAMES } from './materials.js';
+import { paintSpan } from './house.js';
 import { analyse as analyseClearance, zoneStatus, doorSwing, footprintRect } from './clearance.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
@@ -205,7 +208,8 @@ function renderLevelBar() {
     (design.floors.length > 1 && viewer.view !== 'walk' ? `<button role="tab" class="${all ? 'on' : ''}" data-all title="See the whole house">All floors</button>` : '') +
     (ui.editing ? '<span class="sep"></span><button class="add" data-addfloor title="Add a floor above the top one">+ Floor</button>' : '') +
     ((viewer.view === '3d' || viewer.split) && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '') +
-    (viewer.view !== 'walk' ? `<span class="sep"></span><button data-measure class="${ui.tool === 'measure' ? 'on' : ''}" title="Measure distances, paths and along surfaces (M)">Measure</button>` : '') +
+    (viewer.view !== 'walk' && viewer.view !== 'elevation' ? `<span class="sep"></span><button data-paint class="${ui.tool === 'paint' ? 'on' : ''}" title="Paint walls and floors: paint, wallpaper, tiles, wood… (P)">Paint</button>` : '') +
+    (viewer.view !== 'walk' ? `<button data-measure class="${ui.tool === 'measure' ? 'on' : ''}" title="Measure distances, paths and along surfaces (M)">Measure</button>` : '') +
     (viewer.view !== 'walk' ? `<span class="sep"></span><button data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, areas and the grid">View ▾</button>` : '');
   $$('[data-floor]', el).forEach((b) => {
     b.onclick = () => setFloor(+b.dataset.floor);
@@ -222,6 +226,7 @@ function renderLevelBar() {
   });
   $('[data-addfloor]', el)?.addEventListener('click', addFloorAbove);
   $('[data-measure]', el)?.addEventListener('click', () => setTool(ui.tool === 'measure' ? null : 'measure'));
+  $('[data-paint]', el)?.addEventListener('click', () => setTool(ui.tool === 'paint' ? null : 'paint'));
   $('[data-viewmenu]', el)?.addEventListener('click', (e) => {
     e.stopPropagation();
     const m = $('#viewMenu');
@@ -295,7 +300,8 @@ function renderToolBar() {
   const seg = (attr, opts, cur) => `<div class="small-seg">${opts.map(([k, n]) => `<button data-${attr}="${k}" class="${cur === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
   const widthKey = { door: 'doorWidth', window: 'windowWidth', opening: 'openingWidth' }[t];
   el.innerHTML =
-    `<b>${{ wall: 'Wall', door: 'Door', window: 'Window', opening: 'Opening', stairs: 'Stairs', measure: 'Measure' }[t]}</b>` +
+    `<b>${{ wall: 'Wall', door: 'Door', window: 'Window', opening: 'Opening', stairs: 'Stairs', measure: 'Measure', paint: 'Paint' }[t]}</b>` +
+    (t === 'paint' ? `<select id="tbFinish" title="Finish">${FINISHES.map((f) => `<option value="${f.kind}" ${paint.finish.kind === f.kind ? 'selected' : ''}>${f.name}</option>`).join('')}</select><input type="color" id="tbFinishColor" value="${esc(paint.finish.color)}" title="Colour">` + seg('pscope', [['surface', 'One side'], ['room', 'Whole room']], paint.scope) + '<span>Alt+click picks up a finish</span>' : '') +
     (t === 'measure' ? seg('mmode', [['distance', 'Distance'], ['path', 'Path'], ['surface', 'Along surface']], measure.mode) + `<button class="tb-btn" id="tbClearMeasure" ${measure.results.length ? '' : 'disabled'}>Clear all</button>` : '') +
     (t === 'wall' ? seg('ext', [['0', 'Interior'], ['1', 'Exterior']], ui.wallExterior ? '1' : '0') + `<label>Thickness <input type="number" id="tbThick" min="5" max="60" step="1" value="${cm(ui.wallThickness)}"> cm</label>` : '') +
     (widthKey ? `<label>Width <input type="number" id="tbWidth" min="30" max="400" step="5" value="${cm(ui[widthKey])}"> cm</label>` : '') +
@@ -308,6 +314,12 @@ function renderToolBar() {
   }));
   $('#tbThick', el)?.addEventListener('change', (e) => (ui.wallThickness = Math.max(0.05, parseFloat(e.target.value) / 100 || ui.wallThickness)));
   $('#tbWidth', el)?.addEventListener('change', (e) => (ui[widthKey] = Math.max(0.3, parseFloat(e.target.value) / 100 || ui[widthKey])));
+  $('#tbFinish', el)?.addEventListener('change', (e) => {
+    paint.finish = { kind: e.target.value, color: FINISHES.find((f) => f.kind === e.target.value).color };
+    renderToolBar();
+  });
+  $('#tbFinishColor', el)?.addEventListener('input', (e) => (paint.finish = { ...paint.finish, color: e.target.value }));
+  $$('[data-pscope]', el).forEach((b) => (b.onclick = () => ((paint.scope = b.dataset.pscope), renderToolBar())));
   $$('[data-mmode]', el).forEach((b) => (b.onclick = () => (measure.setMode(b.dataset.mmode), renderToolBar(), updateHint())));
   $('#tbClearMeasure', el)?.addEventListener('click', () => (measure.clear(), renderToolBar()));
   $$('[data-sshape]', el).forEach((b) => (b.onclick = () => ((ui.stairShape = b.dataset.sshape), renderToolBar())));
@@ -598,12 +610,21 @@ function wallInspector(el, id) {
     <div class="group"><div class="lbl">Recess or bay</div>
       <div class="num-row">${field('From start', `type="number" min="0" step="5" id="rStart" value="${cm((len - rw) / 2)}"`)}${field('Width', `type="number" min="20" step="5" id="rWidth" value="${cm(rw)}"`)}${field('Depth', `type="number" min="5" step="5" id="rDepth" value="60"`)}</div>
       <div class="row" style="margin-top:8px"><button class="btn small" id="rIn" title="Push part of the wall into the building">Make recess</button><button class="btn small" id="rOut" title="Push part of the wall outward">Make bay</button></div></div>` : ''}
+    <div class="group"><div class="lbl">Finish</div>${['l', 'r'].map((sd) => {
+      const list = [].concat(w.finishes?.[sd] || []);
+      const names = [...new Set(list.map((x) => FINISH_NAMES[x.kind] || x.kind))].join(' + ');
+      return `<div class="finish-row">${list.length ? list.slice(0, 4).map((x) => `<span class="sw" style="background:${esc(x.color)}"></span>`).join('') : `<span class="sw" style="background:${esc(design.wallColor || '#efebe4')}"></span>`}<span>${sd === 'l' ? 'Side A' : 'Side B'}: ${esc(list.length ? names : 'house colour')}</span>${list.length ? `<button class="btn small ghost" data-unfinish="${sd}" title="Back to the house wall colour">Reset</button>` : ''}</div>`;
+    }).join('')}<p class="hint" style="margin:6px 0 0">Use <b>Paint</b> (P) to change a side.</p></div>
     <div class="group"><button class="btn small" id="wElev" title="Look straight at this wall, with heights">Elevation view</button></div>
     ${ops.length ? `<div class="group"><div class="lbl">On this wall</div>${ops.map((o) => `<button class="btn small ghost list-btn" data-op="${esc(o.id)}"><span>${o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening'} · ${cm(o.width)} cm</span><em>${cm(o.offset)} cm in</em></button>`).join('')}</div>` : ''}
     ${edit ? `<div class="group"><div class="row"><button class="btn small" id="wSplit" title="Adds a corner in the middle; drag it to angle the wall">Add corner</button><button class="btn small danger" id="wDel">Delete wall</button></div></div>
     <div class="tip">Drag the wall to push or pull it: square neighbours stretch, others get a step. Drag the dots to move corners (Shift for any angle). Double-click a wall to add a corner there.</div>` : '<div class="tip">Turn on <b>Edit house</b> (E) to change walls.</div>'}</div>`;
   $$('[data-op]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'opening', id: b.dataset.op })));
   $('#wElev', el).onclick = () => openElevation(id);
+  $$('[data-unfinish]', el).forEach((b) => (b.onclick = () => {
+    delete w.finishes[b.dataset.unfinish];
+    commit();
+  }));
   if (!edit) return;
   $('#wLen', el).onchange = (e) => {
     const L = parseFloat(e.target.value) / 100;
@@ -750,12 +771,24 @@ function roomInspector(el, id) {
   el.innerHTML = `<div class="insp"><h3>${esc(r.name || 'Room')}</h3><div class="sub">${esc(f.name)} · ${Math.abs(area(r.points)).toFixed(1)} m²</div>
     <div class="group"><label class="field-label">Name<input id="rName" value="${esc(r.name || '')}"></label></div>
     <div class="group"><div class="lbl">Floor finish</div><div class="swatch-input"><select id="rKind">${['wood', 'tiles', 'carpet', 'concrete'].map((k) => `<option ${r.floorKind === k ? 'selected' : ''}>${k}</option>`).join('')}</select><input type="color" id="rColor" value="${esc(r.floorColor || '#c49a6c')}"></div></div>
+    <div class="group"><div class="lbl">Ceiling</div><div class="swatch-input"><select id="rCeilKind">${FINISHES.filter((x) => ['paint', 'wood', 'concrete', 'tiles'].includes(x.kind)).map((x) => `<option value="${x.kind}" ${(r.ceiling?.kind || 'paint') === x.kind ? 'selected' : ''}>${x.name}</option>`).join('')}</select><input type="color" id="rCeilColor" value="${esc(r.ceiling?.color || '#f6f5f2')}"></div></div>
+    <div class="group"><div class="lbl">Walls of this room</div><div class="swatch-input"><select id="rWallKind">${FINISHES.filter((x) => x.kind !== 'carpet').map((x) => `<option value="${x.kind}">${x.name}</option>`).join('')}</select><input type="color" id="rWallColor" value="${esc(design.wallColor || '#efebe4')}"><button class="btn small" id="rWallApply">Apply</button></div></div>
     ${items.length ? `<div class="group"><div class="lbl">In this room</div>${items.map((p) => `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}">${esc(itemById(p.itemId)?.name || 'Item')}</button>`).join('')}</div>` : ''}
     ${ui.editing ? '<div class="tip">Rooms follow the walls. Delete or move a wall to merge or reshape rooms.</div>' : ''}</div>`;
   $('#rName', el).onchange = (e) => ((r.name = e.target.value.trim()), commit());
   $('#rKind', el).onchange = (e) => ((r.floorKind = e.target.value), commit());
   $('#rColor', el).oninput = (e) => (r.floorColor = e.target.value);
   $('#rColor', el).onchange = () => commit();
+  const ceil = () => ((r.ceiling = { kind: $('#rCeilKind', el).value, color: $('#rCeilColor', el).value }), commit());
+  $('#rCeilKind', el).onchange = ceil;
+  $('#rCeilColor', el).onchange = ceil;
+  $('#rWallApply', el).onclick = () => {
+    const fin = { kind: $('#rWallKind', el).value, color: $('#rWallColor', el).value };
+    const sides = paint.roomSides(r);
+    for (const { wall, side, from, to } of sides) paintSpan(wall, side, { from, to, ...fin });
+    commit();
+    toast(`${FINISH_NAMES[fin.kind]} on ${sides.length} wall side${sides.length === 1 ? '' : 's'} of ${r.name || 'this room'}.`, { undo: true });
+  };
   $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'item', id: b.dataset.sel })));
 }
 
@@ -850,9 +883,10 @@ function renderBuildPanel() {
 }
 
 function setTool(name) {
-  tools.set(name === 'measure' ? null : name);
+  tools.set(name === 'measure' || name === 'paint' ? null : name);
   ui.tool = name;
   measure.set(name === 'measure');
+  paint.set(name === 'paint');
   if (name && viewer.view === 'walk') setView('3d');
   renderAll();
 }
@@ -1529,6 +1563,7 @@ async function takePhoto() {
 
 let chat = null;
 let measure = null;
+let paint = null;
 let toastTimer;
 function toast(msg, { undo, action } = {}) {
   const t = $('#toast');
@@ -1626,6 +1661,14 @@ async function boot() {
       $('#hintbar').textContent = `${r.mode === 'surface' ? 'Along the surface' : r.mode === 'path' ? 'Path length' : 'Distance'}: ${r.length.toFixed(3)} m${r.mode !== 'distance' ? ` (straight line ${r.straight.toFixed(3)} m)` : ''}`;
       renderToolBar();
     },
+  });
+  paint = new Paint(viewer, {
+    edit: (fn) => {
+      fn(floorNow());
+      commit();
+    },
+    picked: (fin) => (renderToolBar(), toast(`Picked up ${FINISH_NAMES[fin.kind] || fin.kind} ${fin.color}. Click to apply it.`)),
+    hover: (t) => ($('#hintbar').textContent = t),
   });
   tools = new Tools(viewer, {
     edit: (fn) => {
@@ -1897,6 +1940,7 @@ function wireUI() {
     else if (k === 'c' && !mod && !e.shiftKey) chat?.toggle();
     else if (k === 'g' && !mod) setDisplay('grid', !viewer.display.grid);
     else if (k === 'm' && !mod) setTool(ui.tool === 'measure' ? null : 'measure');
+    else if (k === 'p' && !mod && viewer.view !== 'elevation') setTool(ui.tool === 'paint' ? null : 'paint');
     else if (ui.editing && !mod && !e.shiftKey && { v: 1, w: 1, d: 1, n: 1, o: 1, s: 1 }[k]) {
       const t = { v: null, w: 'wall', d: 'door', n: 'window', o: 'opening', s: 'stairs' }[k];
       setTool(t === ui.tool ? null : t);

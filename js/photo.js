@@ -8,6 +8,10 @@ import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
 const evaluator = new Evaluator();
 evaluator.useGroups = false;
 evaluator.attributes = ['position', 'normal', 'uv'];
+// Walls with several finishes keep their material groups through the cut
+const groupEvaluator = new Evaluator();
+groupEvaluator.useGroups = true;
+groupEvaluator.attributes = ['position', 'normal', 'uv'];
 
 /** Temporarily replace clipped meshes with really-cut copies. Returns an undo function. */
 function realCut(viewer) {
@@ -21,7 +25,7 @@ function realCut(viewer) {
   cutter.updateMatrixWorld();
   f.group.updateMatrixWorld(true);
   const meshes = [];
-  f.group.traverse((o) => o.isMesh && o.visible && !o.userData.helper && o.material?.clippingPlanes?.length && meshes.push(o));
+  f.group.traverse((o) => o.isMesh && o.visible && !o.userData.helper && [].concat(o.material)[0]?.clippingPlanes?.length && meshes.push(o));
   for (const m of meshes) {
     const box = new THREE.Box3().setFromObject(m);
     if (box.min.y >= cutY) {
@@ -32,16 +36,17 @@ function realCut(viewer) {
     if (box.max.y <= cutY) continue;
     const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
     if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
-    const a = new Brush(geo);
+    const multi = Array.isArray(m.material);
+    const mats = multi ? m.material.map((x) => Object.assign(x.clone(), { clippingPlanes: [] })) : null;
+    const a = multi ? new Brush(geo, mats) : new Brush(geo);
     a.updateMatrixWorld();
     let cut;
     try {
-      cut = evaluator.evaluate(a, cutter, SUBTRACTION);
+      cut = (multi ? groupEvaluator : evaluator).evaluate(a, multi ? Object.assign(cutter, { material: mats[0] }) : cutter, SUBTRACTION);
     } catch {
       continue;
     }
-    const mat = m.material.clone();
-    mat.clippingPlanes = [];
+    const mat = multi ? cut.material : Object.assign(m.material.clone(), { clippingPlanes: [] });
     const rep = new THREE.Mesh(cut.geometry, mat);
     viewer.scene.add(rep);
     m.visible = false;

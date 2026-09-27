@@ -294,13 +294,15 @@ export class Viewer {
       const clones = new Map();
       f.group.traverse((o) => {
         if (!o.isMesh || f.furniture === o || isInside(o, f.furniture)) return;
-        const m = o.material;
-        if (!clones.has(m)) {
-          const c = m.clone();
-          c.clippingPlanes = [];
-          clones.set(m, c);
-        }
-        o.material = clones.get(m);
+        const one = (m) => {
+          if (!clones.has(m)) {
+            const c = m.clone();
+            c.clippingPlanes = [];
+            clones.set(m, c);
+          }
+          return clones.get(m);
+        };
+        o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
       });
       f.clipMaterials = [...clones.values()];
       for (const w of f.walkables) w.geometry.computeBoundsTree?.();

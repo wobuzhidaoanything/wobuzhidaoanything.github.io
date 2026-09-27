@@ -434,3 +434,10 @@ body.hide-left .edge-btn.left svg, body.hide-right .edge-btn.right svg { transfo
 .box-select { position: absolute; display: none; z-index: 6; border: 1px solid var(--accent); background: rgba(47,111,237,.1); pointer-events: none; }
 .btn.small.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .note.warn { background: #fdf3f2; border-color: #f3d6d3; color: #8a2d26; }
+
+.finish-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0; }
+.finish-row .sw, .list-btn .sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); flex: none; }
+.finish-row .btn { margin-left: auto; }
+.tool-bar select { border: 0; border-radius: 6px; padding: 3px 6px; background: #fff; color: var(--text); font: inherit; }
+.tool-bar input[type=color] { width: 32px; height: 24px; padding: 0 2px; }
+.level-bar button[data-paint].on { background: var(--accent); color: #fff; }

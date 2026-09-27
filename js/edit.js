@@ -24,12 +24,31 @@ export function wallsAt(floor, p, skip) {
   return out;
 }
 
-/** Move one end of a wall, keeping its openings where they are in the world. */
+/** Shift finish spans on a wall by `du` along it, optionally keeping only [lo, hi]. */
+function shiftFinishes(w, du, lo = -Infinity, hi = Infinity) {
+  if (!w.finishes) return;
+  const next = {};
+  for (const [side, f] of Object.entries(w.finishes)) {
+    if (!Array.isArray(f)) {
+      next[side] = f;
+      continue;
+    }
+    const spans = f
+      .map((s) => ({ ...s, from: Math.max(lo, s.from) + du, to: Math.min(hi, s.to) + du }))
+      .filter((s) => s.to - s.from > 0.01)
+      .map((s) => ({ ...s, from: +s.from.toFixed(3), to: +s.to.toFixed(3) }));
+    if (spans.length) next[side] = spans;
+  }
+  w.finishes = next;
+}
+
+/** Move one end of a wall, keeping its openings (and finish spans) where they are in the world. */
 function moveEnd(floor, w, end, to) {
   if (end === 'a') {
     const { dir } = wallFrame(w);
     const shift = dot([to[0] - w.a[0], to[1] - w.a[1]], dir);
     for (const o of floor.openings) if (o.wall === w.id) o.offset -= shift;
+    shiftFinishes(w, -shift);
   }
   w[end] = round(to);
 }
@@ -129,9 +148,12 @@ export function splitWall(floor, wallId, at) {
   if (at < MIN_WALL || at > L - MIN_WALL) return null;
   const { dir } = wallFrame(w);
   const p = round([w.a[0] + dir[0] * at, w.a[1] + dir[1] * at]);
-  const nw = { ...w, id: rid('w'), a: p, b: w.b.slice() };
+  const nw = { ...w, id: rid('w'), a: p, b: w.b.slice(), finishes: w.finishes && structuredClone(w.finishes) };
   w.b = p.slice();
   floor.walls.push(nw);
+  // Finish spans: the first part keeps [.., at], the new wall gets the rest (re-measured from its start)
+  shiftFinishes(w, 0, -Infinity, at + w.thickness);
+  shiftFinishes(nw, -at, at - nw.thickness, Infinity);
   for (const o of floor.openings) if (o.wall === w.id && o.offset >= at) (o.wall = nw.id), (o.offset -= at);
   return nw;
 }

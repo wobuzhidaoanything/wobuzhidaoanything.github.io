@@ -149,6 +149,46 @@ export const textures = {
         noise(ctx, s, 18, r);
       }, 1)
     ),
+  // Wall finishes (walls are UV-mapped at 1.5 m per texture repeat)
+  wallpaper: () =>
+    tex('wallpaper', () =>
+      canvasTexture(512, (ctx, s) => {
+        const r = rng(17);
+        ctx.fillStyle = '#eeeeee';
+        ctx.fillRect(0, 0, s, s);
+        // Soft vertical stripes with a small repeating motif
+        const n = 8, w = s / n;
+        for (let i = 0; i < n; i++) {
+          ctx.fillStyle = i % 2 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.35)';
+          ctx.fillRect(i * w, 0, w, s);
+        }
+        ctx.fillStyle = 'rgba(0,0,0,0.09)';
+        for (let i = 0; i < n; i += 2)
+          for (let j = 0; j < 12; j++) {
+            ctx.beginPath();
+            ctx.ellipse(i * w + w / 2, (j + (i % 4 ? 0.5 : 0)) * (s / 12), w * 0.14, w * 0.24, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        noise(ctx, s, 6, r);
+      }, 1)
+    ),
+  brick: () =>
+    tex('brick', () =>
+      canvasTexture(512, (ctx, s) => {
+        const r = rng(21);
+        ctx.fillStyle = '#b8b8b8'; // mortar
+        ctx.fillRect(0, 0, s, s);
+        const rows = 20, cols = 7, h = s / rows, w = s / cols;
+        for (let j = 0; j < rows; j++)
+          for (let i = -1; i < cols; i++) {
+            const v = 150 + Math.floor(r() * 70);
+            ctx.fillStyle = `rgb(${v},${v},${v})`;
+            const x = i * w + (j % 2 ? w / 2 : 0);
+            ctx.fillRect(x + 2, j * h + 2, w - 4, h - 4);
+          }
+        noise(ctx, s, 14, r);
+      }, 1)
+    ),
   plaster: () =>
     tex('plaster', () =>
       canvasTexture(256, (ctx, s) => {
@@ -202,4 +242,33 @@ export function floorMaterial(hex, kind = 'wood') {
     map,
     roughness: kind === 'tiles' ? 0.3 : kind === 'carpet' ? 1 : kind === 'concrete' ? 0.7 : 0.55,
   });
+}
+
+/** Surface finishes for walls, floors and ceilings (the Paint tool). */
+export const FINISHES = [
+  { kind: 'paint', name: 'Paint', color: '#efebe4' },
+  { kind: 'wallpaper', name: 'Wallpaper', color: '#d9cbb3' },
+  { kind: 'tiles', name: 'Tiles', color: '#f2f2ef' },
+  { kind: 'wood', name: 'Wood', color: '#b98a5a' },
+  { kind: 'brick', name: 'Brick', color: '#b5654a' },
+  { kind: 'stone', name: 'Stone', color: '#c9c4bb' },
+  { kind: 'concrete', name: 'Concrete', color: '#b9b7b2' },
+  { kind: 'carpet', name: 'Carpet', color: '#9c948a' },
+];
+export const FINISH_NAMES = Object.fromEntries(FINISHES.map((f) => [f.kind, f.name]));
+
+const finishCache = new Map();
+/** Shared material for a finish { kind, color }. */
+export function finishMaterial(finish) {
+  const kind = finish?.kind || 'paint';
+  const color = finish?.color || '#efebe4';
+  const key = `${kind}:${color}`;
+  if (finishCache.has(key)) return finishCache.get(key);
+  const c = new THREE.Color(color);
+  const map = { paint: textures.plaster, wallpaper: textures.wallpaper, tiles: textures.tiles, wood: textures.planks, brick: textures.brick, stone: textures.concrete, concrete: textures.concrete, carpet: textures.carpet }[kind]?.();
+  const rough = { paint: 0.95, wallpaper: 0.85, tiles: 0.25, wood: 0.6, brick: 0.9, stone: 0.5, concrete: 0.85, carpet: 1 }[kind] ?? 0.9;
+  const m = new THREE.MeshStandardMaterial({ color: c, roughness: rough, map: map || null });
+  m.name = `${FINISH_NAMES[kind] || kind} ${color}`;
+  finishCache.set(key, m);
+  return m;
 }

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { elevations, wallFrame, stairLayout, stairwellPolygon, toPlan, closestOnSegment } from './design.js';
-import { floorMaterial, makeMaterial, textures } from './materials.js';
+import { floorMaterial, makeMaterial, textures, finishMaterial } from './materials.js';
 import { ring, openRing, wallUnion, footprint, detectRooms, polygonClipping } from './plan.js';
 
 export { wallUnion, footprint, detectRooms };
@@ -48,6 +48,25 @@ function flatPlan(multi, y, tile = 1.8) {
     return g;
   });
   return geos.length ? mergeGeometries(geos.map(flat), false) : null;
+}
+
+/** Turn a flat, upward-facing surface to face down (reverse each triangle, flip normals). */
+function faceDown(geo) {
+  if (geo.index) {
+    const a = geo.index.array;
+    for (let i = 0; i < a.length; i += 3) [a[i + 1], a[i + 2]] = [a[i + 2], a[i + 1]];
+  } else
+    for (const attr of Object.values(geo.attributes)) {
+      const n = attr.itemSize, arr = attr.array;
+      for (let t = 0; t < attr.count; t += 3)
+        for (let k = 0; k < n; k++) {
+          const i1 = (t + 1) * n + k, i2 = (t + 2) * n + k;
+          [arr[i1], arr[i2]] = [arr[i2], arr[i1]];
+        }
+    }
+  const nor = geo.attributes.normal;
+  if (nor) for (let i = 0; i < nor.count; i++) nor.setY(i, -nor.getY(i));
+  return geo;
 }
 
 /** World-space UVs for walls so plaster doesn't stretch. */
@@ -336,6 +355,17 @@ export function buildHouse(design, { roof = false } = {}) {
       walkables.push(m);
       roomsG.add(m);
     }
+    // Ceilings (seen from inside: walking and photos), one per room with its finish
+    for (const r of floor.rooms) {
+      const geo = flatPlan([[ring(r.points)]], y0 + floor.height - 0.004, 1.5);
+      if (!geo) continue;
+      faceDown(geo);
+      const m = mesh(geo, finishMaterial(r.ceiling || { kind: 'paint', color: '#f6f5f2' }), `${r.name || 'Room'} ceiling`, { cast: false });
+      m.userData.ceiling = r.id;
+      m.userData.room = r.id;
+      m.raycast = () => {}; // never picked from above
+      roomsG.add(m);
+    }
     fg.add(roomsG);
 
     // Walls: union → extrude → subtract openings
@@ -365,7 +395,11 @@ export function buildHouse(design, { roof = false } = {}) {
         b.updateMatrixWorld();
         geo = evaluator.evaluate(a, b, SUBTRACTION).geometry;
       }
-      wallMesh = mesh(boxUV(geo, 1.5), wallMat, 'Walls');
+      geo = boxUV(geo, 1.5);
+      // Finishes per wall side: split the wall mesh into material groups (paint, tiles, wallpaper…)
+      const painted = floor.walls.some((w) => w.finishes && Object.keys(w.finishes).length);
+      const split = painted ? splitByFinish(geo, floor, wallMat) : null;
+      wallMesh = mesh(split ? split.geo : geo, split ? split.materials : wallMat, 'Walls');
       wallMesh.userData.floorId = floor.id;
       fg.add(wallMesh);
     }
@@ -443,4 +477,118 @@ export function buildHouse(design, { roof = false } = {}) {
     root.add(r);
   }
   return { group: root, floors, elevations: ys };
+}
+
+/**
+ * The finish at distance `u` along one side of a wall. A side's finish is either one finish for
+ * the whole side, or a list of spans [{ from, to, kind, color }] (e.g. wallpaper in the living
+ * room, tiles in the kitchen, on one long wall).
+ */
+export function finishAt(wall, side, u) {
+  const f = wall.finishes?.[side];
+  if (!f) return null;
+  if (!Array.isArray(f)) return f;
+  let hit = null;
+  for (const s of f) if (u >= s.from - 1e-3 && u <= s.to + 1e-3) hit = s;
+  return hit;
+}
+
+/** Add a span to a side's finishes (overlapping parts of older spans are replaced). */
+export function paintSpan(wall, side, span) {
+  const { len } = wallFrame(wall);
+  const old = wall.finishes?.[side];
+  const list = !old ? [] : Array.isArray(old) ? old : [{ from: -wall.thickness, to: len + wall.thickness, kind: old.kind, color: old.color }];
+  const out = [];
+  for (const s of list) {
+    if (s.to <= span.from || s.from >= span.to) out.push(s);
+    else {
+      if (s.from < span.from) out.push({ ...s, to: span.from });
+      if (s.to > span.to) out.push({ ...s, from: span.to });
+    }
+  }
+  out.push({ ...span });
+  out.sort((a, b) => a.from - b.from);
+  wall.finishes = { ...(wall.finishes || {}), [side]: out.map((s) => ({ ...s, from: +s.from.toFixed(3), to: +s.to.toFixed(3) })) };
+}
+
+/** Points along one side of a wall where other walls meet it (T-junctions), plus its ends. */
+export function sideBreaks(floor, wall, side) {
+  const { len, normal } = wallFrame(wall);
+  const s = side === 'l' ? 1 : -1;
+  const out = [-wall.thickness, len + wall.thickness];
+  for (const o of floor.walls) {
+    if (o === wall) continue;
+    for (const [e, q] of [[o.a, o.b], [o.b, o.a]]) {
+      const c = closestOnSegment(e, wall.a, wall.b);
+      if (c.dist > wall.thickness / 2 + 0.02 || c.t <= 0.001 || c.t >= 0.999) continue;
+      const qs = (q[0] - wall.a[0]) * normal[0] + (q[1] - wall.a[1]) * normal[1];
+      if (Math.sign(qs) === s) out.push(c.t * len);
+    }
+  }
+  return [...new Set(out.map((u) => +u.toFixed(3)))].sort((a, b) => a - b);
+}
+
+/**
+ * Which wall side a wall-mesh triangle belongs to: { wall, side: 'l' (the wall's normal side) | 'r' }
+ * or null (tops, reveals in openings, corners).
+ */
+export function classifyWallFace(floor, c, n) {
+  if (Math.abs(n.y) > 0.5) return null;
+  let best = null;
+  for (const w of floor.walls) {
+    const { len, dir, normal } = wallFrame(w);
+    const rx = c.x - w.a[0], rz = c.z - w.a[1];
+    const u = rx * dir[0] + rz * dir[1];
+    const d = rx * normal[0] + rz * normal[1];
+    const h = w.thickness / 2;
+    if (u < -h - 0.01 || u > len + h + 0.01) continue;
+    const err = Math.abs(Math.abs(d) - h);
+    const facing = n.x * normal[0] + n.z * normal[1];
+    if (err > 0.015 || Math.abs(facing) < 0.9 || Math.sign(facing) !== Math.sign(d)) continue;
+    if (!best || err < best.err) best = { wall: w, side: d > 0 ? 'l' : 'r', err, u };
+  }
+  return best;
+}
+
+/** Split a (non-indexed) wall geometry into material groups by the finish of each wall side. */
+function splitByFinish(geo, floor, defaultMat) {
+  if (geo.index) geo = geo.toNonIndexed();
+  const pos = geo.attributes.position;
+  const tri = pos.count / 3;
+  const keys = new Array(tri);
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), N = new THREE.Vector3(), M = new THREE.Vector3();
+  const mats = [defaultMat];
+  const index = new Map([['', 0]]);
+  for (let t = 0; t < tri; t++) {
+    A.fromBufferAttribute(pos, 3 * t);
+    B.fromBufferAttribute(pos, 3 * t + 1);
+    C.fromBufferAttribute(pos, 3 * t + 2);
+    N.subVectors(C, B).cross(M.subVectors(A, B)).normalize();
+    M.copy(A).add(B).add(C).divideScalar(3);
+    const f = classifyWallFace(floor, M, N);
+    const fin = f && finishAt(f.wall, f.side, f.u);
+    const key = fin ? `${fin.kind}:${fin.color}` : '';
+    if (!index.has(key)) {
+      index.set(key, mats.length);
+      mats.push(finishMaterial(fin));
+    }
+    keys[t] = index.get(key);
+  }
+  // Reorder triangles so each material is one contiguous group
+  const order = [...Array(tri).keys()].sort((a, b) => keys[a] - keys[b]);
+  const out = new THREE.BufferGeometry();
+  for (const [name, attr] of Object.entries(geo.attributes)) {
+    const size = attr.itemSize;
+    const arr = new attr.array.constructor(attr.array.length);
+    order.forEach((t, i) => arr.set(attr.array.subarray(3 * t * size, 3 * (t + 1) * size), 3 * i * size));
+    out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  let start = 0;
+  for (let i = 0; i < order.length; i++) {
+    if (i === order.length - 1 || keys[order[i + 1]] !== keys[order[i]]) {
+      out.addGroup(3 * start, 3 * (i + 1 - start), keys[order[i]]);
+      start = i + 1;
+    }
+  }
+  return { geo: out, materials: mats };
 }
