@@ -4,7 +4,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, USERDATA, MODELS, TEXTURES, LIBRARY } from './paths.mjs';
+import { ROOT, USERDATA, MODELS, TEXTURES, LIBRARY, STATE } from './paths.mjs';
 import { scrapeProduct } from '../../shared/scrape.js';
 import * as store from './store.mjs';
 import { agentStatus, autoSetup, removeAgent } from './agents.mjs';
@@ -129,7 +129,24 @@ async function api(req, res, url) {
         throw err;
       }
     }
-    if (method === 'DELETE') return store.deleteDesign(id), send(res, 200, { ok: true });
+    if (method === 'DELETE') {
+      store.deleteDesign(id);
+      fs.rmSync(path.join(STATE, 'thumbs', `${id}.jpg`), { force: true });
+      return send(res, 200, { ok: true });
+    }
+  }
+  // Small picture of each design for the designs list (taken by the app after saving)
+  if (what === 'thumbs' && id && /^[\w-]+$/.test(id)) {
+    const f = path.join(STATE, 'thumbs', `${id}.jpg`);
+    if (method === 'GET') return fs.existsSync(f) ? send(res, 200, fs.readFileSync(f), 'image/jpeg', 'no-cache') : send(res, 404, { ok: false, error: 'No picture yet' });
+    if (method === 'PUT') {
+      const { image } = JSON.parse(await body(req, 2e6));
+      const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(image || '');
+      if (!m) return send(res, 400, { ok: false, error: 'Expected a JPEG data URL' });
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, Buffer.from(m[1], 'base64'));
+      return send(res, 200, { ok: true });
+    }
   }
   if (what === 'history' && id) {
     if (method === 'GET') {
@@ -224,6 +241,16 @@ export function startServer({ port = 5173, host = '127.0.0.1', quiet = false } =
       if (rt) {
         const f = await r3f.runtimeFile(rt[1]);
         return f ? send(res, 200, fs.readFileSync(f), MIME['.js'], 'public, max-age=86400') : send(res, 404, 'Not found', 'text/plain');
+      }
+      // The app's React panels: js/ui/<name>.jsx compiled on request
+      const uiFile = url.pathname.match(/^\/ui\/([\w-]+)\.js$/);
+      if (uiFile) {
+        try {
+          const code = await r3f.compileUI(uiFile[1]);
+          return code ? send(res, 200, code, MIME['.js'], 'no-cache') : send(res, 404, 'Not found', 'text/plain');
+        } catch (err) {
+          return send(res, 500, `console.error(${JSON.stringify(err.message)});`, MIME['.js']);
+        }
       }
       const comp = url.pathname.match(/^\/r3f-model\/([\w-]+)\.js$/);
       if (comp) {

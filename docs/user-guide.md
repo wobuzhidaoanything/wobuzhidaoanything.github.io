@@ -6,6 +6,9 @@ products, walk through the result and export it. This guide covers every feature
 
 Press **?** or **F1** at any time to open this guide. The list on the left jumps to any chapter.
 
+**Can't find something?** Press **Ctrl+K** (the **Search actions** box at the top) and type what you want to do, such
+as "door", "dark mode" or "plan". Or **right-click** anything in the 3D view to see what you can do with it.
+
 ## Getting started
 
 ### Starting Roomcraft
@@ -20,11 +23,13 @@ Open a terminal in the Roomcraft folder and run `npm start`. Nothing else is nee
 
 ### The screen
 
-- **Top bar:**
-  - your design's name (click it to see all your designs);
-  - the **view** buttons (3D, Plan, Split, Walk);
-  - **Edit house**, **Undo / Redo**, **Photo**, **Export**, **Assistant** and **Agents**;
-  - the **⋮** menu, with this guide and the settings.
+- **Top bar**, from left to right:
+  - your design's name (click it to see all your designs), and whether it's **Saved**;
+  - the **view** buttons (3D, Plan, Split, Walk) and **Edit house**;
+  - **Search actions** (**Ctrl+K**), **Undo / Redo**;
+  - **Share**: photos, pictures, plans, costs and files;
+  - **Assistant** and **Agents** (your AI agent);
+  - **?** (this guide), the **gear** (Settings) and the **⋮** menu (history, imports, the tour).
 - **Floor tabs** (over the picture): pick the floor you're working on, see **All floors** at once, and open the
   **Paint**, **Measure**, **Sun** and **View** options.
 - **Left panel:** add furniture from shop links, and browse your furniture models. In Edit house mode it becomes the
@@ -33,6 +38,48 @@ Open a terminal in the Roomcraft folder and run `npm start`. Nothing else is nee
   nothing selected, it shows the current floor, its rooms, its furniture and a **Check** list of problems.
 - **Status bar** (bottom): what a click will do right now, and the pointer's position in metres.
 - Press **[** or **]** to hide or show the side panels for more room.
+- **Hover** over any button to see what it does and its shortcut key.
+
+### The tour
+
+The first time you open Roomcraft, a short **tour** points out the main controls. Use **→** or **Enter** for the next
+stop, and **Esc** to skip. Show it again from **Settings** or **⋮ → Show the tour again**.
+
+### Command search (Ctrl+K)
+
+Every action has a name you can search for. Press **Ctrl+K**, type a few letters, pick with **↑ ↓** and press
+**Enter**.
+- It lists the shortcut next to each action, so you learn them as you go.
+- Your recent actions are at the top.
+- Type a furniture model's name to add it to the room, or a floor's name to go there.
+- With something selected, its actions (turn, duplicate, lock…) come first.
+
+### Right-click menu
+
+**Right-click** anything in the 3D view or plan for a short menu of what you can do with it:
+- **Furniture:** duplicate, turn, push against the wall, lock, copy, edit the model, zoom to it, delete.
+- **A wall** (in Edit house): add a door, window, opening or corner **right where you clicked**, open its elevation,
+  paint it, lock or delete it.
+- **A room:** rename it, select everything in it, paint the floor, zoom to it, paste.
+- **Empty space:** paste, select all, measure, zoom to the house.
+
+A right-*drag* still moves the view, as before.
+
+### Settings
+
+The **gear** button (or **Ctrl+,**):
+- **Appearance:** **Light**, **Dark**, or **System** (follows your computer). The house keeps its real colours.
+- **Graphics:** **High** (soft shadows and ambient light) or **Fast** for older computers.
+- **Currency** for prices (Singapore dollars to start with), and an optional **Budget**.
+- **Tips on hover** on or off.
+- **Model product links with my agent** on or off.
+
+### Typing numbers
+
+Number boxes understand units and sums, so you don't need a calculator:
+- **240**, **2.4 m**, **2400 mm** and **1.2 m + 1.2 m** all give 240 cm;
+- **3 x 60** gives 180, **(400 - 90) / 2** gives 155;
+- **↑ / ↓** change the number by a step (**Shift**: ten steps).
 
 ## Views
 
@@ -87,7 +134,8 @@ hanging a TV, shelves or art, or checking a window's height.
 
 ### Saving
 
-Everything saves **automatically** on your computer, a moment after each change. There's no Save button.
+Everything saves **automatically** on your computer, a moment after each change. There's no Save button. Next to the
+design's name you see **Saved**, **Saving…** or, if something is wrong, **Not saved** in red.
 
 - Designs live in the `userdata` folder inside Roomcraft. To back everything up, copy that folder.
 - `git pull` (updating Roomcraft) never touches it.
@@ -95,6 +143,7 @@ Everything saves **automatically** on your computer, a moment after each change.
 ### Designs list
 
 Click your design's name (top left) to:
+- see a small picture of each design, taken as you work;
 - make a **New house**, **Import** a design file, or open another design;
 - **Duplicate** a design (to try an idea without losing the original), **Rename** or **Delete** it;
 - open a design's **History**.
@@ -230,6 +279,11 @@ most others work.
   - builds a more accurate model;
   - checks it against the photos;
   - marks it as checked. You can keep working meanwhile.
+- Every link counts as a product, whether you paste it here or in the Assistant chat. Your agent gets
+  instructions to make the model **realistic but compact** (a few MB at most), so a full house stays quick. Shop 3D
+  files are compressed automatically.
+- When the model is done, it moves to the top of your models with a green **Ready to place** badge, and a message
+  offers **Add to room**.
 
 ### Your models (the library)
 
@@ -238,6 +292,10 @@ The left panel lists every furniture model you have. Every design can use them.
 - **Add** puts a model in the room. You can also drag its card into the picture.
 - **Edit** changes its size, colours or type.
 - **+ Custom** makes a model from scratch (for example, a built-in cupboard of any size).
+- **Search** by name or type, or use the **filters** under the search box: **Favourites**, **In this house**, or a
+  type such as Sofas.
+- **☆** marks a model as a **favourite**, which keeps it at the top.
+- Prices show in your currency (Settings).
 
 ### Moving and arranging
 
@@ -345,27 +403,30 @@ See where the sunlight falls in each room at any date and time.
 
 ## Pictures, exports and printing
 
-- **Photo:** a photo-realistic picture of the current view, with real light bounces and soft shadows. It takes a
+- **Share → Photo-real picture:** a photo-realistic picture of the current view, with real light bounces and soft shadows. It takes a
   little while; you can keep it or save it.
-- **Export → 3D model for Blender:** the whole house as one `.glb` file. Open it in Blender with
+- **Share → Copy picture** (**Ctrl+Shift+C**): copies the current view, ready to paste into a chat, email or
+  document.
+- **Share → 3D model for Blender:** the whole house as one `.glb` file. Open it in Blender with
   *File → Import → glTF 2.0*. Everything is named and grouped by floor, room, walls, doors and windows, stairs and
   furniture, and each finish is its own material.
-- **Export → 2D floor plan:** a clean drawing of each floor to print or send to a builder.
+- **Share → 2D floor plan:** a clean drawing of each floor to print or send to a builder.
   - Content: walls, doors with their swings, windows, stairs, room names and areas, furniture outlines, dimensions,
     a scale bar, a north arrow and a title.
   - Settings: pick **A4** or **A3**, and a **scale** such as 1:50 (1 m on the house = 2 cm on paper) or 1:100, or
     **Largest that fits**.
   - Save as **PDF** (one page per floor) or **PNG**.
   - Print at 100 % (*actual size*) to keep the scale.
-- **Export → Quantities & costs:** a table (a **schedule**) with, for each room:
+- **Share → Quantities & costs:** a table (a **schedule**) with, for each room:
   - floor area, and flooring to order (10 % extra for cuts);
   - wall area to paint or cover, by finish, with doors and windows taken off;
   - ceiling area and skirting length;
-  - the furniture with prices.
+  - the furniture with prices, and the total for the whole house in your currency (and against your budget, if
+    you set one).
 
   **Download .csv** opens in Excel or Google Sheets.
-- **Export → Screenshot:** the current view as a picture.
-- **Export → Design file:** a `.json` copy of the design, including the furniture it uses, to back up or share.
+- **Share → Screenshot:** the current view as a picture.
+- **Share → Design file:** a `.json` copy of the design, including the furniture it uses, to back up or share.
   Import it from the Designs list.
 
 ## AI agents
@@ -400,6 +461,9 @@ agent in the background and tells it which design, floor and item you're looking
   link and put it under the window"*.
 - The panel shows what the agent is doing and which tools it used.
 - **Stop** ends a job. **+** starts a new conversation.
+- Paste a product link and it's modelled like one from the link box.
+- **Changes your agent makes are applied straight away.** Each one shows as a card in the chat that says what
+  changed (for example *"Ground floor: 1 wall added, Sofa moved"*), with an **Undo** button (and **Redo**).
 
 The Assistant works with the agents that have a command-line version: Grok Build, Claude Code, Codex, Gemini CLI,
 OpenCode and Cursor. Desktop-only apps can still use Roomcraft from their own window.
@@ -415,7 +479,11 @@ OpenCode and Cursor. Desktop-only apps can still use Roomcraft from their own wi
 | **M** | Measure tool |
 | **C** | Assistant |
 | **G** | Grid on/off |
-| **F** | Zoom to fit the house |
+| **F** | Zoom to the selection (the whole house when nothing is selected) |
+| **Ctrl+K** | Search actions |
+| **Ctrl+,** | Settings |
+| **Ctrl+Shift+C** | Copy a picture of the view |
+| Right-click | What you can do with what's under the pointer |
 | **PgUp** / **PgDn** | Floor up / down |
 | **Ctrl+Z** / **Ctrl+Shift+Z** | Undo / redo |
 | **Ctrl+C** / **Ctrl+V** | Copy / paste furniture (pastes at the pointer) |
@@ -439,8 +507,8 @@ OpenCode and Cursor. Desktop-only apps can still use Roomcraft from their own wi
 - **A room isn't recognised.** Its walls don't fully enclose it. Look for a missing wall or a gap in Plan view with
   **Dimensions** on. Very small gaps are closed automatically.
 - **Everything is slow.** A shop's 3D model may be very detailed; Roomcraft warns you. Click **Use simple shape**,
-  or untick *Use the store's 3D model* in the item's panel. Switching **⋮ → Graphics** from *High* to *Fast* also
-  helps.
+  or untick *Use the store's 3D model* in the item's panel. Switching **Settings → Graphics** from *High* to *Fast*
+  also helps.
 - **The 3D view doesn't appear.** Your browser has 3D graphics (WebGL) turned off. Turn on hardware acceleration,
   or try Chrome, Edge or Firefox.
 - **My agent isn't detected.** Finish its setup (restart it if its instructions say so), then open **Agents**
@@ -456,6 +524,6 @@ OpenCode and Cursor. Desktop-only apps can still use Roomcraft from their own wi
   - `models/`: downloaded 3D files and agent-made model components;
   - `textures/`;
   - `exports/`: files your agent exported;
-  - `.state/`: history, agent chat and settings.
+  - `.state/`: history, agent chat, design pictures and settings.
 - `assets/` ships with Roomcraft: the sample house and the starting furniture.
 - Updating Roomcraft (`git pull`) only changes the software, never your `userdata`.

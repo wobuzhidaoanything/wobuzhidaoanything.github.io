@@ -19,6 +19,9 @@ import { footprint } from './plan.js';
 import { cleanFloor, syncRooms, splitWall, makeRecess, moveCorner, moveOpening, openingGaps, insideSign } from './edit.js';
 import { colorFromName } from '../shared/colors.js';
 import { guessCategory } from '../shared/scrape.js';
+import { evalNumber, unitFromLabel } from './units.js';
+import { describeChange } from './diff.js';
+import { mountUI } from '../ui/main.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -86,6 +89,7 @@ function tidy(floor = floorNow()) {
 let saveTimer, libTimer, lastSaved = null, lastLibSave = 0;
 function scheduleSave(delay = 400) {
   clearTimeout(saveTimer);
+  setSaveState('saving');
   saveTimer = setTimeout(saveNow, delay);
 }
 
@@ -100,6 +104,8 @@ async function saveNow() {
   try {
     lastSaved = await store.save(design, store.kind === 'device' ? lastSaved : undefined);
     design.updatedAt = lastSaved;
+    if (!saveTimer) setSaveState('saved');
+    saveThumb();
     if (!$('#saveBanner').hidden) {
       $('#saveBanner').hidden = true;
       toast('Saved. Everything is up to date again.');
@@ -115,6 +121,7 @@ async function saveNow() {
       renderAll();
       toast(`${design.updatedBy === 'agent' ? 'Your AI agent' : 'Another window'} changed this design at the same time. Showing that version; yours is kept in History (Designs → History).`, { action: ['History', () => openHistory(design.id)] });
     } else {
+      setSaveState('error');
       $('#saveBanner').hidden = false;
       $('#saveBanner').textContent = err.offline ? 'Not saved yet: Roomcraft’s server isn’t running. Start it again with npm start; your changes are kept here and will save automatically.' : `Not saved yet (${err.message}). Retrying…`;
       scheduleSave(3000);
@@ -186,7 +193,6 @@ function renderAll() {
   $('#editBtn').textContent = ui.editing ? 'Done editing' : 'Edit house';
   $('#furniturePanel').hidden = ui.editing;
   $('#buildPanel').hidden = !ui.editing;
-  $('#qualityLabel').textContent = ui.quality === 'high' ? 'High' : 'Fast';
   renderLevelBar();
   renderToolBar();
   refreshClearance();
@@ -196,6 +202,7 @@ function renderAll() {
   else renderInventory();
   renderInspector();
   updateHint();
+  reactUI?.bump();
 }
 
 function updateHint() {
@@ -247,9 +254,10 @@ function renderLevelBar() {
     (design.floors.length > 1 && viewer.view !== 'walk' ? `<button role="tab" class="${all ? 'on' : ''}" data-all title="See the whole house">All floors</button>` : '') +
     (ui.editing ? '<span class="sep"></span><button class="add" data-addfloor title="Add a floor above the top one">+ Floor</button>' : '') +
     ((viewer.view === '3d' || viewer.split) && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '') +
-    (viewer.view !== 'elevation' ? `<span class="sep"></span><button data-sun class="${ui.sunOn ? 'on' : ''}" title="Sun and shadows for a place, date and time">${ui.sunOn ? `☀ ${esc(ui.sunTime)}` : 'Sun'}</button>` : '') +
-    (viewer.view !== 'walk' && viewer.view !== 'elevation' ? `<button data-paint class="${ui.tool === 'paint' ? 'on' : ''}" title="Paint walls and floors: paint, wallpaper, tiles, wood… (P)">Paint</button>` : '') +
+    '<span class="sep"></span>' +
     (viewer.view !== 'walk' ? `<button data-measure class="${ui.tool === 'measure' ? 'on' : ''}" title="Measure distances, paths and along surfaces (M)">Measure</button>` : '') +
+    (viewer.view !== 'walk' && viewer.view !== 'elevation' ? `<button data-paint class="${ui.tool === 'paint' ? 'on' : ''}" title="Paint walls and floors: paint, wallpaper, tiles, wood… (P)">Paint</button>` : '') +
+    (viewer.view !== 'elevation' ? `<button data-sun class="${ui.sunOn ? 'on' : ''}" title="Sun and shadows for a place, date and time">${ui.sunOn ? `☀ ${esc(ui.sunTime)}` : 'Sun'}</button>` : '') +
     (viewer.view !== 'walk' ? `<span class="sep"></span><button data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, areas and the grid">View ▾</button>` : '');
   $$('[data-floor]', el).forEach((b) => {
     b.onclick = () => setFloor(+b.dataset.floor);
@@ -391,27 +399,38 @@ const placedCount = (itemId) => design.floors.reduce((n, f) => n + f.placed.filt
 
 function renderInventory() {
   const q = $('#invSearch').value.trim().toLowerCase();
-  const list = library.items.filter((i) => !q || i.name.toLowerCase().includes(q) || (CATEGORY_LABELS[i.category] || '').toLowerCase().includes(q));
+  const filter = ui.invFilter || 'all';
+  const cats = [...new Set(library.items.map((i) => i.category))].sort((a, b) => (CATEGORY_LABELS[a] || a).localeCompare(CATEGORY_LABELS[b] || b));
+  const chips = [['all', 'All'], ['fav', '★ Favourites'], ['placed', 'In this house'], ...cats.map((c) => [c, CATEGORY_LABELS[c] || c])];
+  if (!chips.some(([k]) => k === filter)) ui.invFilter = 'all';
+  $('#invFilters').innerHTML = library.items.length > 3 ? chips.map(([k, n]) => `<button class="chip ${k === (ui.invFilter || 'all') ? 'on' : ''}" data-filter="${esc(k)}">${esc(n)}</button>`).join('') : '';
+  const list = library.items
+    .filter((i) => !q || i.name.toLowerCase().includes(q) || (CATEGORY_LABELS[i.category] || '').toLowerCase().includes(q))
+    .filter((i) => filter === 'all' || (filter === 'fav' ? i.favorite : filter === 'placed' ? placedCount(i.id) : i.category === filter))
+    // Just modelled by your agent first, then favourites
+    .sort((a, b) => (ui.ready?.has(b.id) ? 1 : 0) - (ui.ready?.has(a.id) ? 1 : 0) || (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
   $('#invCount').textContent = library.items.length;
   const el = $('#inventory');
   if (!library.items.length) return (el.innerHTML = '<div class="empty">No models yet.<br>Paste a product link above or add a custom model.</div>');
-  if (!list.length) return (el.innerHTML = '<div class="empty">No matches.</div>');
+  if (!list.length) return (el.innerHTML = `<div class="empty">${filter === 'fav' && !q ? 'No favourites yet. Click ☆ on a model to keep it at the top.' : 'No matches.'}</div>`);
   el.innerHTML = list
     .map((i) => {
       const d = dimsOf(i);
       const n = placedCount(i.id);
       const pick = ui.pickedColor[i.id] || i.colors?.[0]?.name;
-      return `<div class="card" draggable="true" data-id="${esc(i.id)}" title="Drag into the room">
+      const ready = ui.ready?.has(i.id);
+      return `<div class="card ${ready ? 'ready' : ''}" draggable="true" data-id="${esc(i.id)}" title="Drag into the room, or click Add">
         <div class="thumb" style="${i.image ? `background-image:url('${esc(i.image)}')` : ''}">${i.image ? '' : iconFor(i.category)}</div>
         <div>
           <div class="nm">${esc(i.name)}</div>
-          ${i.verified === false ? '<div class="badge-unverified" title="Added by an AI agent and not yet checked against a render">Unverified</div>' : ''}
-          <div class="sz ${i.needsDims ? 'missing' : ''}">${i.needsDims ? '⚠ Check size · ' : ''}${cm(d.w)} × ${cm(d.d)} × ${cm(d.h)} cm${n ? ` · ${n} placed` : ''}</div>
+          ${ready ? '<div class="badge-ready" title="Your AI agent finished this model">✓ Ready to place</div>' : i.verified === false ? '<div class="badge-unverified" title="Added by an AI agent and not yet checked against a render">Unverified</div>' : ''}
+          <div class="sz ${i.needsDims ? 'missing' : ''}">${i.needsDims ? '⚠ Check size · ' : ''}${cm(d.w)} × ${cm(d.d)} × ${cm(d.h)} cm${n ? ` · ${n} placed` : ''}${i.price ? ` · ${esc(i.currency || pref.get('currency', 'SGD'))} ${esc(i.price)}` : ''}</div>
           <div class="swatches">${(i.colors || []).slice(0, 10).map((c) => `<button class="sw ${c.name === pick ? 'on' : ''}" data-color="${esc(c.name)}" title="${esc(c.name)}" style="background:${esc(c.hex)}"></button>`).join('')}${i.colors?.length > 10 ? `<span class="hint">+${i.colors.length - 10}</span>` : ''}</div>
         </div>
         <div class="card-actions">
-          <button class="btn small primary" data-act="add">Add</button>
-          <button class="btn small ghost" data-act="edit">Edit</button>
+          <button class="btn small primary" data-act="add" title="Put it in the room">Add</button>
+          <button class="btn small ghost" data-act="edit" title="Size, colours and 3D model">Edit</button>
+          <button class="fav ${i.favorite ? 'on' : ''}" data-act="fav" title="${i.favorite ? 'Remove from favourites' : 'Favourite: keep it at the top'}" aria-label="Favourite">${i.favorite ? '★' : '☆'}</button>
         </div>
       </div>`;
     })
@@ -690,20 +709,7 @@ function wallInspector(el, id) {
   };
   $('#wExt', el).onchange = (e) => ((w.exterior = e.target.checked), commit());
   $('#wLock', el).onchange = (e) => (e.target.checked ? (w.locked = true) : delete w.locked, commit({ rebuild: false }));
-  $$('[data-add]', el).forEach((b) => (b.onclick = () => {
-    const type = b.dataset.add;
-    const width = Math.min(ui[type + 'Width'], len - 0.2);
-    if (width < (type === 'door' ? 0.6 : 0.3)) return toast('This wall is too short for that.');
-    const oid = uid('o');
-    const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
-    const probe = structuredClone(f);
-    probe.openings.push({ id: oid, type, wall: w.id, offset: 0, width, height: 1, sill: 0 });
-    if (!moveOpening(probe, oid, mid, { reach: 0.01 })) return toast('No free space left on this wall.');
-    const offset = probe.openings.find((o) => o.id === oid).offset;
-    f.openings.push({ id: oid, type, wall: w.id, offset, width, height: type === 'window' ? Math.min(1.3, f.height - 1) : Math.min(2.1, f.height - 0.1), sill: type === 'window' ? 0.9 : 0 });
-    commit();
-    viewer.select({ type: 'opening', id: oid });
-  }));
+  $$('[data-add]', el).forEach((b) => (b.onclick = () => addOpening(w, b.dataset.add)));
   const recess = (sign) => {
     const start = parseFloat($('#rStart', el).value) / 100;
     const width = parseFloat($('#rWidth', el).value) / 100;
@@ -726,6 +732,23 @@ function wallInspector(el, id) {
     toast('Corner added in the middle. Drag its dot to move it.');
   };
   $('#wDel', el).onclick = () => deleteSelection();
+}
+
+/** Add a door, window or opening to wall `w`, centred on `at` (default: the middle of the wall). */
+function addOpening(w, type, at) {
+  const f = floorNow();
+  const { len } = wallFrame(w);
+  const width = Math.min(ui[type + 'Width'], len - 0.2);
+  if (width < (type === 'door' ? 0.6 : 0.3)) return toast('This wall is too short for that.');
+  const oid = uid('o');
+  const mid = at || [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+  const probe = structuredClone(f);
+  probe.openings.push({ id: oid, type, wall: w.id, offset: 0, width, height: 1, sill: 0 });
+  if (!moveOpening(probe, oid, mid, { reach: 0.01 })) return toast('No free space left on this wall.');
+  const offset = probe.openings.find((o) => o.id === oid).offset;
+  f.openings.push({ id: oid, type, wall: w.id, offset, width, height: type === 'window' ? Math.min(1.3, f.height - 1) : Math.min(2.1, f.height - 0.1), sill: type === 'window' ? 0.9 : 0 });
+  commit();
+  viewer.select({ type: 'opening', id: oid });
 }
 
 function openingInspector(el, id) {
@@ -818,13 +841,15 @@ function roomInspector(el, id) {
   if (!r) return (el.innerHTML = '');
   const items = f.placed.filter((p) => pointInPolygon(p.x, p.z, r.points));
   el.innerHTML = `<div class="insp"><h3>${esc(r.name || 'Room')}</h3><div class="sub">${esc(f.name)} · ${Math.abs(area(r.points)).toFixed(1)} m²</div>
-    <div class="group"><label class="field-label">Name<input id="rName" value="${esc(r.name || '')}"></label></div>
+    <div class="group"><label class="field-label">Name<input id="rName" list="roomNames" value="${esc(r.name || '')}" placeholder="Pick or type a name"></label>
+      <div class="chips wrap" style="margin-top:6px">${ROOM_QUICK.map((n) => `<button class="chip ${r.name === n ? 'on' : ''}" data-rname="${esc(n)}">${esc(n)}</button>`).join('')}</div></div>
     <div class="group"><div class="lbl">Floor finish</div><div class="swatch-input"><select id="rKind">${['wood', 'tiles', 'carpet', 'concrete'].map((k) => `<option ${r.floorKind === k ? 'selected' : ''}>${k}</option>`).join('')}</select><input type="color" id="rColor" value="${esc(r.floorColor || '#c49a6c')}"></div></div>
     <div class="group"><div class="lbl">Ceiling</div><div class="swatch-input"><select id="rCeilKind">${FINISHES.filter((x) => ['paint', 'wood', 'concrete', 'tiles'].includes(x.kind)).map((x) => `<option value="${x.kind}" ${(r.ceiling?.kind || 'paint') === x.kind ? 'selected' : ''}>${x.name}</option>`).join('')}</select><input type="color" id="rCeilColor" value="${esc(r.ceiling?.color || '#f6f5f2')}"></div></div>
     <div class="group"><div class="lbl">Walls of this room</div><div class="swatch-input"><select id="rWallKind">${FINISHES.filter((x) => x.kind !== 'carpet').map((x) => `<option value="${x.kind}">${x.name}</option>`).join('')}</select><input type="color" id="rWallColor" value="${esc(design.wallColor || '#efebe4')}"><button class="btn small" id="rWallApply">Apply</button></div></div>
     ${items.length ? `<div class="group"><div class="lbl">In this room</div>${items.map((p) => `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}">${esc(itemById(p.itemId)?.name || 'Item')}</button>`).join('')}</div>` : ''}
     ${ui.editing ? '<div class="tip">Rooms follow the walls. Delete or move a wall to merge or reshape rooms.</div>' : ''}</div>`;
   $('#rName', el).onchange = (e) => ((r.name = e.target.value.trim()), commit());
+  $$('[data-rname]', el).forEach((b) => (b.onclick = () => ((r.name = b.dataset.rname), commit())));
   $('#rKind', el).onchange = (e) => ((r.floorKind = e.target.value), commit());
   $('#rColor', el).oninput = (e) => (r.floorColor = e.target.value);
   $('#rColor', el).onchange = () => commit();
@@ -839,6 +864,21 @@ function roomInspector(el, id) {
     toast(`${FINISH_NAMES[fin.kind]} on ${sides.length} wall side${sides.length === 1 ? '' : 's'} of ${r.name || 'this room'}.`, { undo: true });
   };
   $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'item', id: b.dataset.sel })));
+}
+
+const ROOM_NAMES = ['Living room', 'Kitchen', 'Dining room', 'Kitchen & dining', 'Bedroom', 'Master bedroom', 'Kids’ room', 'Guest room', 'Bathroom', 'En-suite', 'Toilet', 'Study', 'Home office', 'Family room', 'Hall', 'Entrance', 'Corridor', 'Laundry', 'Utility', 'Storage', 'Walk-in wardrobe', 'Balcony', 'Garage', 'Yard', 'Helper’s room', 'Prayer room'];
+const ROOM_QUICK = ['Living room', 'Bedroom', 'Kitchen', 'Bathroom', 'Study', 'Dining room'];
+
+/** Furniture total for the floors, against the budget from Settings. */
+function costLine(floors) {
+  const c = furnitureCost(floors);
+  if (!c.main && !c.other.length) return '';
+  const budget = pref.get('budget', 0);
+  const pct = budget ? Math.round((c.main / budget) * 100) : 0;
+  return `<div class="group cost"><div class="lbl">Furniture cost <span>${floors.length > 1 ? 'whole house' : 'this floor'}</span></div>
+    <div class="cost-total">${money(c.main, c.cur)}${c.other.map(([k, v]) => ` <em>+ ${money(v, k)}</em>`).join('')}</div>
+    ${budget ? `<div class="budget-bar ${pct > 100 ? 'over' : ''}"><span style="width:${Math.min(100, pct)}%"></span></div><div class="hint">${pct}% of your ${money(budget, c.cur)} budget${pct > 100 ? ` · ${money(c.main - budget, c.cur)} over` : ` · ${money(budget - c.main, c.cur)} left`}</div>` : ''}
+  </div>`;
 }
 
 function floorInspector(el) {
@@ -856,6 +896,7 @@ function floorInspector(el) {
       const c = it && colorOf(it, p);
       return it ? `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}"><span class="sw" style="background:${esc(c?.hex || '#ccc')}"></span>${esc(it.name)}</button>` : '';
     }).join('')}</div>` : ''}
+    ${costLine([f])}${design.floors.length > 1 ? costLine(design.floors) : ''}
     ${!ui.editing ? `<div class="group"><button class="btn" style="width:100%" id="walkHere">Walk through ${esc(f.name)}</button></div><div class="group"><button class="btn" style="width:100%" id="editHouse">Edit walls, rooms &amp; stairs</button></div>` : ''}
     <div class="group"><div class="lbl">House</div>
       ${ui.editing ? `<label class="field-label">Name<input id="hName" value="${esc(design.name)}"></label>` : ''}
@@ -1331,6 +1372,7 @@ async function renderDesignList() {
   $('#storageNote').textContent = store.kind === 'device' ? 'Saved on this computer (userdata/ folder)' : 'Saved in this browser. Run npm start to save to your computer.';
   $('#designList').innerHTML = list
     .map((d) => `<div class="design-row ${d.id === design.id ? 'on' : ''}" data-id="${esc(d.id)}">
+      ${store.kind === 'device' ? `<div class="dr-thumb"><img alt="" loading="lazy" src="api/thumbs/${encodeURIComponent(d.id)}?v=${encodeURIComponent(d.updatedAt || '')}" onerror="this.remove()"></div>` : ''}
       <div class="dr-main"><b>${esc(d.name || 'Untitled')}</b><span>${d.floors} floor${d.floors === 1 ? '' : 's'} · ${d.updatedAt ? new Date(d.updatedAt).toLocaleString() : ''}${d.updatedBy === 'agent' ? ' · edited by agent' : ''}</span></div>
       <div class="dr-actions">
         ${d.id === design.id ? '<span class="pill">Open</span>' : '<button class="btn small primary" data-open>Open</button>'}
@@ -1604,6 +1646,8 @@ function openQuantities() {
       ${q.finishes.length ? `<p class="qty-sum">Wall coverings on this floor: ${q.finishes.map((w) => `${fin(w.finish)} ${esc(w.finish.color)} <b>${m2(w.area)}</b>`).join(' · ')}</p>` : ''}`;
     })
     .join('');
+  const c = furnitureCost();
+  if (c.main || c.other.length) $('#qtyBody').insertAdjacentHTML('afterbegin', `<div class="qty-total">Furniture for the whole house: <b>${money(c.main, c.cur)}</b>${c.other.map(([k, v]) => ` + ${money(v, k)}`).join('')}${pref.get('budget', 0) ? ` · budget ${money(pref.get('budget', 0), c.cur)}` : ''}</div>`);
   $('#qtyCsv').onclick = () => download(`${fileName(design.name)} quantities.csv`, URL.createObjectURL(new Blob(['\ufeff' + quantitiesCSV(design, { itemById })], { type: 'text/csv' })));
   $('#qtyDialog').showModal();
 }
@@ -1807,6 +1851,338 @@ function toast(msg, { undo, action } = {}) {
   toastTimer = setTimeout(() => t.classList.remove('show'), action || undo ? 6000 : 3500);
 }
 
+// ---------- React panels: commands, right-click menu, settings, tour, save state ----------
+
+let reactUI = null;
+
+function setSaveState(status) {
+  if (!reactUI) return;
+  const cur = reactUI.state.save;
+  if (cur.status === status && status !== 'saved') return;
+  reactUI.set({ save: { status, at: status === 'saved' ? Date.now() : cur.at } });
+}
+
+/** A small picture of the house for the designs list, at most every 20 s. */
+let thumbAt = 0;
+function saveThumb() {
+  if (store.kind !== 'device' || Date.now() - thumbAt < 20000 || viewer.view === 'walk' || viewer.view === 'elevation') return;
+  thumbAt = Date.now();
+  setTimeout(() => {
+    try {
+      const src = viewer.renderer.domElement;
+      const c = document.createElement('canvas');
+      c.width = 240;
+      c.height = Math.round((240 * src.height) / src.width) || 150;
+      viewer.withoutHelpers(() => {
+        viewer.renderer.render(viewer.scene, viewer.camera);
+        c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+      });
+      fetch(`api/thumbs/${encodeURIComponent(design.id)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: c.toDataURL('image/jpeg', 0.7) }) }).catch(() => {});
+    } catch {}
+  }, 300);
+}
+
+function settings() {
+  return {
+    theme: pref.get('theme', 'system'),
+    quality: ui.quality,
+    currency: pref.get('currency', 'SGD'),
+    budget: pref.get('budget', 0),
+    tips: pref.get('tips', true),
+    autoModel: pref.get('autoModel', true),
+  };
+}
+
+function setSetting(k, v) {
+  if (k === 'quality') {
+    ui.quality = v;
+    setQuality(viewer, v);
+  } else if (k === 'autoModel') $('#autoModel').checked = v;
+  pref.set(k, v);
+  if (k === 'theme') applyTheme();
+  renderAll();
+}
+
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() {
+  const t = pref.get('theme', 'system');
+  const dark = t === 'dark' || (t === 'system' && darkQuery.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  viewer?.setTheme(dark);
+}
+darkQuery.addEventListener?.('change', applyTheme);
+
+/** Prices in the chosen currency (items without a currency are assumed to be in it). */
+function furnitureCost(floors = design.floors) {
+  const cur = pref.get('currency', 'SGD');
+  const sums = {};
+  for (const f of floors)
+    for (const p of f.placed) {
+      const it = itemById(p.itemId);
+      const v = parseFloat(String(it?.price ?? '').replace(/[^\d.]/g, ''));
+      if (!Number.isFinite(v)) continue;
+      const c = (it.currency || cur).toUpperCase();
+      sums[c] = (sums[c] || 0) + v;
+    }
+  return { cur, sums, main: sums[cur] || 0, other: Object.entries(sums).filter(([c]) => c !== cur) };
+}
+const money = (v, c) => {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: c, maximumFractionDigits: v >= 1000 ? 0 : 2 }).format(v);
+  } catch {
+    return `${c} ${v.toFixed(2)}`;
+  }
+};
+
+const openSun = () => $('[data-sun]')?.click();
+const openViewMenu = () => $('[data-viewmenu]')?.click();
+
+/** Everything you can do, for the command palette (and its shortcuts, shown as hints). */
+function commands() {
+  const sel = viewer.sel;
+  const items = viewer.selectedItems();
+  const p = sel?.type === 'item' ? findPlaced(sel.id).p : null;
+  const walk = viewer.view === 'walk';
+  const c = [];
+  const add = (group, id, label, run, extra = {}) => c.push({ group, id, label, run, ...extra });
+  // Selection first, when there is one
+  if (items.length) {
+    add('Selection', 'dup', items.length > 1 ? 'Duplicate the selected items' : 'Duplicate', () => (items.length > 1 ? (copyItems(), pasteItems({ offset: true })) : duplicate(sel.id)), { keys: 'Ctrl+D' });
+    add('Selection', 'rot', 'Turn 90°', () => (p ? rotateItem(p, 90) : rotateGroup(90)), { keys: 'R' });
+    add('Selection', 'rotb', 'Turn 90° the other way', () => (p ? rotateItem(p, -90) : rotateGroup(-90)), { keys: 'Shift+R' });
+    if (p) add('Selection', 'wall', 'Push against the nearest wall', () => (againstWall(p, findPlaced(p.id).floor), commit({ rebuild: false })));
+    add('Selection', 'lock', selectedPlaced().every((q) => q.locked) ? 'Unlock' : 'Lock (so it can’t be moved by accident)', toggleLock, { keys: 'L' });
+    add('Selection', 'copy', 'Copy', copyItems, { keys: 'Ctrl+C' });
+    if (p) add('Selection', 'editmodel', 'Edit this model (size, colours)', () => openItemDialog(itemById(p.itemId)));
+    add('Selection', 'del', 'Delete', deleteSelection, { keys: 'Delete' });
+  } else if (sel?.type === 'wall') {
+    const w = floorNow().walls.find((x) => x.id === sel.id);
+    if (w && ui.editing) for (const t of ['door', 'window', 'opening']) add('Selection', `add-${t}`, `Add a ${t} to this wall`, () => addOpening(w, t));
+    add('Selection', 'elev', 'Elevation view of this wall', () => openElevation(sel.id));
+    if (ui.editing) add('Selection', 'del', 'Delete this wall', deleteSelection, { keys: 'Delete' });
+  }
+  if (sel) add('Selection', 'focus', 'Zoom to the selection', () => viewer.frameSelection(), { keys: 'F' });
+
+  add('View', 'v3d', '3D view', () => setView('3d'), { keys: '1' });
+  add('View', 'vplan', 'Floor plan', () => setView('plan'), { keys: '2' });
+  add('View', 'vwalk', 'Walk through the house', () => setView('walk'), { keys: '3' });
+  add('View', 'vsplit', 'Plan and 3D side by side', () => setView('split'), { keys: '4' });
+  add('View', 'fit', 'Zoom to the whole house', () => (viewer.select(null), viewer.frameHouse(true)), { keys: 'F' });
+  for (const [k, name] of DISPLAY) add('View', `disp-${k}`, `${viewer.display[k] ? 'Hide' : 'Show'} ${name.toLowerCase()}`, () => setDisplay(k, !viewer.display[k]), { keys: k === 'grid' ? 'G' : null, keywords: 'display toggle' });
+  add('View', 'walls', viewer.wallMode === 'cut' ? 'Show walls full height' : 'Cut walls at 1.25 m', () => (viewer.setWallMode(viewer.wallMode === 'cut' ? 'up' : 'cut'), pref.set('wallMode', viewer.wallMode), renderAll()));
+  if (design.floors.length > 1) add('View', 'all', 'See all floors', () => (viewer.setShowAll(true), renderAll()));
+  add('View', 'sun', 'Sun and shadows', () => (setView(viewer.view === 'walk' ? '3d' : viewer.view), setTimeout(openSun, 0)), { keywords: 'light daylight time' });
+  add('View', 'left', 'Hide or show the left panel', () => togglePanel('left'), { keys: '[' });
+  add('View', 'right', 'Hide or show the right panel', () => togglePanel('right'), { keys: ']' });
+  add('View', 'dark', document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode', () => setSetting('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'), { keywords: 'theme night appearance' });
+
+  design.floors.forEach((f, i) => add('Floors', `floor-${i}`, `Go to ${f.name}`, () => setFloor(i), { note: i === viewer.activeFloor ? 'current' : '', keys: null }));
+  add('Floors', 'addfloor', 'Add a floor on top', () => (ui.editing || setEditing(true), addFloorAbove()));
+  if (design.floors.length > 1) add('Floors', 'delfloor', `Delete ${floorNow().name}`, deleteFloor);
+
+  add('House', 'edit', ui.editing ? 'Stop editing the house' : 'Edit the house (walls, rooms, doors…)', () => setEditing(!ui.editing), { keys: 'E' });
+  for (const [t, label, keys] of [['wall', 'Draw walls', 'W'], ['door', 'Add doors', 'D'], ['window', 'Add windows', 'N'], ['opening', 'Add openings (no door)', 'O'], ['stairs', 'Add stairs', 'S']])
+    add('House', `tool-${t}`, label, () => (ui.editing || setEditing(true), setTool(t)), { keys: ui.editing ? keys : null, note: ui.editing ? '' : 'turns on Edit house' });
+  add('House', 'measure', 'Measure', () => setTool(ui.tool === 'measure' ? null : 'measure'), { keys: 'M', keywords: 'distance length tape ruler' });
+  add('House', 'paint', 'Paint walls and floors', () => setTool(ui.tool === 'paint' ? null : 'paint'), { keys: 'P', keywords: 'wallpaper tiles colour color finish' });
+  add('House', 'rename', 'Rename this house', () => {
+    const n = prompt('House name', design.name);
+    if (n?.trim()) (design.name = n.trim()), commit({ rebuild: false });
+  });
+
+  add('Furniture', 'links', 'Add furniture from a product link', () => (ui.editing && setEditing(false), document.body.classList.remove('hide-left'), $('#linkInput').focus()), { keywords: 'import shop url ikea' });
+  add('Furniture', 'custom', 'Add a custom model', () => $('#newItemBtn').click());
+  add('Furniture', 'selall', 'Select all furniture on this floor', selectAllItems, { keys: 'Ctrl+A' });
+  if (clipboard?.length) add('Furniture', 'paste', 'Paste', () => pasteItems(), { keys: 'Ctrl+V' });
+  for (const it of library.items) add('Add to room', `add-${it.id}`, it.name, () => addToRoom(it.id), { note: CATEGORY_LABELS[it.category] || '', keywords: `add place ${it.category}`, hidden: true });
+
+  add('Edit', 'undo', 'Undo', () => restore(history.index - 1), { keys: 'Ctrl+Z', disabled: history.index <= 0 });
+  add('Edit', 'redo', 'Redo', () => restore(history.index + 1), { keys: 'Ctrl+Shift+Z', disabled: history.index >= history.stack.length - 1 });
+
+  add('File', 'designs', 'Your designs', () => $('#designBtn').click(), { keywords: 'open switch house' });
+  add('File', 'new', 'New house', () => $('#newHouseDialog').showModal());
+  if (store.history) add('File', 'history', 'Version history', () => openHistory(design.id), { keywords: 'restore earlier backup' });
+  add('File', 'photo', 'Photo-real picture of this view', takePhoto, { keywords: 'render' });
+  add('File', 'copyimg', 'Copy a picture of this view', copyPicture, { keys: 'Ctrl+Shift+C', keywords: 'clipboard screenshot' });
+  add('File', 'png', 'Save a screenshot (.png)', () => exportAs('png'));
+  add('File', 'plan', '2D floor plan (PDF or PNG)', () => exportAs('plan'), { keywords: 'print drawing' });
+  add('File', 'qty', 'Quantities and costs', () => exportAs('qty'), { keywords: 'budget price paint flooring' });
+  add('File', 'glb', '3D model for Blender (.glb)', () => exportAs('glb').catch((err) => toast(`Export failed: ${err.message}`)));
+  add('File', 'json', 'Design file (.json)', () => exportAs('design'), { keywords: 'backup share' });
+  add('File', 'import', 'Import a design file', () => $('#designFile').click());
+  add('File', 'dxf', 'Import a CAD floor plan (DXF)', () => $('#dxfFile').click());
+
+  add('Help', 'assistant', 'Talk to your AI agent', () => chat?.toggle(true), { keys: 'C', keywords: 'chat ai assistant' });
+  add('Help', 'agents', 'Connect an AI agent', openAgents);
+  add('Help', 'guide', 'User guide', () => openGuide($('#helpDialog')), { keys: 'F1 or ?' });
+  add('Help', 'tour', 'Show the tour again', startTour);
+  add('Help', 'settings', 'Settings', () => reactUI.set({ settings: true }), { keywords: 'preferences currency theme graphics' });
+  return walk ? c.filter((x) => !['Selection', 'Furniture', 'Add to room'].includes(x.group) || x.id === 'links') : c;
+}
+
+function runCommand(cmd) {
+  if (cmd.id) {
+    const recent = [cmd.id, ...pref.get('recentCommands', []).filter((x) => x !== cmd.id)].slice(0, 5);
+    if (cmd.group !== 'Selection' && !cmd.id.startsWith('floor-')) pref.set('recentCommands', recent);
+  }
+  try {
+    cmd.run();
+  } catch (err) {
+    console.error(err);
+    toast(`That didn’t work: ${err.message}`);
+  }
+}
+
+function startTour() {
+  if (ui.editing) setEditing(false);
+  if (viewer.view === 'walk') setView('3d');
+  document.body.classList.remove('hide-left');
+  reactUI.set({ tour: 0 });
+}
+
+async function copyPicture() {
+  try {
+    const blob = await (await fetch(viewer.screenshot())).blob();
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    toast('Picture copied. Paste it into a message or document.');
+  } catch {
+    toast('Couldn’t copy to the clipboard here; saving it as a file instead.');
+    exportAs('png');
+  }
+}
+
+/** Right-click menu: actions for what's under the pointer. */
+function contextMenu(e) {
+  if (viewer.view === 'walk' || ui.tool) return;
+  const hit = viewer.pickAt(e.clientX, e.clientY);
+  const at = viewer.planAt(e.clientX, e.clientY);
+  const f = floorNow();
+  if (hit?.type === 'item') {
+    if (!viewer.selectedItems().includes(hit.id)) viewer.select({ type: 'item', id: hit.id });
+  } else if (hit && hit.type !== 'handle' && hit.id) viewer.select({ type: hit.type, id: hit.id });
+  const s = viewer.sel;
+  const items = [];
+  const sep = () => items.length && !items.at(-1).sep && items.push({ sep: true });
+  const add = (label, run, extra = {}) => items.push({ label, run, ...extra });
+  let title = '';
+  const n = viewer.selectedItems().length;
+  if (hit?.type === 'item' && n) {
+    const p = findPlaced(s.id)?.p;
+    title = n > 1 ? `${n} items` : itemById(p?.itemId)?.name || 'Item';
+    const cmds = commands().filter((x) => x.group === 'Selection');
+    for (const id of ['dup', 'rot', 'rotb', 'wall', 'lock']) {
+      const x = cmds.find((q) => q.id === id);
+      if (x) items.push(x);
+    }
+    sep();
+    for (const id of ['copy', 'editmodel', 'focus']) {
+      const x = cmds.find((q) => q.id === id);
+      if (x) items.push(x);
+    }
+    sep();
+    items.push({ ...cmds.find((q) => q.id === 'del'), danger: true });
+  } else if (hit?.type === 'wall' && s?.type === 'wall') {
+    const w = f.walls.find((x) => x.id === s.id);
+    title = `Wall · ${cm(wallFrame(w).len)} cm`;
+    if (ui.editing) {
+      for (const t of ['door', 'window', 'opening']) add(`Add a ${t} here`, () => addOpening(w, t, at), { keys: { door: 'D', window: 'N', opening: 'O' }[t] });
+      add('Add a corner here', () => {
+        const c = closestOnSegment(at, w.a, w.b);
+        if (!splitWall(f, w.id, Math.round(c.t * wallFrame(w).len * 20) / 20)) return toast('Too close to a corner to add one here.');
+        commit();
+      });
+      sep();
+    }
+    add('Elevation view', () => openElevation(w.id));
+    add('Paint this wall', () => setTool('paint'), { keys: 'P' });
+    add('Zoom to it', () => viewer.frameSelection(), { keys: 'F' });
+    if (ui.editing) {
+      add(w.locked ? 'Unlock' : 'Lock', () => (w.locked ? delete w.locked : (w.locked = true), commit({ rebuild: false })));
+      sep();
+      add('Delete wall', deleteSelection, { keys: 'Delete', danger: true, disabled: !!w.locked });
+    } else add('Edit the house to change it', () => setEditing(true), { keys: 'E' });
+  } else if (hit?.type === 'opening' || hit?.type === 'stairs') {
+    title = hit.type === 'stairs' ? 'Stairs' : { door: 'Door', window: 'Window', opening: 'Opening' }[f.openings.find((o) => o.id === hit.id)?.type] || 'Opening';
+    if (ui.editing && hit.type === 'stairs') add('Turn 90°', () => {
+      const st = f.stairs.find((x) => x.id === hit.id);
+      st.rot = ((st.rot || 0) + 90) % 360;
+      commit();
+    }, { keys: 'R' });
+    add('Zoom to it', () => viewer.frameSelection(), { keys: 'F' });
+    if (ui.editing) (sep(), add('Delete', deleteSelection, { keys: 'Delete', danger: true }));
+    else add('Edit the house to change it', () => (setEditing(true), viewer.select({ type: hit.type, id: hit.id })), { keys: 'E' });
+  } else {
+    const room = hit?.type === 'room' ? f.rooms.find((r) => r.id === hit.id) : null;
+    title = room ? `${room.name || 'Room'} · ${Math.abs(area(room.points)).toFixed(1)} m²` : f.name;
+    if (clipboard?.length) add('Paste here', () => ((ui.pointer = at), pasteItems()), { keys: 'Ctrl+V' });
+    if (room) {
+      add('Rename room…', () => {
+        const name = prompt('Room name', room.name || '');
+        if (name?.trim()) (room.name = name.trim()), commit();
+      });
+      const inRoom = f.placed.filter((q) => pointInPolygon(q.x, q.z, room.points)).map((q) => q.id);
+      if (inRoom.length) add(`Select the ${inRoom.length} item${inRoom.length > 1 ? 's' : ''} in this room`, () => viewer.select(inRoom.length > 1 ? { type: 'items', ids: inRoom } : { type: 'item', id: inRoom[0] }));
+      add('Paint the floor', () => setTool('paint'), { keys: 'P' });
+      add('Zoom to room', () => viewer.frameSelection(), { keys: 'F' });
+      sep();
+    }
+    add('Select all furniture', selectAllItems, { keys: 'Ctrl+A' });
+    add('Add furniture from a link…', () => (ui.editing && setEditing(false), $('#linkInput').focus()));
+    add('Measure', () => setTool('measure'), { keys: 'M' });
+    add('Zoom to the whole house', () => (viewer.select(null), viewer.frameHouse(true)), { keys: 'F' });
+    sep();
+    add(ui.editing ? 'Stop editing the house' : 'Edit the house', () => setEditing(!ui.editing), { keys: 'E' });
+  }
+  if (items.at(-1)?.sep) items.pop();
+  reactUI.set({ menu: { x: e.clientX, y: e.clientY, title, items } });
+}
+
+/**
+ * Number fields take units and sums ("2.4 m", "1.2 m + 30 cm", "3 x 60"). The typed text is
+ * turned into a plain number in the field's own unit before the field's handler reads it.
+ * Arrow keys step the value (Shift for 10 steps).
+ */
+function upgradeNumbers(root) {
+  for (const inp of root.querySelectorAll('input[type=number]:not([data-plain])')) {
+    inp.type = 'text';
+    inp.inputMode = 'decimal';
+    inp.autocomplete = 'off';
+    inp.dataset.num = '';
+    const labels = [inp.closest('label')?.textContent, inp.closest('.group')?.querySelector('.lbl')?.textContent, inp.closest('fieldset')?.querySelector('legend')?.textContent];
+    inp.dataset.unit = inp.dataset.unit || labels.map(unitFromLabel).find(Boolean) || '';
+    if (!inp.title && inp.dataset.unit) inp.dataset.tip = `Type a number in ${inp.dataset.unit}, or with a unit (2.4 m, 85 cm) or a sum (1.2 m + 30 cm). ↑/↓ change it.`;
+  }
+}
+function normaliseNumber(inp) {
+  if (!inp?.matches?.('input[data-num]')) return true;
+  const v = evalNumber(inp.value, inp.dataset.unit || null);
+  if (v == null) {
+    if (inp.value.trim()) toast(`“${inp.value}” isn’t a number Roomcraft understands. Try 240, 2.4 m or 1.2 m + 30 cm.`);
+    return false;
+  }
+  inp.value = String(v);
+  return true;
+}
+window.addEventListener('change', (e) => normaliseNumber(e.target) || e.stopImmediatePropagation(), true);
+window.addEventListener('submit', (e) => [...e.target.querySelectorAll('input[data-num]')].forEach((i) => normaliseNumber(i)), true);
+window.addEventListener('keydown', (e) => {
+  const inp = e.target;
+  if (!inp.matches?.('input[data-num]') || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+  e.preventDefault();
+  const v = evalNumber(inp.value, inp.dataset.unit || null) ?? 0;
+  const step = (parseFloat(inp.step) || 1) * (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+  let nv = Math.round((v + step) * 1000) / 1000;
+  if (inp.min !== '') nv = Math.max(+inp.min, nv);
+  if (inp.max !== '') nv = Math.min(+inp.max, nv);
+  inp.value = String(nv);
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
+}, true);
+new MutationObserver((muts) => {
+  for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) (n.matches('input[type=number]') ? upgradeNumbers(n.parentNode) : upgradeNumbers(n));
+}).observe(document.body, { childList: true, subtree: true });
+upgradeNumbers(document.body);
+
 // ---------- boot ----------
 
 async function boot() {
@@ -1828,6 +2204,7 @@ async function boot() {
   design = await store.load(id);
   lastSaved = design.updatedAt;
   $('#categorySelect').innerHTML = Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+  $('#roomNames').innerHTML = ROOM_NAMES.map((n) => `<option value="${esc(n)}">`).join('');
 
   $('#loading').remove();
   viewer = new Viewer($('#viewport'), {
@@ -1894,6 +2271,7 @@ async function boot() {
     return `${base}/asset?url=${encodeURIComponent(u)}`;
   });
   setQuality(viewer, ui.quality);
+  applyTheme();
   viewer.setDesign(design, { refit: true });
   walker = new Walker(viewer, {
     onFloor: (fi) => {
@@ -1933,9 +2311,20 @@ async function boot() {
     },
     options: () => ({ exterior: ui.wallExterior, thickness: ui.wallThickness, stairShape: ui.stairShape, stairTurn: ui.stairTurn, doorWidth: ui.doorWidth, windowWidth: ui.windowWidth, openingWidth: ui.openingWidth }),
   });
+  reactUI = mountUI({
+    commands, runCommand, settings, setSetting, startTour,
+    recentCommands: () => pref.get('recentCommands', []),
+    // After the first tour, offer to connect an agent (once)
+    tourEnded: async () => {
+      if (store.kind !== 'device' || pref.get('agentsDontAsk', false) || ui.askedAgents) return;
+      ui.askedAgents = true;
+      if (!(await refreshAgentsDot())) openAgents();
+    },
+  });
   resetHistory();
   wireUI();
   renderAll();
+  setSaveState('saved');
 
   // Live updates from AI agents (or another window) editing the same files.
   store.subscribe(async (ev) => {
@@ -1947,10 +2336,21 @@ async function boot() {
     } else if (ev.type === 'design' && ev.id === design.id && ev.updatedAt !== lastSaved) {
       const d = await store.load(design.id);
       if (d.updatedAt === lastSaved) return;
+      const before = structuredClone(design);
       design = d;
       lastSaved = d.updatedAt;
       commit();
-      toast(ev.updatedBy === 'agent' ? 'Your AI agent updated this design.' : 'Design updated.');
+      const lines = describeChange(before, d, (id) => itemById(id)?.name);
+      if (ev.updatedBy !== 'agent' || !lines.length) return toast('Design updated.');
+      // Applied straight away; one click puts it back
+      const after = structuredClone(d);
+      const put = (v) => () => {
+        design = normalize(structuredClone(v));
+        design.updatedAt = lastSaved;
+        commit();
+      };
+      const card = chat.addChange({ lines, undo: put(before), redo: put(after) });
+      toast(`Your AI agent changed the house: ${lines.join('; ')}.`, { action: ['Undo', () => (put(before)(), (card.undone = true), chat.refresh())] });
     } else if (ev.type === 'library' && Date.now() - lastLibSave > 1500) {
       library = await store.loadLibrary();
       viewer.library = library.items;
@@ -1976,14 +2376,19 @@ async function boot() {
         Object.assign(q, { status: ev.error ? 'warn' : 'ok', message: (ev.error ? 'Your agent couldn’t finish the model; the draft is kept. ' : `Modelled and checked by your agent · `) + `<a data-add="${esc(ev.itemId)}">Add to room</a>` });
         renderQueue();
       }
-      toast(ev.error ? 'Your agent couldn’t finish a model. See the Assistant panel.' : `Your agent finished the model${item ? ` for “${item.name}”` : ''}.`, { action: item && ['Add to room', () => addToRoom(item.id)] });
+      if (item && !ev.error) (ui.ready ||= new Set()).add(item.id);
+      renderInventory();
+      $(`#inventory .card[data-id="${CSS.escape(ev.itemId || '')}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      toast(ev.error ? 'Your agent couldn’t finish a model. See the Assistant panel.' : `Your agent finished the model${item ? ` for “${item.name}”` : ''}. It’s at the top of your models.`, { action: item && ['Add to room', () => (ui.ready?.delete(item.id), addToRoom(item.id))] });
     },
   });
   $('#autoModel').checked = pref.get('autoModel', true);
   $('#autoModel').onchange = (e) => pref.set('autoModel', e.target.checked);
 
   const agents = await refreshAgentsDot();
-  if (store.kind === 'device' && !agents && !pref.get('agentsDontAsk', false)) openAgents();
+  const firstRun = !pref.get('tourDone', false);
+  if (store.kind === 'device' && !agents && !pref.get('agentsDontAsk', false) && !firstRun) openAgents();
+  if (firstRun) setTimeout(startTour, 600);
   window.roomcraft = { get viewer() { return viewer; }, get design() { return design; }, get library() { return library; }, commit, addToRoom, setView, setFloor, setEditing, setTool, get walker() { return walker; } };
 }
 
@@ -1992,7 +2397,6 @@ function wireUI() {
   $('#editBtn').onclick = () => setEditing(!ui.editing);
   $('#undoBtn').onclick = () => restore(history.index - 1);
   $('#redoBtn').onclick = () => restore(history.index + 1);
-  $('#photoBtn').onclick = takePhoto;
   $('#photoCancel').onclick = () => {
     photoAbort?.abort();
     $('#photoOverlay').hidden = true;
@@ -2025,27 +2429,29 @@ function wireUI() {
   $('#exportMenu').onclick = (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     $('#exportMenu').hidden = true;
-    if (act) exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
+    if (act === 'photo') takePhoto();
+    else if (act === 'copy') copyPicture();
+    else if (act) exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
   };
   $('#menu').onclick = (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     $('#menu').hidden = true;
     if (['glb', 'design', 'png'].includes(act)) exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
     else if (act === 'photo') takePhoto();
+    else if (act === 'history') openHistory(design.id);
+    else if (act === 'tour') startTour();
     else if (act === 'import-design') $('#designFile').click();
     else if (act === 'import-dxf') $('#dxfFile').click();
-    else if (act === 'quality') {
-      ui.quality = ui.quality === 'high' ? 'low' : 'high';
-      pref.set('quality', ui.quality);
-      setQuality(viewer, ui.quality);
-      renderAll();
-      toast(ui.quality === 'high' ? 'High quality: soft shadows and ambient occlusion.' : 'Fast graphics for older computers.');
-    } else if (act === 'settings') openSettings();
+    else if (act === 'settings') reactUI.set({ settings: true });
     else if (act === 'help') openGuide($('#helpDialog'));
   };
 
   // Models
   $('#invSearch').oninput = renderInventory;
+  $('#invFilters').onclick = (e) => {
+    const b = e.target.closest('[data-filter]');
+    if (b) (ui.invFilter = b.dataset.filter), renderInventory();
+  };
   $('#newItemBtn').onclick = () => openItemDialog({ id: uid('i'), name: '', category: 'sofa', colors: [] }, { isNew: true });
   $('#inventory').addEventListener('click', (e) => {
     const card = e.target.closest('.card');
@@ -2060,8 +2466,13 @@ function wireUI() {
       return;
     }
     const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'add') addToRoom(id);
+    if (act === 'add') (ui.ready?.delete(id), addToRoom(id));
     else if (act === 'edit') openItemDialog(itemById(id));
+    else if (act === 'fav') {
+      const it = itemById(id);
+      it.favorite ? delete it.favorite : (it.favorite = true);
+      commit({ lib: true, rebuild: false });
+    }
   });
   $('#inventory').addEventListener('dragstart', (e) => {
     const card = e.target.closest('.card');
@@ -2161,7 +2572,28 @@ function wireUI() {
     b.addEventListener('pointerleave', off);
   });
 
+  // Right-click: what you can do with what's under the pointer (a right-drag still pans)
+  let rdown = null;
+  $('#viewport').addEventListener('pointerdown', (e) => e.button === 2 && (rdown = [e.clientX, e.clientY]));
+  $('#viewport').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (rdown && Math.hypot(e.clientX - rdown[0], e.clientY - rdown[1]) > 5) return;
+    contextMenu(e);
+  });
+  $('#cmdBtn').onclick = () => reactUI.set({ palette: true });
+  $('#settingsBtn').onclick = () => reactUI.set({ settings: true });
+
   // Keyboard
+  window.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'k' && !document.querySelector('dialog[open]')) {
+      e.preventDefault();
+      reactUI.set({ palette: !reactUI.state.palette, menu: null });
+    } else if (mod && e.key === ',') {
+      e.preventDefault();
+      reactUI.set({ settings: true });
+    }
+  });
   window.addEventListener('keydown', (e) => {
     if (/input|textarea|select/i.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
     const mod = e.ctrlKey || e.metaKey;
@@ -2178,6 +2610,7 @@ function wireUI() {
       else viewer.select(null);
     } else if (['1', '2', '3', '4'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'walk', 4: 'split' }[k]);
     else if (viewer.view === 'walk') return;
+    else if (mod && e.shiftKey && k === 'c') (e.preventDefault(), copyPicture());
     else if (mod && k === 'd' && sel?.type === 'item') (e.preventDefault(), duplicate(sel.id));
     else if (mod && k === 'd' && sel?.type === 'items') (e.preventDefault(), copyItems(), pasteItems({ offset: true }));
     else if (mod && k === 'c' && viewer.selectedItems().length) (e.preventDefault(), copyItems());
@@ -2194,7 +2627,7 @@ function wireUI() {
     } else if (k === 'e' && !mod) setEditing(!ui.editing);
     else if (k === 'c' && !mod && !e.shiftKey) chat?.toggle();
     else if (k === 'g' && !mod) setDisplay('grid', !viewer.display.grid);
-    else if (k === 'f' && !mod && viewer.view !== 'walk' && viewer.view !== 'elevation') viewer.frameHouse(true);
+    else if (k === 'f' && !mod && viewer.view !== 'walk' && viewer.view !== 'elevation') sel ? viewer.frameSelection() : viewer.frameHouse(true);
     else if (k === 'm' && !mod) setTool(ui.tool === 'measure' ? null : 'measure');
     else if (k === 'p' && !mod && viewer.view !== 'elevation') setTool(ui.tool === 'paint' ? null : 'paint');
     else if (ui.editing && !mod && !e.shiftKey && { v: 1, w: 1, d: 1, n: 1, o: 1, s: 1 }[k]) {
@@ -2246,10 +2679,6 @@ function togglePanel(side) {
   document.body.classList.toggle('hide-' + side);
   pref.set('hide-' + side, document.body.classList.contains('hide-' + side));
   setTimeout(() => viewer.resize?.(), 0);
-}
-
-function openSettings() {
-  $('#settingsDialog').showModal();
 }
 
 boot().catch((err) => {

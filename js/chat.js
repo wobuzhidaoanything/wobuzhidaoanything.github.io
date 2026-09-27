@@ -8,6 +8,8 @@ export function initChat({ context, openAgents, onJobDone, onReady, local, onLin
   const log = $('#chatLog');
   const input = $('#chatInput');
   let st = { runners: [], runner: null, busy: false, messages: [] };
+  // Changes the agent made to the house, shown as cards with Undo (kept in this window only)
+  const changes = [];
 
   const api = async (path, body) => {
     const r = await fetch(`api/chat${path}`, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -36,7 +38,7 @@ export function initChat({ context, openAgents, onJobDone, onReady, local, onLin
     sel.hidden = usable.length < 2;
     $('#chatStop').hidden = !st.busy;
     input.disabled = $('#chatSend').disabled = !r;
-    if (!st.messages.length || !r) {
+    if ((!st.messages.length || !r) && !changes.length) {
       const installed = st.runners.filter((x) => x.available).map((x) => x.name);
       log.innerHTML = `<div class="chat-empty">${
         !local
@@ -48,9 +50,34 @@ export function initChat({ context, openAgents, onJobDone, onReady, local, onLin
       $('#chatSetup')?.addEventListener('click', openAgents);
       return;
     }
-    log.innerHTML = st.messages.map(msgHtml).join('');
+    const html = [];
+    const cards = (after) => changes.filter((c) => c.after === after).forEach((c) => html.push(changeHtml(c)));
+    cards(null);
+    for (const m of st.messages) {
+      html.push(msgHtml(m));
+      cards(m.id);
+    }
+    // Cards whose message was cleared go at the end
+    changes.filter((c) => c.after && !st.messages.some((m) => m.id === c.after)).forEach((c) => html.push(changeHtml(c)));
+    if (!r) html.push(`<div class="chat-empty">${local ? 'Set up a terminal agent to chat here.' : ''}</div>`);
+    log.innerHTML = html.join('');
     log.scrollTop = log.scrollHeight;
   }
+
+  function changeHtml(c) {
+    const i = changes.indexOf(c);
+    return `<div class="chat-change ${c.undone ? 'undone' : ''}"><div><b>${c.undone ? 'Change undone' : 'Your agent changed the house'}</b>${c.lines.map((l) => `<span>${esc(l)}</span>`).join('')}</div>${c.undone ? `<button class="btn small ghost" data-redo="${i}">Redo</button>` : `<button class="btn small" data-undo="${i}">Undo</button>`}</div>`;
+  }
+  log.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-undo], [data-redo]');
+    if (!b) return;
+    const c = changes[+(b.dataset.undo ?? b.dataset.redo)];
+    if (!c) return;
+    if (b.dataset.undo != null) c.undo();
+    else c.redo();
+    c.undone = b.dataset.undo != null;
+    render();
+  });
 
   function msgHtml(m) {
     if (m.role === 'job') {
@@ -156,6 +183,14 @@ export function initChat({ context, openAgents, onJobDone, onReady, local, onLin
     toggle,
     get ready() {
       return ready();
+    },
+    /** Show a card for a change the agent made, with Undo/Redo. */
+    addChange({ lines, undo, redo }) {
+      const c = { lines, undo, redo, after: st.messages.at(-1)?.id || null, undone: false };
+      changes.push(c);
+      if (changes.length > 30) changes.shift();
+      render();
+      return c;
     },
     /** Ask the agent to model a product from its link (improving the draft item `itemId`). */
     async modelLink(url, item) {

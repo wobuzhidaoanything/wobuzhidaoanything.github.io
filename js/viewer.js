@@ -355,6 +355,53 @@ export class Viewer {
     this.plan.zoomTo(1, animate);
   }
 
+  /** Zoom to the selection (furniture, wall, stairs, room); the whole house when nothing is selected. */
+  frameSelection(animate = true) {
+    const s = this.sel;
+    const f = this.activeFloorData;
+    const y = this.floorY;
+    const box = new THREE.Box3();
+    const addXZ = (pts, h = 2.4) => pts.forEach(([x, z]) => (box.expandByPoint(new THREE.Vector3(x, y, z)), box.expandByPoint(new THREE.Vector3(x, y + h, z))));
+    for (const id of this.selectedItems()) {
+      const g = this.items.get(id)?.group;
+      if (g) box.expandByObject(g);
+    }
+    if (s?.type === 'wall') {
+      const w = f?.walls.find((q) => q.id === s.id);
+      if (w) addXZ([w.a, w.b], f.height || 2.7);
+    } else if (s?.type === 'room') {
+      const r = f?.rooms.find((q) => q.id === s.id);
+      if (r) addXZ(r.points, 0.5);
+    } else if (s?.type === 'opening' || s?.type === 'stairs') {
+      const o = (s.type === 'opening' ? f?.openings : f?.stairs)?.find((q) => q.id === s.id);
+      const w = o?.wall && f.walls.find((q) => q.id === o.wall);
+      if (w) addXZ([w.a, w.b], 2.2);
+      else if (o) addXZ([[o.x - 1.5, o.z - 1.5], [o.x + 1.5, o.z + 1.5]], 2);
+    }
+    if (box.isEmpty()) return this.frameHouse(animate);
+    const size = box.getSize(new THREE.Vector3());
+    box.expandByVector(new THREE.Vector3(1, 0, 1).multiplyScalar(Math.max(0.6, Math.max(size.x, size.z) * 0.6)));
+    if (this.view === 'plan' || this.view === 'split') this.plan.fitToBox(box, animate);
+    if (this.view !== 'plan') {
+      const c = box.getCenter(new THREE.Vector3());
+      const r = Math.max(1.2, box.getSize(new THREE.Vector3()).length() * 0.75);
+      const az = this.orbit.azimuthAngle;
+      this.orbit.setLookAt(c.x + Math.sin(az) * r, c.y + r * 0.7, c.z + Math.cos(az) * r, c.x, c.y, c.z, animate);
+    }
+  }
+
+  /** What's under a screen position (for the right-click menu). */
+  pickAt(clientX, clientY) {
+    this.setPointer({ clientX, clientY });
+    return this.pick();
+  }
+
+  /** Dark or light surroundings (the house itself keeps its real colours). */
+  setTheme(dark) {
+    this.scene.background.set(dark ? '#23262b' : '#e9e6e1');
+    this.ground.material.color.set(dark ? '#3a3d42' : '#dcd8cf');
+  }
+
   setActiveFloor(i, { animate = true } = {}) {
     if (!this.design) return;
     i = Math.max(0, Math.min(this.design.floors.length - 1, i));

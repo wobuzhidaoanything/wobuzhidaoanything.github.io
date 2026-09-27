@@ -107,8 +107,8 @@ tvstand, desk, table, coffeetable, sidetable, floorlamp, lamp, rug, plant, tv, m
 
 ## Working on the software itself
 
-- No build step: `index.html` + `js/*.js` (ES modules). Libraries are served from `node_modules` via `/vendor/…`
-  (see the import map in `index.html`).
+- No build step: `index.html` + `js/*.js` (ES modules). Libraries are served from `node_modules` via `/vendor/…`,
+  and React/R3F from a one-time esbuild bundle at `/r3f/…` (see the import map in `index.html`).
 - Key files:
   - `js/design.js`: data model, stairs maths, validation (pure JS, also used by the tools)
   - `js/house.js`: geometry
@@ -123,6 +123,10 @@ tvstand, desk, table, coffeetable, sidetable, floorlamp, lamp, rug, plant, tv, m
   - `js/measure.js`, `js/paint.js`: measure and paint tools
   - `js/clearance.js`, `js/quantities.js`, `js/sun.js`, `js/planexport.js`: pure logic, tested in Node
   - `js/r3f-host.js`: React Three Fiber model components
+  - `js/ui/*.jsx`: React panels (command palette, right-click menu, settings, tour, hover tips, save state).
+    Compiled on request by the local server and served at `/ui/<name>.js`; `js/ui/store.jsx` is the bridge to
+    `js/app.js`, which owns the design. React is for the software's UI; R3F is only for furniture models.
+  - `js/units.js` (number fields with units and sums), `js/diff.js` (what an agent changed): pure, tested in Node
   - `docs/user-guide.md`: the in-app Help. **Update it when you change a feature.**
 - User data paths come from `tools/lib/paths.mjs`. Tests set `ROOMCRAFT_USERDATA` to a temporary folder.
 - Desktop only: don't spend effort on mobile layouts.

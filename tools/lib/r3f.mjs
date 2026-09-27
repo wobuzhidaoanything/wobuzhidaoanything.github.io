@@ -1,10 +1,11 @@
-// React Three Fiber for furniture models written as components (userdata/models/<id>.jsx).
-// The app itself is plain JS; only these model components use React/R3F.
+// React for the app's panels (js/ui/*.jsx) and React Three Fiber for furniture models written as
+// components (userdata/models/<id>.jsx). The 3D house itself is plain three.js.
 //
 // - runtime(): bundles react, react/jsx-runtime, @react-three/fiber and @react-three/drei once
 //   (esbuild, code-split so they share one React) with `three` left external, so components
 //   use the app's own three.js. Served at /r3f/<file>.js; the import map points the bare
-//   names there.
+//   names there. react-dom is in the same bundle for the UI panels.
+// - compileUI(name): compiles js/ui/<name>.jsx for the app's own panels, served at /ui/<name>.js.
 // - compileComponent(id): compiles userdata/models/<id>.jsx to an ES module (JSX → react/jsx-runtime),
 //   served at /r3f-model/<id>.js. Only react, three, @react-three/fiber and @react-three/drei
 //   may be imported.
@@ -31,6 +32,7 @@ const ENTRIES = {
   'jsx-runtime': `import * as J from 'react/jsx-runtime';\nexport const { jsx, jsxs, Fragment } = J;\n`,
   fiber: `export * from '@react-three/fiber';\n`,
   drei: `export * from '@react-three/drei';\n`,
+  'react-dom': `export { createRoot } from 'react-dom/client';\nexport { createPortal, flushSync } from 'react-dom';\n`,
 };
 
 function versionKey() {
@@ -41,14 +43,14 @@ function versionKey() {
       return '?';
     }
   };
-  return crypto.createHash('sha1').update(['react', '@react-three/fiber', '@react-three/drei', 'three'].map(v).join('|') + JSON.stringify(ENTRIES)).digest('hex').slice(0, 10);
+  return crypto.createHash('sha1').update(['react', 'react-dom', '@react-three/fiber', '@react-three/drei', 'three'].map(v).join('|') + JSON.stringify(ENTRIES)).digest('hex').slice(0, 10);
 }
 
 let building = null;
 /** Build (once per package versions) and return the folder with the runtime files. */
 export function runtime() {
   const dir = path.join(CACHE, versionKey());
-  if (fs.existsSync(path.join(dir, 'drei.js'))) return Promise.resolve(dir);
+  if (fs.existsSync(path.join(dir, 'react-dom.js'))) return Promise.resolve(dir);
   building ||= (async () => {
     const esbuild = await import('esbuild');
     const src = path.join(CACHE, 'src');
@@ -113,4 +115,19 @@ export async function compileComponent(id) {
   const code = await compileSource(fs.readFileSync(f, 'utf8'), `${id}.jsx`);
   compiled.set(id, { mtime: st.mtimeMs, code });
   return code;
+}
+
+const uiCompiled = new Map(); // file -> { mtime, code }
+/** Compiled module for the app's own UI file js/ui/<name>.jsx (cached until the file changes). */
+export async function compileUI(name) {
+  if (!/^[\w-]{1,80}$/.test(name)) return null;
+  const f = path.join(ROOT, 'js', 'ui', `${name}.jsx`);
+  if (!fs.existsSync(f)) return null;
+  const st = fs.statSync(f);
+  const hit = uiCompiled.get(f);
+  if (hit && hit.mtime === st.mtimeMs) return hit.code;
+  const esbuild = await import('esbuild');
+  const out = await esbuild.transform(fs.readFileSync(f, 'utf8'), { loader: 'jsx', jsx: 'automatic', format: 'esm', sourcefile: `${name}.jsx`, target: 'es2022' });
+  uiCompiled.set(f, { mtime: st.mtimeMs, code: out.code });
+  return out.code;
 }

@@ -57,6 +57,12 @@ The full **user guide** is in the app: the **Help** button, or **F1**. It's also
 - **Export:** one `.glb` for Blender with everything named and grouped by floor, room, walls, openings, stairs and
   furniture. Design files (`.json`) are for backup and sharing.
 - **Several designs:** create, switch, duplicate, rename and import designs. Everything saves automatically.
+- **Easy to find your way:** one top bar grouped by task, **Ctrl+K** to search every action by name (with its
+  shortcut), a right-click menu on anything in the view, hover tips with shortcut keys, and a short first-run tour.
+- **Comfort:** dark mode (follows your computer), a Saved indicator, design pictures in the designs list,
+  favourites and filters in the model library, number boxes that take units and sums (`2.4 m`, `1.2 m + 30 cm`),
+  **F** to zoom to the selection, copy a picture of the view, and furniture totals in your currency (SGD by default)
+  against a budget.
 
 ## AI agents
 
@@ -74,6 +80,9 @@ Roomcraft's tools where the agent allows it. It knows which design, floor and se
 - Paste product links into the link box: a quick draft appears at once, then your agent reads every product photo
   and the description, models the item, compares renders with the photos, and marks it checked. You can turn this
   off with the checkbox under the link box.
+- Links pasted into the chat are modelled the same way. Models are kept realistic but compact (5 MB at most; shop
+  3D files are compressed automatically; see [docs/MODELLING.md](docs/MODELLING.md)).
+- Changes the agent makes to the house are applied at once and show as cards in the chat with **Undo**.
 - You can chat while jobs run. They queue, and the panel shows each job's progress and the tools used.
 - Desktop-only apps (Claude Desktop, VS Code, Windsurf) can still use Roomcraft from their own window, but the app
   can't drive them.
