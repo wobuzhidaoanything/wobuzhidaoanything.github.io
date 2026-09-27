@@ -14,6 +14,14 @@ store link, pick its colour, and see it to scale.
 - **Easy to arrange:** drag to move, drag the blue dot to rotate, items snap flush to walls and sit on
   tables and rugs. 3D, plan and walk-through views, undo/redo, screenshots, export/import.
 
+## AI modeller (free with OpenRouter)
+
+Click **Ask AI**, paste an OpenRouter key (stored only in your browser) and pick a model. Free models are
+listed first, loaded live from OpenRouter. Describe furniture ("an IKEA KIVIK 3-seat sofa with all its colours")
+and it creates the model in your inventory with real dimensions and colour options, or checks and corrects
+existing items. It can **only** create and check inventory models. It never sees or changes your room; you
+place items yourself.
+
 ## Changing things by asking Claude
 
 Describe what you want in the Claude Code chat ("add a 200 cm oak dining table by the window",
@@ -27,6 +35,7 @@ imported items. To hand your current layout to Claude, use **⋮ → Export proj
 index.html          page shell (three.js via import map, no build step)
 css/style.css
 js/app.js           state, inventory, import, inspector, undo, persistence
+js/chat.js          AI modeller panel (OpenRouter), inventory-only actions
 js/viewer.js        three.js scene, interaction, camera modes
 js/room.js          polygon room, walls with openings
 js/models.js        parametric furniture generators

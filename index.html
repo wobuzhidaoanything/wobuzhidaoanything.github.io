@@ -26,6 +26,7 @@
       <button data-view="plan" title="Top-down floor plan (2)">Plan</button>
       <button data-view="eye" title="Eye level – walk with W A S D (3)">Walk</button>
     </div>
+    <button class="btn ai-btn" id="chatToggle" title="Have an AI create or check furniture models (uses your OpenRouter key)"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span>Ask AI</span></button>
     <button class="btn" id="editRoomBtn" title="Change the room's shape, walls, doors and windows">Edit room</button>
     <div class="spacer"></div>
     <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
@@ -75,6 +76,25 @@
       <div class="drop-overlay" id="dropOverlay" hidden><div>Drop links to import</div></div>
       <div class="hintbar" id="hintbar"></div>
       <div class="loading" id="loading">Loading 3D engine…</div>
+      <section class="chat" id="chatPanel" hidden>
+        <header>
+          <b>AI modeller</b>
+          <span class="spacer"></span>
+          <button class="icon-btn" id="chatSettingsBtn" title="Key & model" aria-label="Chat settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+          <button class="icon-btn" id="chatClear" title="Clear conversation" aria-label="Clear conversation"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+          <button class="icon-btn" id="chatClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </header>
+        <div class="chat-setup" id="chatSetup">
+          <label>OpenRouter API key <input id="orKey" type="password" placeholder="sk-or-…" autocomplete="off"></label>
+          <label>Model <select id="orModel"></select></label>
+          <p class="muted">Free models are listed first. Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Your key is stored only in this browser.</p>
+        </div>
+        <div class="chat-log" id="chatLog"></div>
+        <form class="chat-form" id="chatForm">
+          <textarea id="chatInput" rows="2" placeholder="Describe a piece of furniture to model…"></textarea>
+          <button class="btn primary" id="chatSend" type="submit" aria-label="Send">Send</button>
+        </form>
+      </section>
     </main>
 
     <aside class="right panel" id="inspector"></aside>
