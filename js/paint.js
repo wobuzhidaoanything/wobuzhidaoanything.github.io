@@ -3,7 +3,8 @@
 // Alt+click picks up the finish under the pointer (eyedropper).
 import * as THREE from 'three';
 import { classifyWallFace, finishAt, paintSpan, sideBreaks } from './house.js';
-import { pointInPolygon, wallFrame, closestOnSegment } from './design.js';
+import { roomSides } from './quantities.js';
+import { pointInPolygon, wallFrame } from './design.js';
 
 const FLOOR_KINDS = { wood: 'wood', tiles: 'tiles', carpet: 'carpet', concrete: 'concrete', stone: 'tiles', paint: 'concrete', brick: 'tiles', wallpaper: 'carpet' };
 
@@ -52,32 +53,9 @@ export class Paint {
     return null;
   }
 
-  /**
-   * The stretches of wall sides that face into a room: [{ wall, side, from, to }] (u along the wall).
-   * Found from the room outline: each outline edge lies on one wall's face.
-   */
+  /** The stretches of wall sides that face into a room: [{ wall, side, from, to }]. */
   roomSides(room) {
-    const f = this.v.activeFloorData;
-    const out = [];
-    const pts = room.points;
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i], q = pts[(i + 1) % pts.length];
-      const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-      let best = null;
-      for (const w of f.walls) {
-        const { dir, normal } = wallFrame(w);
-        const d = (m) => (m[0] - w.a[0]) * normal[0] + (m[1] - w.a[1]) * normal[1];
-        const err = Math.abs(Math.abs(d(mid)) - w.thickness / 2);
-        const parallel = Math.abs(((q[0] - p[0]) * dir[0] + (q[1] - p[1]) * dir[1]) / (Math.hypot(q[0] - p[0], q[1] - p[1]) || 1));
-        if (err > 0.03 || parallel < 0.99) continue;
-        const u = (m) => (m[0] - w.a[0]) * dir[0] + (m[1] - w.a[1]) * dir[1];
-        const { len } = wallFrame(w);
-        if (u(mid) < -w.thickness || u(mid) > len + w.thickness) continue;
-        if (!best || err < best.err) best = { wall: w, side: d(mid) > 0 ? 'l' : 'r', from: Math.min(u(p), u(q)), to: Math.max(u(p), u(q)), err };
-      }
-      if (best) out.push(best);
-    }
-    return out;
+    return roomSides(this.v.activeFloorData, room);
   }
 
   /** The stretch of a wall side between the junctions around `u`. */

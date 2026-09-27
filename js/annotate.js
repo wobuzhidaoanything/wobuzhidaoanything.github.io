@@ -40,13 +40,13 @@ function dimension(pts, labels, a, b, n, off, y, value = Math.hypot(b[0] - a[0],
   labels.push(l);
 }
 
-/** Dimension lines for a floor: every outside face, plus the overall width and depth. */
-export function buildDimensions(floor, y) {
-  const g = new THREE.Group();
-  g.name = 'Dimensions';
-  g.userData.helper = true;
-  const pts = [];
-  const labels = [];
+/**
+ * Dimension chains for a floor as data: every outside face (offset 0.45 m) plus, for outlines
+ * that aren't a plain rectangle, the overall width and depth (offset 1.05 m).
+ * [{ a, b, n (outward unit normal), off, value }]
+ */
+export function dimensionData(floor) {
+  const out = [];
   const polys = footprint(floor);
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   let corners = 0;
@@ -60,16 +60,25 @@ export function buildDimensions(floor, y) {
       minX = Math.min(minX, a[0]), maxX = Math.max(maxX, a[0]), minZ = Math.min(minZ, a[1]), maxZ = Math.max(maxZ, a[1]);
       if (L < 0.3) continue; // too short to label cleanly
       const d = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
-      // Outward normal: to the right of travel for a counter-clockwise ring (in this handedness)
-      const n = ccw ? [d[1], -d[0]] : [-d[1], d[0]];
-      dimension(pts, labels, a, b, n, 0.45, y);
+      out.push({ a, b, n: ccw ? [d[1], -d[0]] : [-d[1], d[0]], off: 0.45, value: L });
     }
   }
   if (Number.isFinite(minX) && (corners > 4 || polys.length > 1)) {
     // Overall chain on the top and left sides (a plain rectangle doesn't need it)
-    dimension(pts, labels, [minX, minZ], [maxX, minZ], [0, -1], 1.05, y);
-    dimension(pts, labels, [minX, maxZ], [minX, minZ], [-1, 0], 1.05, y);
+    out.push({ a: [minX, minZ], b: [maxX, minZ], n: [0, -1], off: 1.05, value: maxX - minX });
+    out.push({ a: [minX, maxZ], b: [minX, minZ], n: [-1, 0], off: 1.05, value: maxZ - minZ });
   }
+  return out;
+}
+
+/** Dimension lines for a floor, drawn on the ground. */
+export function buildDimensions(floor, y) {
+  const g = new THREE.Group();
+  g.name = 'Dimensions';
+  g.userData.helper = true;
+  const pts = [];
+  const labels = [];
+  for (const d of dimensionData(floor)) dimension(pts, labels, d.a, d.b, d.n, d.off, y, d.value);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.85, depthTest: false }));

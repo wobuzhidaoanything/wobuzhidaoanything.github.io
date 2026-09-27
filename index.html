@@ -54,6 +54,8 @@
         <button data-act="glb"><b>3D model for Blender</b><span>Whole house as .glb</span></button>
         <button data-act="design"><b>Design file</b><span>.json to back up or share</span></button>
         <button data-act="png"><b>Screenshot</b><span>This view as .png</span></button>
+        <button data-act="plan"><b>2D floor plan</b><span>PDF or PNG at scale, with dimensions</span></button>
+        <button data-act="qty"><b>Quantities &amp; costs</b><span>Areas, paint, flooring, furniture (.csv)</span></button>
       </div>
     </div>
     <button class="btn chat-btn" id="chatBtn" title="Talk to your AI agent (C)" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span class="hide-narrow">Assistant</span><span class="busy-dot" id="chatBusy" hidden></span></button>
@@ -212,6 +214,30 @@
       <div class="row"><span class="hint" id="chatHint">Enter to send · Shift+Enter for a new line</span><span class="spacer"></span><button type="button" class="btn small danger ghost" id="chatStop" hidden>Stop</button><button class="btn primary small" id="chatSend">Send</button></div>
     </form>
   </aside>
+
+  <dialog id="planDialog" class="dialog wide">
+    <div class="dlg-head"><h3>2D floor plan</h3></div>
+    <div class="plan-export">
+      <div class="plan-opts">
+        <div class="lbl">Floors</div><div id="planFloors"></div>
+        <label class="field-label">Paper<select id="planPaper"><option value="A4">A4 landscape</option><option value="A3">A3 landscape</option></select></label>
+        <label class="field-label">Scale<select id="planScale"><option value="fit">Largest that fits</option><option value="50">1:50</option><option value="100">1:100</option><option value="200">1:200</option></select></label>
+        <label class="check small-check"><input type="checkbox" id="planDims" checked> Dimensions</label>
+        <label class="check small-check"><input type="checkbox" id="planAreas" checked> Room areas</label>
+        <label class="check small-check"><input type="checkbox" id="planFurniture" checked> Furniture</label>
+        <p class="hint" id="planNote"></p>
+      </div>
+      <div class="plan-preview" id="planPreview"></div>
+    </div>
+    <div class="actions"><button class="btn primary" id="planPdf">Download PDF</button><button class="btn" id="planPng">Download PNG</button><span class="spacer"></span><button class="btn" data-close>Close</button></div>
+  </dialog>
+
+  <dialog id="qtyDialog" class="dialog wide">
+    <div class="dlg-head"><h3>Quantities &amp; costs</h3></div>
+    <p class="muted">How much floor, paint and skirting each room needs (doors and windows taken off, flooring with 10% extra for cuts), and the furniture in it.</p>
+    <div id="qtyBody" class="qty-body"></div>
+    <div class="actions"><button class="btn" id="qtyCsv">Download .csv (Excel)</button><span class="spacer"></span><button class="btn" data-close>Close</button></div>
+  </dialog>
 
   <dialog id="agentsDialog" class="dialog wide">
     <div class="dlg-head"><h3 id="agentsTitle">Connect your AI agent</h3></div>

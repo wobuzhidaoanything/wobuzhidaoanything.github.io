@@ -6,6 +6,8 @@ import { Measure } from './measure.js';
 import { Paint } from './paint.js';
 import { FINISHES, FINISH_NAMES } from './materials.js';
 import { paintSpan } from './house.js';
+import { floorQuantities, quantitiesCSV } from './quantities.js';
+import { planSVG, fitScale, svgToCanvas, makePDF } from './planexport.js';
 import { analyse as analyseClearance, zoneStatus, doorSwing, footprintRect } from './clearance.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
@@ -1367,6 +1369,10 @@ async function exportAs(kind) {
     download(`${fileName(design.name)}.roomcraft.json`, URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' })));
   } else if (kind === 'png') {
     download(`${fileName(design.name)}.png`, viewer.screenshot());
+  } else if (kind === 'qty') {
+    openQuantities();
+  } else if (kind === 'plan') {
+    openPlanExport();
   } else if (kind === 'glb') {
     toast('Preparing 3D model…');
     const { exportGLB } = await import('./export.js');
@@ -1374,6 +1380,80 @@ async function exportAs(kind) {
     download(`${fileName(design.name)}.glb`, URL.createObjectURL(blob));
     toast(`Saved ${fileName(design.name)}.glb (${(blob.size / 1e6).toFixed(1)} MB). In Blender: File → Import → glTF 2.0.`);
   }
+}
+
+// ---------- 2D plan export ----------
+
+function planOpts(fi) {
+  const paper = $('#planPaper').value;
+  const sv = $('#planScale').value;
+  return { paper, scale: sv === 'fit' ? fitScale(design.floors[fi], paper) : +sv, dims: $('#planDims').checked, areas: $('#planAreas').checked, furniture: $('#planFurniture').checked, itemById, dimsOf };
+}
+
+function planFloors() {
+  return $$('#planFloors input:checked').map((c) => +c.value);
+}
+
+function renderPlanPreview() {
+  const fis = planFloors();
+  if (!fis.length) return ($('#planPreview').innerHTML = '<p class="muted">Pick at least one floor.</p>');
+  const r = planSVG(design, fis[0], planOpts(fis[0]));
+  $('#planPreview').innerHTML = r.svg.replace(/width="[\d.]+mm" height="[\d.]+mm"/, 'width="100%"');
+  const tight = fis.filter((fi) => !planSVG(design, fi, planOpts(fi)).fits);
+  $('#planNote').textContent = tight.length
+    ? `At this scale ${tight.map((fi) => design.floors[fi].name).join(', ')} won't fit on ${$('#planPaper').value}. Choose a larger paper or scale, or "Largest that fits".`
+    : `Print at 100% ("actual size") to keep the scale 1:${r.scale}.`;
+}
+
+function openPlanExport() {
+  $('#planFloors').innerHTML = design.floors.map((f, i) => `<label class="check small-check"><input type="checkbox" value="${i}" ${i === viewer.activeFloor ? 'checked' : ''}> ${esc(f.name)}</label>`).join('');
+  for (const el of $$('#planDialog select, #planDialog input')) el.onchange = renderPlanPreview;
+  renderPlanPreview();
+  const pages = async () => {
+    const out = [];
+    for (const fi of planFloors()) {
+      const r = planSVG(design, fi, planOpts(fi));
+      out.push({ fi, r, canvas: await svgToCanvas(r.svg, r.width, r.height, 300) });
+    }
+    return out;
+  };
+  $('#planPng').onclick = async () => {
+    for (const { fi, canvas } of await pages()) download(`${fileName(design.name)} ${fileName(design.floors[fi].name)} plan.png`, canvas.toDataURL('image/png'));
+  };
+  $('#planPdf').onclick = async () => {
+    const ps = await pages();
+    if (!ps.length) return;
+    const list = [];
+    for (const { r, canvas } of ps) {
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
+      list.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), widthPx: canvas.width, heightPx: canvas.height, widthMm: r.width, heightMm: r.height });
+    }
+    download(`${fileName(design.name)} plans.pdf`, URL.createObjectURL(new Blob([makePDF(list)], { type: 'application/pdf' })));
+    toast('Saved the plan PDF. Print at 100% (actual size) to keep the scale.');
+  };
+  $('#planDialog').showModal();
+}
+
+// ---------- quantities ----------
+
+function openQuantities() {
+  const m2 = (v) => `${v.toFixed(1)} m²`;
+  const fin = (f) => `<span class="sw" style="background:${esc(f.color)}"></span>${esc(FINISH_NAMES[f.kind] || f.kind)}`;
+  $('#qtyBody').innerHTML = design.floors
+    .map((f) => {
+      const q = floorQuantities(f, { itemById, wallColor: design.wallColor });
+      const cost = Object.entries(q.totals.cost).map(([c, v]) => `${esc(c)} ${v.toFixed(2)}`.trim()).join(' + ');
+      return `<h4>${esc(f.name)} <em>${m2(q.totals.floorArea)} of rooms · ${m2(q.totals.wallArea)} of walls · ${q.totals.skirting.toFixed(1)} m skirting${cost ? ` · furniture ${cost}` : ''}</em></h4>
+      <table class="qty"><thead><tr><th>Room</th><th>Floor</th><th>Flooring to order</th><th>Walls</th><th>Ceiling</th><th>Skirting</th><th>Furniture</th></tr></thead><tbody>
+      ${q.rooms.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td>${m2(r.floorArea)}</td><td>${fin({ kind: r.flooring.kind, color: r.flooring.color || '#c49a6c' })} ${m2(r.flooring.order)}</td>
+        <td>${r.walls.map((w) => `<div>${fin(w.finish)} ${m2(w.area)}</div>`).join('')}</td><td>${m2(r.ceilingArea)}</td><td>${r.skirting.toFixed(1)} m</td>
+        <td>${r.items.map(({ item }) => `<div>${esc(item.name)}${item.price ? ` <em>${esc(item.currency || '')} ${esc(item.price)}</em>` : ''}</div>`).join('') || '<em>none</em>'}</td></tr>`).join('')}
+      </tbody></table>
+      ${q.finishes.length ? `<p class="qty-sum">Wall coverings on this floor: ${q.finishes.map((w) => `${fin(w.finish)} ${esc(w.finish.color)} <b>${m2(w.area)}</b>`).join(' · ')}</p>` : ''}`;
+    })
+    .join('');
+  $('#qtyCsv').onclick = () => download(`${fileName(design.name)} quantities.csv`, URL.createObjectURL(new Blob(['\ufeff' + quantitiesCSV(design, { itemById })], { type: 'text/csv' })));
+  $('#qtyDialog').showModal();
 }
 
 async function importDxf(file) {

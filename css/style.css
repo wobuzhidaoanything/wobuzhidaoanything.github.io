@@ -441,3 +441,19 @@ body.hide-left .edge-btn.left svg, body.hide-right .edge-btn.right svg { transfo
 .tool-bar select { border: 0; border-radius: 6px; padding: 3px 6px; background: #fff; color: var(--text); font: inherit; }
 .tool-bar input[type=color] { width: 32px; height: 24px; padding: 0 2px; }
 .level-bar button[data-paint].on { background: var(--accent); color: #fff; }
+
+.qty-body { max-height: 60vh; overflow: auto; }
+.qty-body h4 { margin: 14px 0 6px; font-size: 14px; }
+.qty-body h4 em { font-style: normal; font-weight: 400; color: var(--muted); font-size: 12.5px; margin-left: 8px; }
+table.qty { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.qty th { text-align: left; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 8px; }
+table.qty td { white-space: nowrap; vertical-align: top; border-bottom: 1px solid var(--line); padding: 6px 8px; }
+table.qty td em { font-style: normal; color: var(--muted); }
+.qty .sw, .qty-sum .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); vertical-align: -1px; margin-right: 4px; }
+.qty-sum { font-size: 12.5px; color: var(--muted); }
+
+.plan-export { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
+.plan-opts { display: flex; flex-direction: column; gap: 8px; }
+.plan-preview { border: 1px solid var(--line); border-radius: 8px; background: #fff; min-height: 300px; display: grid; place-items: center; overflow: hidden; }
+.plan-preview svg { display: block; width: 100%; height: auto; }
+#planDialog { width: min(1100px, 94vw); }
