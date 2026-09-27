@@ -4,6 +4,7 @@ import { ROOM_PRESETS, signedArea, bounds, centroid, pointInPolygon, walls, near
 import { colorFromName } from '../shared/colors.js';
 import { guessCategory } from '../worker/src/scrape.js';
 import { WORKER_URL } from './config.js';
+import { initChat } from './chat.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -475,28 +476,37 @@ function findSpot(item, at) {
   return [cx, cz];
 }
 
-function addToRoom(itemId, at) {
+function addToRoom(itemId, at, { rot, color, lift, againstWall: wall, select = true } = {}) {
   const item = itemById(itemId);
   if (!item) return;
   const [x, z] = findSpot(item, at);
-  const p = { id: uid('p'), itemId, x: +x.toFixed(3), z: +z.toFixed(3), rot: 0, color: pickedColor[itemId] || item.colors?.[0]?.name || null };
+  const colorName = color && item.colors?.some((c) => c.name === color) ? color : /^#[0-9a-f]{6}$/i.test(color || '') ? color : null;
+  const p = { id: uid('p'), itemId, x: +x.toFixed(3), z: +z.toFixed(3), rot: rot != null ? ((+rot % 360) + 360) % 360 : 0, color: colorName || pickedColor[itemId] || item.colors?.[0]?.name || null };
   state.placed.push(p);
   viewer.sync(state.placed, state.inventory);
   const rec = viewer.items.get(p.id);
   const c = rec && viewer.constrain(rec, p.x, p.z, false);
   if (c) Object.assign(p, c);
-  if (item.category === 'curtain' || item.category === 'mirror' || item.category === 'wardrobe' || item.category === 'bookshelf') {
-    placeAgainstWall(p);
-  }
+  if (lift != null) p.y = lift;
+  if (Number.isInteger(wall)) placeAgainstWall(p, wall, at ? undefined : undefined);
+  else if (wall || (!at && ['curtain', 'mirror', 'wardrobe', 'bookshelf'].includes(item.category))) placeAgainstWall(p);
+  if (!select) return p;
   commit({ render: false });
   renderAll();
   viewer.select(p.id);
   $('#leftPanel').classList.remove('open');
+  return p;
 }
 
-function placeAgainstWall(p) {
+function placeAgainstWall(p, wallIndex, along) {
   const item = itemById(p.itemId);
-  const w = nearestWall(p.x, p.z, state.room.points);
+  let w;
+  if (Number.isInteger(wallIndex) && walls(state.room.points)[wallIndex]) {
+    // A specific wall: centre on it, or `along` metres from its start corner.
+    const ww = walls(state.room.points)[wallIndex];
+    const t = along != null ? Math.max(0, Math.min(ww.len, along)) : ww.len / 2;
+    w = { ...ww, q: [ww.a[0] + ww.dir[0] * t, ww.a[1] + ww.dir[1] * t] };
+  } else w = nearestWall(p.x, p.z, state.room.points);
   if (!w) return;
   const d = dimsOf(item);
   p.rot = Math.round((Math.atan2(w.inward[0], w.inward[1]) * 180) / Math.PI + 360) % 360;
@@ -751,6 +761,25 @@ async function importUrls(urls) {
   renderQueue();
 }
 
+/** Read one link into the inventory (used by the AI chat). */
+async function importOne(url) {
+  const existing = state.inventory.find((i) => i.url === url);
+  if (existing) return existing;
+  const base = workerUrl();
+  let item;
+  if (base) {
+    const res = await fetch(`${base}/scrape?url=${encodeURIComponent(url)}`);
+    const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+    if (!data.ok) throw new Error(data.error || 'Could not read the page.');
+    item = itemFromProduct(data.product);
+  } else {
+    item = guessFromUrl(url);
+    item.needsDims = true;
+  }
+  state.inventory.unshift(item);
+  return item;
+}
+
 // ---------- misc UI ----------
 
 let toastTimer;
@@ -885,7 +914,18 @@ async function boot() {
 
   wireUI();
   // Handy for debugging from the browser console.
-  window.roomcraft = { viewer, get state() { return state; }, commit, addToRoom };
+  // The AI chat only gets inventory access: it can create and correct item models, not the room.
+  const chat = initChat({
+    state: () => state,
+    commit: () => commit(),
+    importUrl: importOne,
+    uid,
+    colorFromName,
+    guessCategory,
+    DEFAULT_DIMS,
+    categories: Object.keys(CATEGORY_LABELS),
+  });
+  window.roomcraft = { viewer, get state() { return state; }, commit, addToRoom, chat };
 }
 
 function wireUI() {
