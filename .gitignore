@@ -2,4 +2,8 @@
 node_modules/
 worker/node_modules/
 worker/.wrangler/
+# Your designs, models and local state stay on this device (never committed)
+designs/
+models/
+exports/
 .roomcraft/

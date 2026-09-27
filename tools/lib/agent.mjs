@@ -1,39 +1,34 @@
-// Operations shared by the MCP server and the CLI. Everything reads and writes
-// data/project.json (the house layout + model inventory).
+// Operations shared by the MCP server and the CLI. They work on this device's design store
+// (designs/ folder, see store.mjs): house designs and the furniture model library.
 //
-// Vision rule: every item an agent adds or changes is saved as `verified: false`.
-// It can only be verified after the agent has rendered its current version
-// (renders are tracked in .roomcraft/renders.json), so the agent must look first.
+// Vision rule: every model an agent adds or changes is saved as `verified: false`, and
+// can only be verified after its current version has been rendered (tracked in
+// .roomcraft/renders.json) — so the agent must look at it first. Layout changes return
+// renders of every floor for the same reason.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { ROOT } from './server.mjs';
+import { ROOT } from './paths.mjs';
+import * as store from './store.mjs';
 import { scrapeProduct, guessCategory } from '../../worker/src/scrape.js';
 import { colorFromName } from '../../shared/colors.js';
+import { migrate, normalize, validate, elevations, stairLayout, wallFrame } from '../../js/design.js';
+import { detectRooms } from '../../js/plan.js';
 
-export const PROJECT = path.join(ROOT, 'data', 'project.json');
 const STATE_DIR = path.join(ROOT, '.roomcraft');
 const RENDERS = path.join(STATE_DIR, 'renders.json');
+export const EXPORTS = path.join(ROOT, 'exports');
 
 export const CATEGORIES = ['sofa', 'armchair', 'chair', 'stool', 'ottoman', 'bed', 'wardrobe', 'bookshelf', 'dresser', 'nightstand', 'sideboard', 'tvstand', 'desk', 'table', 'coffeetable', 'sidetable', 'floorlamp', 'lamp', 'rug', 'plant', 'tv', 'mirror', 'curtain', 'box'];
 
-export function loadProject() {
-  return JSON.parse(fs.readFileSync(PROJECT, 'utf8'));
-}
+const rid = (p) => `${p}-${crypto.randomBytes(3).toString('hex')}`;
+const cm = (m) => Math.round(m * 1000) / 10;
 
-/** Save and bump the version so open browsers offer to load the change. */
-export function saveProject(p) {
-  p.version = (+p.version || 0) + 1;
-  fs.writeFileSync(PROJECT, JSON.stringify(p, null, 2) + '\n');
-  return p.version;
-}
-
-/** Fingerprint of everything that affects how an item looks. */
+/** Fingerprint of everything that affects how a model looks. */
 export function itemHash(item) {
   const { name, category, dims, colors, accent, modelUrl, useModel } = item;
   return crypto.createHash('sha1').update(JSON.stringify({ name, category, dims, colors, accent, modelUrl, useModel })).digest('hex').slice(0, 12);
 }
-
 function readRenders() {
   try {
     return JSON.parse(fs.readFileSync(RENDERS, 'utf8'));
@@ -48,7 +43,7 @@ function recordRender(item) {
   fs.writeFileSync(RENDERS, JSON.stringify(r, null, 2));
 }
 
-const toM = (cm) => (cm == null || cm === '' || !Number.isFinite(+cm) || +cm <= 0 ? undefined : +(+cm / 100).toFixed(4));
+const toM = (v) => (v == null || v === '' || !Number.isFinite(+v) || +v <= 0 ? undefined : +(+v / 100).toFixed(4));
 const hexOk = (h) => /^#[0-9a-f]{6}$/i.test(h || '');
 function normColors(list) {
   if (!Array.isArray(list)) return undefined;
@@ -56,11 +51,18 @@ function normColors(list) {
     .map((c) => (typeof c === 'string' ? { name: c, hex: colorFromName(c) } : { name: String(c.name || c.hex || ''), hex: hexOk(c.hex) ? c.hex.toLowerCase() : colorFromName(c.name) }))
     .filter((c) => c.name && c.hex);
 }
-function slug(s) {
-  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'item';
+const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'item';
+
+function withLibrary(fn) {
+  store.ensureStore();
+  const lib = store.getLibrary();
+  lib.items ||= [];
+  const out = fn(lib);
+  store.saveLibrary(lib);
+  return out;
 }
 
-// ---------- operations ----------
+// ---------- links & models ----------
 
 export async function readLink(url) {
   const product = await scrapeProduct(url);
@@ -76,140 +78,204 @@ export async function readLink(url) {
   return { product, image };
 }
 
-export function listItems() {
-  const p = loadProject();
+export function listModels() {
+  store.ensureStore();
   const renders = readRenders();
-  return {
-    version: p.version,
-    inventory: p.inventory.map((i) => ({
-      id: i.id,
-      name: i.name,
-      category: i.category,
-      size_cm: i.dims ? `${Math.round(i.dims.w * 100)} × ${Math.round(i.dims.d * 100)} × ${Math.round(i.dims.h * 100)}` : null,
-      colors: (i.colors || []).map((c) => `${c.name} ${c.hex}`),
-      modelUrl: i.modelUrl || undefined,
-      verified: i.verified !== false,
-      renderedCurrentVersion: renders[i.id]?.hash === itemHash(i),
-    })),
-    placed: (p.placed || []).map((q) => ({ id: q.id, itemId: q.itemId, x_cm: Math.round(q.x * 100), z_cm: Math.round(q.z * 100), rot: q.rot || 0, color: q.color })),
-  };
+  return store.getLibrary().items.map((i) => ({
+    id: i.id,
+    name: i.name,
+    category: i.category,
+    size_cm: i.dims ? `${cm(i.dims.w)} × ${cm(i.dims.d)} × ${cm(i.dims.h)}` : null,
+    colors: (i.colors || []).map((c) => `${c.name} ${c.hex}`),
+    modelUrl: i.modelUrl || undefined,
+    verified: i.verified !== false,
+    renderedCurrentVersion: renders[i.id]?.hash === itemHash(i),
+  }));
 }
 
-/**
- * Add a model to the inventory. Fields in cm. `from_url` scrapes the product first;
- * explicit fields override what was scraped.
- */
+/** Add a model to the library. Sizes in cm. `from_url` reads a product page first; explicit fields win. */
 export async function addItem(args) {
   let base = {};
   if (args.from_url) {
     const { product } = await readLink(args.from_url);
-    base = {
-      name: product.name, category: product.category, url: product.url, image: product.image, modelUrl: product.modelUrl,
-      dims: product.dims, colors: product.colors?.map((c) => ({ name: c.name, hex: c.hex })),
-      price: product.price, currency: product.currency,
-    };
+    base = { name: product.name, category: product.category, url: product.url, image: product.image, modelUrl: product.modelUrl, dims: product.dims, colors: product.colors?.map((c) => ({ name: c.name, hex: c.hex })), price: product.price, currency: product.currency };
   }
-  const p = loadProject();
-  const name = String(args.name || base.name || 'New item').slice(0, 140);
+  const name = String(args.name || base.name || 'New model').slice(0, 140);
   const category = CATEGORIES.includes(args.category) ? args.category : CATEGORIES.includes(base.category) && base.category !== 'box' ? base.category : guessCategory(name);
   const dims = { w: toM(args.width_cm) ?? base.dims?.w, d: toM(args.depth_cm) ?? base.dims?.d, h: toM(args.height_cm) ?? base.dims?.h };
   const missing = ['w', 'd', 'h'].filter((k) => !dims[k]);
   if (missing.length) throw new Error(`Missing size (${missing.map((k) => ({ w: 'width_cm', d: 'depth_cm', h: 'height_cm' })[k]).join(', ')}). Give the real product dimensions.`);
   const colors = normColors(args.colors) || base.colors || [];
-  let id = args.id || `i-${slug(name)}`;
-  while (p.inventory.some((i) => i.id === id)) id = `${id}-${crypto.randomBytes(2).toString('hex')}`;
-  const item = {
-    id, name, category, dims,
-    colors: colors.length ? colors : [{ name: 'Default', hex: '#b8b2a7' }],
-    ...(args.accent && hexOk(args.accent.hex) ? { accent: { name: args.accent.name || 'Accent', hex: args.accent.hex } } : {}),
-    ...(args.url || base.url ? { url: args.url || base.url } : {}),
-    ...(args.image || base.image ? { image: args.image || base.image } : {}),
-    ...(args.model_url || base.modelUrl ? { modelUrl: args.model_url || base.modelUrl } : {}),
-    ...(base.price ? { price: String(base.price), currency: base.currency || null } : {}),
-    verified: false,
-    addedBy: 'agent',
-  };
-  p.inventory.unshift(item);
-  const version = saveProject(p);
-  return { item, version };
+  return withLibrary((lib) => {
+    let id = args.id || `i-${slug(name)}`;
+    while (lib.items.some((i) => i.id === id)) id = `${id}-${crypto.randomBytes(2).toString('hex')}`;
+    const item = {
+      id, name, category, dims,
+      colors: colors.length ? colors : [{ name: 'Default', hex: '#b8b2a7' }],
+      ...(args.accent && hexOk(args.accent.hex) ? { accent: { name: args.accent.name || 'Accent', hex: args.accent.hex } } : {}),
+      ...(args.url || base.url ? { url: args.url || base.url } : {}),
+      ...(args.image || base.image ? { image: args.image || base.image } : {}),
+      ...(args.model_url || base.modelUrl ? { modelUrl: args.model_url || base.modelUrl } : {}),
+      ...(base.price ? { price: String(base.price), currency: base.currency || null } : {}),
+      verified: false,
+      addedBy: 'agent',
+    };
+    lib.items.unshift(item);
+    return { item };
+  });
 }
 
 export function updateItem(args) {
-  const p = loadProject();
-  const item = p.inventory.find((i) => i.id === args.id);
-  if (!item) throw new Error(`No inventory item "${args.id}". Use list_items to see ids.`);
-  if (args.name) item.name = String(args.name).slice(0, 140);
-  if (args.category) {
-    if (!CATEGORIES.includes(args.category)) throw new Error(`Unknown category "${args.category}". Use one of: ${CATEGORIES.join(', ')}`);
-    item.category = args.category;
-  }
-  item.dims = { w: toM(args.width_cm) ?? item.dims?.w, d: toM(args.depth_cm) ?? item.dims?.d, h: toM(args.height_cm) ?? item.dims?.h };
-  const colors = normColors(args.colors);
-  if (colors?.length) {
-    item.colors = colors;
-    for (const q of p.placed || []) if (q.itemId === item.id && q.color && !q.color.startsWith('#') && !colors.some((c) => c.name === q.color)) q.color = colors[0].name;
-  }
-  if (args.accent === null) delete item.accent;
-  else if (args.accent && hexOk(args.accent.hex)) item.accent = { name: args.accent.name || 'Accent', hex: args.accent.hex };
-  if (args.model_url !== undefined) args.model_url ? (item.modelUrl = args.model_url) : delete item.modelUrl;
-  if (args.image) item.image = args.image;
-  if (args.url) item.url = args.url;
-  item.verified = false;
-  const version = saveProject(p);
-  return { item, version };
+  return withLibrary((lib) => {
+    const item = lib.items.find((i) => i.id === args.id);
+    if (!item) throw new Error(`No model "${args.id}". Use list_models to see ids.`);
+    if (args.name) item.name = String(args.name).slice(0, 140);
+    if (args.category) {
+      if (!CATEGORIES.includes(args.category)) throw new Error(`Unknown category "${args.category}". Use one of: ${CATEGORIES.join(', ')}`);
+      item.category = args.category;
+    }
+    item.dims = { w: toM(args.width_cm) ?? item.dims?.w, d: toM(args.depth_cm) ?? item.dims?.d, h: toM(args.height_cm) ?? item.dims?.h };
+    const colors = normColors(args.colors);
+    if (colors?.length) item.colors = colors;
+    if (args.accent === null) delete item.accent;
+    else if (args.accent && hexOk(args.accent.hex)) item.accent = { name: args.accent.name || 'Accent', hex: args.accent.hex };
+    if (args.model_url !== undefined) args.model_url ? (item.modelUrl = args.model_url) : delete item.modelUrl;
+    if (args.image) item.image = args.image;
+    if (args.url) item.url = args.url;
+    item.verified = false;
+    return { item };
+  });
 }
 
-/** Download a .glb into models/ so the repo keeps its own copy of the 3D model. */
+/** Download a .glb into models/ so the model has a permanent local copy. */
 export async function saveModelFile({ id, url }) {
   const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 roomcraft' } });
   if (!r.ok) throw new Error(`Download failed: HTTP ${r.status}`);
   const buf = Buffer.from(await r.arrayBuffer());
   if (buf.length > 40e6) throw new Error('Model is larger than 40 MB; keep it as a URL instead.');
   if (buf.subarray(0, 4).toString() !== 'glTF') throw new Error('That file is not a binary glTF (.glb).');
-  const p = loadProject();
-  const item = p.inventory.find((i) => i.id === id);
-  if (!item) throw new Error(`No inventory item "${id}".`);
   fs.mkdirSync(path.join(ROOT, 'models'), { recursive: true });
   const rel = `models/${slug(id)}.glb`;
   fs.writeFileSync(path.join(ROOT, rel), buf);
-  item.modelUrl = rel;
-  item.useModel = true;
-  item.verified = false;
-  const version = saveProject(p);
-  return { item, file: rel, bytes: buf.length, version };
+  return withLibrary((lib) => {
+    const item = lib.items.find((i) => i.id === id);
+    if (!item) throw new Error(`No model "${id}".`);
+    Object.assign(item, { modelUrl: rel, useModel: true, verified: false });
+    return { item, file: rel, bytes: buf.length };
+  });
 }
 
 export async function renderItemImages(id, opts = {}) {
   const { renderItem } = await import('./render.mjs');
-  const item = loadProject().inventory.find((i) => i.id === id);
-  if (!item) throw new Error(`No inventory item "${id}".`);
+  const item = store.getLibrary().items.find((i) => i.id === id);
+  if (!item) throw new Error(`No model "${id}".`);
   const shots = await renderItem(id, opts);
   recordRender(item);
   return { item, shots };
 }
 
-export async function renderRoomImages(opts = {}) {
-  const { renderRoom } = await import('./render.mjs');
-  return renderRoom(opts);
+/** Record a visual check. Refused unless the current version was rendered (i.e. looked at). */
+export function verifyItem({ id, matches, notes }) {
+  const item = store.getLibrary().items.find((i) => i.id === id);
+  if (!item) throw new Error(`No model "${id}".`);
+  const r = readRenders()[id];
+  if (!r || r.hash !== itemHash(item)) throw new Error('This model has not been rendered since its last change. Render it (render_item), look at the images and compare them with the product photo, then verify.');
+  if (!notes || String(notes).trim().length < 10) throw new Error('Describe what you compared in the renders (shape, proportions, colours, size) in `notes`.');
+  return withLibrary((lib) => {
+    const it = lib.items.find((i) => i.id === id);
+    if (matches) Object.assign(it, { verified: true, verifiedNotes: String(notes).slice(0, 500), verifiedAt: new Date().toISOString() });
+    else Object.assign(it, { verified: false, verifiedNotes: `Mismatch: ${String(notes).slice(0, 480)}` });
+    return { item: it };
+  });
 }
 
-/** Mark an item verified. Refuses unless the current version was rendered (i.e. looked at). */
-export function verifyItem({ id, matches, notes }) {
-  const p = loadProject();
-  const item = p.inventory.find((i) => i.id === id);
-  if (!item) throw new Error(`No inventory item "${id}".`);
-  const r = readRenders()[id];
-  if (!r || r.hash !== itemHash(item))
-    throw new Error('This item has not been rendered since its last change. Render it (render_item), look at the images and compare with the product photo, then verify.');
-  if (!notes || String(notes).trim().length < 10) throw new Error('Describe what you compared in the renders (shape, proportions, colours, size) in `notes`.');
-  if (matches) {
-    item.verified = true;
-    item.verifiedNotes = String(notes).slice(0, 500);
-    item.verifiedAt = new Date().toISOString();
-  } else {
-    item.verified = false;
-    item.verifiedNotes = `Mismatch: ${String(notes).slice(0, 480)}`;
-  }
-  const version = saveProject(p);
-  return { item, version };
+// ---------- designs ----------
+
+export function listDesigns() {
+  store.ensureStore();
+  return { active: store.getActive(), designs: store.listDesigns() };
 }
+
+const resolveId = (id) => id || store.getActive() || (() => { throw new Error('No designs yet. Run npm start once, or create one with write_design.'); })();
+
+/** A human-readable summary + the full JSON of a design. */
+export function getDesign(id) {
+  store.ensureStore();
+  const d = store.getDesign(resolveId(id));
+  const ys = elevations(d);
+  const summary = d.floors.map((f, i) => ({
+    index: i, id: f.id, name: f.name, level_cm: cm(ys[i]), ceiling_cm: cm(f.height), slab_cm: cm(f.slab),
+    walls: f.walls.length, rooms: f.rooms.map((r) => r.name || r.id), openings: f.openings.length, stairs: f.stairs.length, furniture: f.placed.length,
+  }));
+  return { summary: { id: d.id, name: d.name, floors: summary }, design: d, problems: validate({ ...d, inventory: store.getLibrary().items }) };
+}
+
+/**
+ * Save a whole design (format 2, metres). Normalizes, auto-detects rooms on floors that have
+ * none (if `detect_rooms`), validates, and makes it the active design so the open app shows it.
+ */
+export function writeDesign(json, { detect_rooms = true, activate = true } = {}) {
+  store.ensureStore();
+  let d = typeof json === 'string' ? JSON.parse(json) : json;
+  d = migrate({ ...d, format: d.format ?? 2 });
+  d.id ||= rid('d');
+  if (detect_rooms) {
+    for (const f of d.floors) {
+      if (f.rooms.length || !f.walls.length) continue;
+      f.rooms = detectRooms(f).map((pts, i) => ({ id: rid('r'), name: `Room ${i + 1}`, points: pts, floorKind: 'wood', floorColor: '#c49a6c' }));
+    }
+  }
+  d = normalize(d);
+  const problems = validate({ ...d, inventory: store.getLibrary().items });
+  const saved = store.saveDesign(d, { by: 'agent' });
+  if (activate) store.setActive(saved.id);
+  return { id: saved.id, problems, floors: saved.floors.map((f) => `${f.name}: ${f.walls.length} walls, ${f.rooms.length} rooms, ${f.openings.length} openings, ${f.stairs.length} stairs, ${f.placed.length} items`) };
+}
+
+/** Stair numbers for a design floor (so agents can plan stairwells that fit). */
+export function stairInfo(id, floorIndex = 0, shape = 'straight', width_cm = 100) {
+  const d = store.getDesign(resolveId(id));
+  const ys = elevations(d);
+  if (floorIndex >= d.floors.length - 1) throw new Error('Stairs need a floor above.');
+  const L = stairLayout({ shape, width: width_cm / 100, turn: 'left' }, ys[floorIndex + 1] - ys[floorIndex]);
+  return { steps: L.n, riser_mm: Math.round(L.riser * 1000), tread_mm: Math.round(L.going * 1000), footprint_cm: { width: cm(L.box.maxX - L.box.minX), length: cm(L.box.maxZ - L.box.minZ) }, note: 'Stair origin = bottom-centre of the first step; rot 0 climbs toward −z. Leave ~95 cm clear floor at the bottom and top.' };
+}
+
+export async function renderDesignImages(id, { floors, views = ['plan', '3d'], exterior = false } = {}) {
+  const { renderDesign } = await import('./render.mjs');
+  const did = resolveId(id);
+  const d = store.getDesign(did);
+  const idx = floors?.length ? floors : d.floors.map((_, i) => i);
+  const specs = [];
+  for (const i of idx) for (const v of views) specs.push(`${v}:${i}`);
+  if (exterior) specs.push('exterior');
+  return renderDesign(did, specs);
+}
+
+export async function exportGLB(id, file) {
+  const { exportDesignGLB } = await import('./render.mjs');
+  const did = resolveId(id);
+  const d = store.getDesign(did);
+  const buf = await exportDesignGLB(did);
+  fs.mkdirSync(EXPORTS, { recursive: true });
+  const out = path.resolve(file || path.join(EXPORTS, `${slug(d.name)}.glb`));
+  fs.writeFileSync(out, buf);
+  return { file: out, bytes: buf.length };
+}
+
+// ---------- placing furniture (agents editing layouts) ----------
+
+export function placeItem({ design, floor = 0, item, x_cm, z_cm, rot = 0, color, lift_cm = 0 }) {
+  const did = resolveId(design);
+  const d = store.getDesign(did);
+  const f = d.floors[floor];
+  if (!f) throw new Error(`No floor ${floor}`);
+  const it = store.getLibrary().items.find((i) => i.id === item);
+  if (!it) throw new Error(`No model "${item}" in the library (list_models).`);
+  const p = { id: rid('p'), itemId: item, x: +(x_cm / 100).toFixed(3), z: +(z_cm / 100).toFixed(3), rot: ((+rot % 360) + 360) % 360, color: color || it.colors?.[0]?.name || null, ...(lift_cm ? { y: lift_cm / 100 } : {}) };
+  f.placed.push(p);
+  store.saveDesign(d, { by: 'agent' });
+  return { placed: p };
+}
+
+export { wallFrame };

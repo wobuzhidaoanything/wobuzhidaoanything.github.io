@@ -1,91 +1,110 @@
-# Guide for AI agents: editing the house layout
+# Guide for AI agents working with Roomcraft
 
-Roomcraft is a static site (plain HTML/CSS/JS + three.js/WebGL, no build step). The house layout
-lives in **`data/project.json`**. To change the room or furniture, edit that file, then commit and push.
+Roomcraft is a 3D house planner (plain HTML/CSS/JS + three.js/WebGL) that runs locally with `npm start`.
+Everything a person designs lives **on their device**, in the git-ignored `designs/` folder:
 
-## Tools (use them)
+- `designs/<id>.json`: one house design (multi-floor), format below
+- `designs/library.json`: the furniture model library shared by all designs
+- `designs/.active`: the design currently open in the app
 
-- Run the site: `npm start` (one command; installs dependencies and opens the browser).
-- **MCP server** `roomcraft` (auto-configured for most agents, see [docs/MCP.md](docs/MCP.md)): `read_link`,
-  `add_item`, `update_item`, `render_item`, `verify_item`, `save_model_file`, `render_room`, `list_items`.
-- No MCP? The same operations are available from the CLI: `node tools/cli.mjs help`.
+Git only carries the software. Never commit `designs/`, `models/` or `exports/`.
 
-## Vision rule (mandatory, every agent)
+## Use the tools
 
-Never trust a model you haven't looked at. After adding or changing a furniture model:
-1. look at the product photo (`read_link`, or `node tools/cli.mjs read <url> --photo`);
-2. render the model (`render_item` / `node tools/cli.mjs render <id>`) and **look at the images**;
-3. compare shape, proportions, colours and size, fix with `update_item` if needed, and look again;
-4. only then call `verify_item` with notes on what you compared.
+The **`roomcraft` MCP server** (`tools/mcp-server.mjs`) is how you work with designs and models. The user connects
+you from the app's **Agents** screen; setup for every agent is in [docs/MCP.md](docs/MCP.md). Without MCP, the
+same operations exist on the command line: `node tools/cli.mjs` (run it without arguments for help).
 
-Items stay "Unverified" until this is done, and verification is refused for any version that hasn't been
-rendered. After layout edits, check the result with `render_room` (or `node tools/cli.mjs render-room`).
-Prefer the tools over hand-editing inventory items, because the tools track verification.
+| Task | Tools |
+| --- | --- |
+| Read a product link | `read_link` (returns the product photo as an image) |
+| Create or fix a furniture model | `add_item` (use `from_url`), `update_item`, `render_item`, `verify_item`, `save_model_file` |
+| Look at / edit a house | `list_designs`, `get_design`, `write_design`, `render_design`, `stair_info`, `place_item` |
+| Export for Blender | `export_glb` |
 
-## Workflow
+The app open in the browser updates live when you write a design or the library.
 
-1. `git pull`
-2. Edit `data/project.json` (schema below).
-3. **Increase `"version"` by 1.** Browsers that already have a saved layout only offer
-   "The project file in the repo was updated → Load it" when the version changes.
-4. Check it's valid JSON: `node -e "JSON.parse(require('fs').readFileSync('data/project.json'))"`
-5. Commit with a message describing the change, then push.
+## Vision rule (mandatory for every agent)
 
-## Units and coordinates
+Never trust what you haven't looked at.
 
-- All lengths are **metres** (0.9 = 90 cm).
-- The floor is the x/z plane seen from above: **x** runs to the right and **z** runs toward the
-  default camera (the "front"). The "back wall" has the smallest z.
-- `rot` is degrees around the vertical axis: 0 = the item's front faces +z, 90 = +x, 180 = −z, 270 = −x.
-- A placed item's `x`/`z` is the **centre of its footprint**. An item against the back wall (z = 0) at
-  rot 0 has `z = depth / 2`.
+- **Models:** after `add_item` or `update_item`, look at the returned renders and compare shape, proportions,
+  colours and size with the product photo from `read_link`. Fix mismatches with `update_item` and look again, then
+  call `verify_item` with notes. Models stay "Unverified" in the app until you do, and `verify_item` is refused for
+  any version you haven't rendered.
+- **Layouts:** `write_design` and `place_item` return floor renders. Compare them with what was asked, or with the
+  floor plan image. If anything differs, fix it and write again.
+- Agents without image input can't do this and must say so, leaving items unverified for the person to check.
 
-## Schema
+## Floor plan → house (workflow)
+
+1. Look at the plan image or PDF. Read the overall dimensions and scale: use a dimension line, or a known size
+   (an interior door is about 80–90 cm).
+2. Choose the origin at the top-left outer corner. **x runs right, z runs down the page, units are metres.**
+3. For each storey, write **walls as centre lines**:
+   - exterior walls `thickness` 0.2–0.3 with `exterior: true`;
+   - interior walls 0.1–0.15;
+   - make walls meet end to end at corners and T-junctions, so rooms close.
+4. Add `openings` on their wall:
+   - `offset` is the distance from the wall's `a` end to the opening's near edge;
+   - doors are about 0.8–0.9 × 2.1 m;
+   - windows need a `sill`.
+5. Add stairs on the lower floor (`stair_info` gives the footprint they need) and leave about 95 cm clear floor at
+   both ends. The stairwell in the floor above is cut automatically.
+6. Leave `rooms` empty to auto-detect enclosed rooms, or give names and finishes (`floorKind`: wood, tiles, carpet,
+   concrete).
+7. `write_design`, **look at every floor render**, compare with the plan, fix, repeat.
+
+## Design format (format 2)
+
+All lengths in metres. Rotation in degrees around the vertical axis: 0 = the object's front faces +z (down the plan),
+90 = +x, 180 = −z, 270 = −x.
 
 ```jsonc
 {
-  "version": 3,                       // bump on every edit
-  "room": {
-    "points": [[0,0],[4.2,0],[4.2,3.6],[0,3.6]],  // floor outline corners [x,z], in order; ≥ 3; any shape
-    "height": 2.6,                    // ceiling height
-    "floorKind": "wood",              // wood | tiles | carpet | concrete
-    "floorColor": "#c49a6c",
-    "wallColor": "#efebe4",
-    "openings": [                     // doors/windows; wall i runs from points[i] to points[i+1]
-      { "id": "o-door", "type": "door", "wall": 1, "offset": 2.6, "width": 0.9, "height": 2.1, "sill": 0, "open": true },
-      { "id": "o-win",  "type": "window", "wall": 3, "offset": 1.0, "width": 1.4, "height": 1.4, "sill": 0.8 }
-      // offset = distance from the wall's start corner to the opening's near edge
-    ]
-  },
-  "inventory": [                      // furniture models available to place
+  "format": 2,
+  "id": "my-house",                     // letters, digits, - and _ only
+  "name": "My house",
+  "wallColor": "#efebe4",
+  "floors": [                           // bottom to top; elevations are computed from height + slab
     {
-      "id": "i-sofa",                 // unique, referenced by placed[].itemId
-      "name": "IKEA KIVIK 3-seat sofa",
-      "category": "sofa",             // decides how the 3D model is generated (list below)
-      "dims": { "w": 2.28, "d": 0.95, "h": 0.83 },  // width (side to side), depth (front-back), overall height
-      "colors": [ { "name": "Gunnared dark grey", "hex": "#4a4b4d" } ],  // available colour options
-      "accent": { "name": "Black", "hex": "#1d1d1f" },   // optional legs/frame colour
-      "url": "https://…",             // optional product page
-      "image": "https://…",           // optional photo for the inventory card
-      "modelUrl": "https://….glb"     // optional real 3D model; scaled to dims automatically
+      "name": "Ground floor",
+      "height": 2.7,                    // finished floor to ceiling
+      "slab": 0.15,                     // floor slab thickness under this floor
+      "walls": [ { "id": "w1", "a": [0, 0], "b": [10, 0], "thickness": 0.25, "exterior": true } ],
+      "openings": [
+        { "id": "o1", "type": "door", "wall": "w1", "offset": 2.0, "width": 0.9, "height": 2.1, "open": false },
+        { "id": "o2", "type": "window", "wall": "w1", "offset": 5.0, "width": 1.6, "height": 1.3, "sill": 0.9 }
+        // type "opening" = doorless gap
+      ],
+      "rooms": [ { "id": "r1", "name": "Living", "points": [[0.125, 0.125], [5, 0.125], [5, 7.875], [0.125, 7.875]], "floorKind": "wood", "floorColor": "#c49a6c" } ],
+      "stairs": [ { "id": "s1", "shape": "U", "turn": "left", "x": 9.3, "z": 6.9, "rot": 0, "width": 1.0 } ],
+      // stairs lead up to the next floor. x/z = bottom-centre of the first step; rot 0 climbs toward −z.
+      // Step height/depth are computed from the floor-to-floor height (≤ 18 cm rise, 2·rise + tread ≈ 63 cm).
+      "placed": [ { "id": "p1", "itemId": "i-sofa", "x": 3, "z": 0.6, "rot": 0, "color": "Sage green", "y": 0 } ]
+      // x/z = centre of the item's footprint; y = lift (e.g. a lamp on a table)
     }
-  ],
-  "placed": [                         // what's actually in the room
-    { "id": "p-sofa", "itemId": "i-sofa", "x": 2.1, "z": 0.475, "rot": 0, "color": "Gunnared dark grey", "y": 0 }
-    // color = one of the item's colour names (or a "#rrggbb"); y = lift off the floor (e.g. a lamp on a table)
   ]
 }
 ```
 
-**Categories:** sofa, armchair, chair, stool, ottoman, bed, wardrobe, bookshelf, dresser, nightstand,
-sideboard, tvstand, desk, table, coffeetable, sidetable, floorlamp, lamp, rug, plant, tv, mirror,
-curtain, box. Names containing "office" (chairs), "round" (tables, rugs) or "pouf" change the style.
-Sofas deeper than 1.25 m get a chaise.
+Library models (`designs/library.json` → `items[]`):
+`{ id, name, category, dims: {w, d, h}, colors: [{name, hex}], accent?, url?, image?, modelUrl?, verified? }`.
 
-## Tips
+**Categories:** sofa, armchair, chair, stool, ottoman, bed, wardrobe, bookshelf, dresser, nightstand, sideboard,
+tvstand, desk, table, coffeetable, sidetable, floorlamp, lamp, rug, plant, tv, mirror, curtain, box. Names containing
+"office" (chairs), "round" (tables, rugs) or "pouf" change the style. Sofas deeper than 1.25 m get a chaise.
 
-- Use real product dimensions. Wood finishes should be named with a wood word (oak, walnut…) so they
-  get a wood texture.
-- Keep every placed item inside the room outline and not overlapping. Leave about 80 cm walkways.
-- Keep ids stable when editing existing items; make new ids unique (e.g. `i-desk-2`, `p-desk-2`).
-- To preview, run `npm start`.
+## Working on the software itself
+
+- No build step: `index.html` + `js/*.js` (ES modules). Libraries are served from `node_modules` via `/vendor/…`
+  (see the import map in `index.html`).
+- Key files:
+  - `js/design.js`: data model, stairs maths, validation (pure JS, also used by the tools)
+  - `js/house.js`: geometry
+  - `js/viewer.js`: rendering and interaction
+  - `js/walk.js`: walk-through
+  - `js/tools.js`: editing tools
+  - `js/app.js`: UI
+  - `tools/`: local server, MCP server, CLI
+- Tests: `npm test`. Check UI changes in a real browser, not just the tests.

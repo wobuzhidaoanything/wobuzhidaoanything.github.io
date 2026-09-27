@@ -1,23 +1,28 @@
-// Render page used by agents (via tools/lib/render.mjs) to see a model or the room.
-//   preview.html?item=<itemId>&color=<name>   one inventory item, studio lighting
-//   preview.html?room=1                       the whole room from data/project.json
-// The page exposes window.preview.show(view) and sets window.preview.ready.
+// Render page used by agent tools (tools/lib/render.mjs) through a headless browser.
+//   preview.html?item=<itemId>&color=<name>      one furniture model, studio lighting
+//   preview.html?design=<id>                     a house design (views: 3d:<floor>, plan:<floor>, exterior)
+// Exposes window.preview = { ready, error, show(view), exportGLB() }.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildParametric, tintModel, DEFAULT_DIMS, CATEGORY_LABELS } from './models.js';
-import { Viewer } from './viewer.js';
+import { Viewer, fitModel } from './viewer.js';
+import { migrate } from './design.js';
 
 const params = new URLSearchParams(location.search);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const proxy = (u) => (/^https?:/i.test(u) && !u.startsWith(location.origin) ? `${location.origin}/asset?url=${encodeURIComponent(u)}` : u);
-const api = (window.preview = { ready: false, error: null, views: [] });
-
-const project = await fetch('data/project.json', { cache: 'no-store' }).then((r) => r.json());
+const api = (window.preview = { ready: false, error: null });
+const get = async (url) => {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+  return r.json();
+};
 
 async function itemMode(itemId) {
-  const item = project.inventory.find((i) => i.id === itemId);
-  if (!item) throw new Error(`No inventory item "${itemId}"`);
+  const library = await get('api/library');
+  const item = library.items.find((i) => i.id === itemId);
+  if (!item) throw new Error(`No model "${itemId}" in the library`);
   const def = DEFAULT_DIMS[item.category] || [0.6, 0.6, 0.6];
   const dims = { w: item.dims?.w || def[0], d: item.dims?.d || def[1], h: item.dims?.h || def[2] };
   const color = item.colors?.find((c) => c.name === params.get('color')) || item.colors?.[0];
@@ -26,7 +31,6 @@ async function itemMode(itemId) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   stage.appendChild(renderer.domElement);
@@ -46,7 +50,6 @@ async function itemMode(itemId) {
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
-  // 1 m grid so scale is readable in the render
   const grid = new THREE.GridHelper(span * 6, Math.round(span * 6), 0xb5b0a6, 0xcfcac2);
   grid.position.y = 0.001;
   scene.add(grid);
@@ -56,22 +59,9 @@ async function itemMode(itemId) {
   if (item.modelUrl && item.useModel !== false) {
     try {
       const gltf = await new GLTFLoader().loadAsync(proxy(item.modelUrl));
-      const m = gltf.scene;
-      let box = new THREE.Box3().setFromObject(m);
-      let size = box.getSize(new THREE.Vector3());
-      if (Math.abs(size.z / size.x - dims.w / dims.d) < Math.abs(size.x / size.z - dims.w / dims.d) - 0.05) {
-        m.rotation.y = Math.PI / 2;
-        m.updateMatrixWorld(true);
-        box = new THREE.Box3().setFromObject(m);
-        size = box.getSize(new THREE.Vector3());
-      }
-      m.scale.multiply(new THREE.Vector3(dims.w / (size.x || 1), dims.h / (size.y || 1), dims.d / (size.z || 1)));
-      m.updateMatrixWorld(true);
-      box = new THREE.Box3().setFromObject(m);
-      const c = box.getCenter(new THREE.Vector3());
-      m.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
-      tintModel(m, item.colors?.length > 1 ? color?.hex : null);
-      model = m;
+      fitModel(gltf.scene, dims);
+      tintModel(gltf.scene, item.colors?.length > 1 ? color?.hex : null);
+      model = gltf.scene;
       source = 'store 3D model';
     } catch (err) {
       source = `generated (3D model failed to load: ${err.message || err})`;
@@ -95,36 +85,58 @@ async function itemMode(itemId) {
     side: [dist, dims.h * 0.55, 0],
     top: [0.001, dist * 1.2, 0.001],
   };
-  api.views = Object.keys(VIEWS);
   api.show = async (view) => {
-    const p = VIEWS[view] || VIEWS['three-quarter'];
-    camera.position.set(...p);
+    camera.position.set(...(VIEWS[view] || VIEWS['three-quarter']));
     camera.lookAt(target);
     document.getElementById('viewName').textContent = `${view} view · grid = 1 m`;
     renderer.render(scene, camera);
   };
 }
 
-async function roomMode() {
-  const stage = document.getElementById('stage');
-  const viewer = new Viewer(stage, {});
+async function designMode(id) {
+  const [design, library] = await Promise.all([get(`api/designs/${encodeURIComponent(id)}`).then(migrate), get('api/library')]);
+  const viewer = new Viewer(document.getElementById('stage'), {});
+  viewer.library = library.items;
   viewer.setAssetProxy(proxy);
-  const room = project.room;
-  viewer.setRoom({ ...room, openings: room.openings || [] });
-  viewer.sync(project.placed || [], project.inventory || []);
-  // Wait for store 3D models to finish loading.
+  viewer.setDesign(design, { refit: true });
   for (let i = 0; i < 100 && [...viewer.items.values()].some((r) => r.loading); i++) await new Promise((r) => setTimeout(r, 100));
-  api.views = ['3d', 'plan', 'eye'];
-  api.show = async (view) => {
-    viewer.setView(view);
-    document.getElementById('viewName').textContent = `${view} view`;
+  const tag = document.getElementById('tag');
+  api.show = async (spec) => {
+    // spec: "3d:<floor>", "plan:<floor>" or "exterior"
+    const [view, f] = spec.split(':');
+    const floor = Math.max(0, Math.min(design.floors.length - 1, +(f ?? 0) || 0));
+    if (view === 'exterior') {
+      viewer.setView('3d');
+      viewer.setWallMode('up');
+      viewer.setActiveFloor(design.floors.length - 1, { animate: false });
+      viewer.frameHouse(false);
+    } else {
+      viewer.setView(view === 'plan' ? 'plan' : '3d');
+      viewer.setWallMode('cut');
+      viewer.setActiveFloor(floor, { animate: false });
+      viewer.frameHouse(false);
+    }
+    viewer.orbit.update(1);
+    viewer.plan.update(1);
+    tag.hidden = false;
+    tag.innerHTML = `<b>${esc(design.name)}</b><div class="row">${view === 'exterior' ? 'Whole house, outside' : `${esc(design.floors[floor].name)} · ${view === 'plan' ? 'floor plan, walls cut at 1.25 m' : '3D, walls cut at 1.25 m'}`}</div>`;
+    document.getElementById('viewName').textContent = spec;
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   };
+  api.exportGLB = async () => {
+    const { exportGLB } = await import('./export.js');
+    const blob = await exportGLB(viewer);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  };
+  api.floors = design.floors.map((f) => f.name);
 }
 
 try {
   if (params.get('item')) await itemMode(params.get('item'));
-  else await roomMode();
+  else await designMode(params.get('design'));
   api.ready = true;
 } catch (err) {
   api.error = err.message || String(err);

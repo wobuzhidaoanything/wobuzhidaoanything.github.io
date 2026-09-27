@@ -3,78 +3,121 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
   <title>Roomcraft</title>
-  <meta name="description" content="Plan any room in 3D with real furniture from any store link.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='26' height='14' rx='4' fill='%232f6fed'/%3E%3Crect x='6' y='6' width='20' height='10' rx='3' fill='%2393b4f7'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <meta name="description" content="Design a whole house in 3D, furnish it from any store link, and walk through it.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 15 16 5l12 10v12H4z' fill='%232f6fed'/%3E%3Crect x='13' y='19' width='6' height='8' fill='%2393b4f7'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/",
+      "three/examples/jsm/": "./vendor/three/examples/jsm/",
+      "three-mesh-bvh": "./vendor/three-mesh-bvh/build/index.module.js",
+      "three-bvh-csg": "./vendor/three-bvh-csg/build/index.module.js",
+      "three-gpu-pathtracer": "./vendor/three-gpu-pathtracer/build/index.module.js",
+      "camera-controls": "./vendor/camera-controls/dist/camera-controls.module.js",
+      "n8ao": "./vendor/n8ao/dist/N8AO.js",
+      "postprocessing": "./vendor/postprocessing/build/index.js",
+      "polygon-clipping": "./vendor/polygon-clipping/dist/polygon-clipping.esm.js",
+      "splaytree": "./vendor/splaytree/dist/splaytree.js",
+      "robust-predicates": "./vendor/robust-predicates/index.js"
     }
   }
   </script>
 </head>
 <body>
   <header class="topbar">
+    <button class="icon-btn only-narrow" id="panelToggle" aria-label="Panel"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
     <div class="brand"><span class="logo"></span>Roomcraft</div>
-    <div class="seg" id="viewSeg" role="tablist" aria-label="Camera">
-      <button data-view="3d" class="on" title="Orbit around the room (1)">3D</button>
-      <button data-view="plan" title="Top-down floor plan (2)">Plan</button>
-      <button data-view="eye" title="Eye level – walk with W A S D (3)">Walk</button>
+    <button class="design-btn" id="designBtn" title="Your designs"><span id="designName">…</span><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+    <div class="seg" id="viewSeg" role="tablist" aria-label="View">
+      <button data-view="3d" class="on" title="Dollhouse view (1)">3D</button>
+      <button data-view="plan" title="Floor plan (2)">Plan</button>
+      <button data-view="walk" title="Walk through the house (3)">Walk</button>
     </div>
-    <button class="btn" id="editRoomBtn" title="Change the room's shape, walls, doors and windows">Edit room</button>
+    <button class="btn" id="editBtn" title="Walls, rooms, doors, windows, stairs and floors (E)">Edit house</button>
     <div class="spacer"></div>
     <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
     <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-    <button class="icon-btn" id="shotBtn" title="Save a screenshot" aria-label="Screenshot"><svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg></button>
+    <button class="btn ghost hide-narrow" id="photoBtn" title="Render a photoreal image of this view"><svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg>Photo</button>
+    <div class="menu-wrap hide-narrow">
+      <button class="btn" id="exportBtn" aria-haspopup="menu">Export</button>
+      <div class="menu" id="exportMenu" role="menu" hidden>
+        <button data-act="glb"><b>3D model for Blender</b><span>Whole house as .glb</span></button>
+        <button data-act="design"><b>Design file</b><span>.json to back up or share</span></button>
+        <button data-act="png"><b>Screenshot</b><span>This view as .png</span></button>
+      </div>
+    </div>
+    <button class="btn agents-btn" id="agentsBtn" title="Connect AI agents"><span class="status-dot" id="agentsDot"></span><span class="hide-narrow">Agents</span></button>
     <div class="menu-wrap">
       <button class="icon-btn" id="menuBtn" aria-haspopup="menu" aria-label="More"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
       <div class="menu" id="menu" role="menu" hidden>
-        <button data-act="export">Export project (.json)</button>
-        <button data-act="import">Import project…</button>
-        <button data-act="reload">Load project from repo</button>
+        <button data-act="glb" class="only-narrow-item">Export 3D model for Blender (.glb)</button>
+        <button data-act="design" class="only-narrow-item">Export design file</button>
+        <button data-act="png" class="only-narrow-item">Save screenshot</button>
+        <button data-act="photo" class="only-narrow-item">Render photo</button>
+        <hr class="only-narrow-item">
+        <button data-act="import-design">Import design file…</button>
+        <button data-act="import-dxf">Import CAD floor plan (DXF)…</button>
         <hr>
-        <button data-act="settings">Link scraper settings…</button>
-        <button data-act="help">Shortcuts & help</button>
-        <hr>
-        <button data-act="clear" class="danger">Clear room</button>
+        <button data-act="quality">Graphics: <span id="qualityLabel">High</span></button>
+        <button data-act="settings">Link reader…</button>
+        <button data-act="help">Shortcuts &amp; help</button>
       </div>
     </div>
-    <button class="icon-btn only-narrow" id="panelToggle" aria-label="Inventory"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
   </header>
 
   <div class="layout">
     <aside class="left panel" id="leftPanel">
-      <section class="import">
-        <h2>Add from a link</h2>
-        <div class="dropzone" id="dropzone">
-          <textarea id="linkInput" rows="3" placeholder="Paste or drag product links here (one per line): IKEA, Amazon, Wayfair, Shopify stores…"></textarea>
-          <div class="dz-row">
-            <span class="hint">Drop links anywhere on the page</span>
-            <button class="btn primary" id="importBtn">Import</button>
+      <div id="furniturePanel">
+        <section class="import">
+          <h2>Add furniture from a link</h2>
+          <div class="dropzone" id="dropzone">
+            <textarea id="linkInput" rows="2" placeholder="Paste or drop product links (IKEA, Amazon, Wayfair, Shopify stores…)"></textarea>
+            <div class="dz-row"><span class="hint">Drop links anywhere</span><button class="btn primary small" id="importBtn">Import</button></div>
           </div>
-        </div>
-        <ul class="queue" id="queue"></ul>
-      </section>
-      <section class="inv">
-        <div class="inv-head">
-          <h2>Inventory <span class="count" id="invCount"></span></h2>
-          <button class="btn small" id="newItemBtn">+ Custom</button>
-        </div>
-        <input class="search" id="invSearch" type="search" placeholder="Search inventory">
-        <div class="cards" id="inventory"></div>
-      </section>
+          <ul class="queue" id="queue"></ul>
+        </section>
+        <section class="inv">
+          <div class="inv-head">
+            <h2>Models <span class="count" id="invCount"></span></h2>
+            <button class="btn small" id="newItemBtn">+ Custom</button>
+          </div>
+          <input class="search" id="invSearch" type="search" placeholder="Search models">
+          <div class="cards" id="inventory"></div>
+        </section>
+      </div>
+      <div id="buildPanel" hidden></div>
     </aside>
 
     <main class="stage" id="stage">
+      <div class="viewport" id="viewport"></div>
+      <div class="floor-stack" id="floorStack"></div>
       <div class="banner" id="banner" hidden></div>
-      <div class="drop-overlay" id="dropOverlay" hidden><div>Drop links to import</div></div>
       <div class="hintbar" id="hintbar"></div>
-      <div class="loading" id="loading">Loading 3D engine…</div>
+      <div class="walk-ui" id="walkUI" hidden>
+        <div class="crosshair"></div>
+        <div class="walk-help" id="walkHelp"></div>
+        <div class="dpad only-touch">
+          <button data-move="1,0" aria-label="Forward">▲</button>
+          <button data-move="0,-1" aria-label="Left">◀</button>
+          <button data-move="-1,0" aria-label="Back">▼</button>
+          <button data-move="0,1" aria-label="Right">▶</button>
+        </div>
+      </div>
+      <div class="photo-overlay" id="photoOverlay" hidden>
+        <div class="photo-card">
+          <b id="photoTitle">Rendering photo…</b>
+          <div class="bar"><span id="photoBar"></span></div>
+          <div class="muted" id="photoInfo"></div>
+          <img id="photoImg" alt="" hidden>
+          <div class="actions"><button class="btn" id="photoCancel">Cancel</button><button class="btn primary" id="photoSave" hidden>Download</button></div>
+        </div>
+      </div>
+      <div class="loading" id="loading">Loading…</div>
     </main>
 
     <aside class="right panel" id="inspector"></aside>
@@ -82,7 +125,7 @@
 
   <dialog id="itemDialog" class="dialog">
     <form method="dialog" id="itemForm">
-      <h3 id="itemDialogTitle">Item</h3>
+      <h3 id="itemDialogTitle">Model</h3>
       <div class="note" id="itemNote" hidden></div>
       <label>Name<input name="name" required></label>
       <div class="grid2">
@@ -106,51 +149,87 @@
           <label>Legs / frame colour<span class="inline"><input type="checkbox" name="accentOn"> <input type="color" name="accent" value="#4a3426"></span></label>
           <label>Photo URL<input name="image" type="url"></label>
         </div>
-        <label>3D model URL (.glb / .gltf)<input name="modelUrl" type="url" placeholder="Leave empty to use a generated model"></label>
+        <label>3D model URL (.glb / .gltf)<input name="modelUrl" type="text" placeholder="Leave empty to use a generated model"></label>
         <label class="check"><input type="checkbox" name="useModel" checked> Use the 3D model when available</label>
       </details>
       <div class="actions">
-        <button type="button" class="btn danger ghost" id="deleteItemBtn">Delete item</button>
+        <button type="button" class="btn danger ghost" id="deleteItemBtn">Delete model</button>
         <span class="spacer"></span>
         <button type="button" class="btn" id="cancelItemBtn">Cancel</button>
-        <button type="submit" class="btn primary" id="saveItemBtn">Save</button>
+        <button type="submit" class="btn primary">Save</button>
       </div>
     </form>
   </dialog>
 
+  <dialog id="designsDialog" class="dialog wide">
+    <div class="dlg-head"><h3>Your designs</h3><span class="muted" id="storageNote"></span></div>
+    <div class="design-list" id="designList"></div>
+    <div class="actions">
+      <button class="btn" id="importDesignBtn">Import file…</button>
+      <span class="spacer"></span>
+      <button class="btn" data-close>Close</button>
+      <button class="btn primary" id="newDesignBtn">+ New house</button>
+    </div>
+  </dialog>
+
+  <dialog id="newHouseDialog" class="dialog">
+    <form method="dialog" id="newHouseForm">
+      <h3>New house</h3>
+      <p class="muted">Start with an empty shell. Draw interior walls with Edit house, give an AI agent a floor plan, or import a DXF.</p>
+      <label>Name<input name="name" value="My house" required></label>
+      <div class="grid2">
+        <label>Width (m)<input name="width" type="number" min="3" max="60" step="0.1" value="10" required></label>
+        <label>Depth (m)<input name="depth" type="number" min="3" max="60" step="0.1" value="8" required></label>
+        <label>Floors<input name="floors" type="number" min="1" max="6" step="1" value="2" required></label>
+        <label>Ceiling height (m)<input name="height" type="number" min="2.1" max="6" step="0.05" value="2.7" required></label>
+      </div>
+      <div class="actions"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Create</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="agentsDialog" class="dialog wide">
+    <div class="dlg-head"><h3 id="agentsTitle">Connect your AI agent</h3></div>
+    <p class="muted" id="agentsIntro">Your agent can read product links, create furniture models (and check them with its own eyes), trace floor plans into the house and export it. Pick the agent you use; it sets itself up from a prompt.</p>
+    <div id="agentsConnected"></div>
+    <div class="agent-grid" id="agentGrid"></div>
+    <div id="agentSetup" hidden></div>
+    <div class="actions"><label class="check small-check"><input type="checkbox" id="agentsDontAsk"> Don't show at start</label><span class="spacer"></span><button class="btn" data-close>Done</button></div>
+  </dialog>
+
   <dialog id="settingsDialog" class="dialog">
     <form method="dialog">
-      <h3>Link scraper</h3>
-      <p class="muted">Links are read by your own free Cloudflare Worker (see <code>worker/README.md</code>). Paste its URL here.</p>
+      <h3>Link reader</h3>
+      <p class="muted" id="readerNote">When you run Roomcraft with <code>npm start</code>, links are read on this computer and nothing needs setting up. Only set this if you host your own Cloudflare Worker (see <code>worker/README.md</code>).</p>
       <label>Worker URL<input id="workerUrl" type="url" placeholder="https://room-planner-worker.<you>.workers.dev"></label>
       <div class="test-row"><button type="button" class="btn small" id="testWorker">Test connection</button><span id="workerStatus" class="muted"></span></div>
       <div class="actions"><span class="spacer"></span><button class="btn primary" value="ok">Done</button></div>
     </form>
   </dialog>
 
-  <dialog id="helpDialog" class="dialog">
+  <dialog id="helpDialog" class="dialog wide">
     <form method="dialog">
       <h3>How to use</h3>
       <ul class="help">
-        <li><b>Add furniture:</b> paste or drop a product link, or click <b>+ Custom</b>. Drag a card from the inventory into the room, or press <b>Add</b>.</li>
-        <li><b>Move:</b> drag an item. It snaps flush to walls and sits on tables, shelves and rugs. Hold <kbd>Shift</kbd> for free movement.</li>
-        <li><b>Rotate:</b> drag the blue dot on the ring (15° steps, <kbd>Shift</kbd> for 1°), or press <kbd>R</kbd>.</li>
-        <li><b>Room shape:</b> <b>Edit room</b>, then drag the blue corners. Double-click a wall to add a corner. Click a wall to add doors and windows.</li>
-        <li><b>Walk:</b> switch to Walk view and use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, dragging to look around.</li>
+        <li><b>Floors:</b> pick a floor on the left of the view. Upper floors hide so you can see into the one you're on.</li>
+        <li><b>Furniture:</b> drag a model card into the room, or press <b>Add</b>. Drag to move (it snaps to walls and sits on tables and rugs), drag the blue dot to rotate.</li>
+        <li><b>Edit house:</b> draw walls (click corners, double-click or Esc to finish), click inside enclosed walls to make a room, click a wall to add a door or window, place stairs. Drag walls, corners, doors and stairs to adjust them.</li>
+        <li><b>Walk:</b> click the view to look around with the mouse, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to walk, <kbd>Shift</kbd> to hurry, and take the stairs between floors. <kbd>Esc</kbd> releases the mouse.</li>
+        <li><b>Designs</b> are saved on this device automatically. Export a design file to share it, or a .glb to open in Blender.</li>
       </ul>
       <table class="keys">
-        <tr><td><kbd>Del</kbd></td><td>Remove selected</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate</td></tr>
-        <tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>Rotate ±90°</td><td>Arrows</td><td>Nudge 1 cm (Shift: 10)</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td><kbd>Esc</kbd></td><td>Deselect</td></tr>
-        <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>3D / Plan / Walk</td><td></td><td></td></tr>
+        <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>3D / Plan / Walk</td><td><kbd>E</kbd></td><td>Edit house</td></tr>
+        <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Floor up / down</td><td><kbd>Del</kbd></td><td>Delete selection</td></tr>
+        <tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>Rotate ±90°</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td><kbd>Esc</kbd></td><td>Deselect / stop tool</td></tr>
       </table>
       <div class="actions"><span class="spacer"></span><button class="btn primary">Got it</button></div>
     </form>
   </dialog>
 
-  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+  <input type="file" id="designFile" accept=".json,application/json" hidden>
+  <input type="file" id="dxfFile" accept=".dxf" hidden>
+  <div class="drop-overlay" id="dropOverlay" hidden><div>Drop links to import</div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -1,58 +1,71 @@
 # Roomcraft
 
-Free 3D room planner that runs on GitHub Pages. Build a room of any shape, drop in furniture from any
-store link, pick its colour, and see it to scale.
+Design a whole house in 3D on your own computer. Set its size and floors, draw or trace the floor plan, furnish it
+from any store link, walk through it (stairs included), and export it to Blender.
 
-- **Any room shape:** rectangle, L, T, U presets, or drag corners and add new ones. Set wall lengths, ceiling
-  height, floor type and colours, and add doors and windows.
-- **Furniture from links:** paste or drag product links (IKEA, Amazon, Wayfair, Shopify stores, anything
-  with product data). The link reader worker pulls dimensions, colour options and 3D models.
-- **Real-looking models:** uses the store's 3D model when there is one. Otherwise a detailed model is
-  generated for the type (sofa with cushions and chaise, bed with bedding, bookcase with books,
-  wardrobe, dresser, tables, chairs, lamps, plants, rugs, TV, mirror, curtains…) at the exact size,
-  with fabric, wood and metal materials.
-- **Easy to arrange:** drag to move, drag the blue dot to rotate, items snap flush to walls and sit on
-  tables and rugs. 3D, plan and walk-through views, undo/redo, screenshots, export/import.
-
-## Run it (one command)
+## Run it
 
 ```bash
+git clone <this repo> && cd <repo>
 npm start
 ```
 
-This installs what's needed on first run, serves the site at http://127.0.0.1:5173, opens your browser, and
-reads pasted product links locally, so there's no worker to deploy. Needs Node.js 18.17+.
+That's the only command. The first run installs dependencies. After that it opens the app at
+http://127.0.0.1:5173. It needs Node.js 18.17 or newer.
 
-## AI agents (MCP)
+`git pull` updates the software. Your designs and models stay on your computer in `designs/`, which git ignores,
+so pulling never touches them.
 
-`tools/mcp-server.mjs` lets any MCP-capable agent read product links, add furniture models, and **see
-renders of them** before marking them verified. Config files for Claude Code, Cursor, VS Code, Gemini CLI,
-OpenCode and Grok are committed, so it's picked up after `git pull`. Setup for every agent (including
-Codex and Windsurf) and the CLI alternative: [docs/MCP.md](docs/MCP.md).
+## What you can do
 
-## Editing the layout with an AI agent
+- **Houses of any size, multi-floor:**
+  - start a new house at any width, depth, number of floors and ceiling height;
+  - draw walls with snapping and live lengths;
+  - click to create rooms;
+  - add doors, windows and openings;
+  - place straight, L or U stairs, whose step height and depth follow real building rules and adapt to the
+    floor-to-floor height (the stairwell is cut in the floor above);
+  - import CAD floor plans (DXF).
+- **Floor by floor:** switch floors and see each one cut like an architect's plan, in 3D or top-down.
+- **Walk through:** first-person with mouse-look and W A S D. You collide with walls and furniture and climb
+  the stairs step by step between floors.
+- **Furniture from links:** paste or drop product links (IKEA, Amazon, Wayfair, Shopify stores…). Their size,
+  colours and 3D models are read on your computer. Models without a store 3D file are generated in detail at the
+  exact size. Drag to place, rotate, recolour; items snap to walls and stack on tables and rugs.
+- **Photo:** a path-traced, photoreal image of the current view.
+- **Export:** one `.glb` for Blender with everything named and grouped by floor, room, walls, openings, stairs and
+  furniture. Design files (`.json`) are for backup and sharing.
+- **Several designs:** create, switch, duplicate, rename and import designs. Everything saves automatically.
 
-The house layout is `data/project.json`. Any coding agent (Claude Code, Codex, Cursor…) can
-`git pull`, edit that file, bump its `version`, and push. [AGENTS.md](AGENTS.md) explains the format
-and coordinates. Open the site afterwards and it offers **Load it**, which merges the changes with any
-items you imported yourself. To hand your current layout to an agent, use **⋮ → Export project** and
-commit the file as `data/project.json`.
+## AI agents
+
+Open **Agents** in the app, pick your agent (Claude Code, Codex, Cursor, VS Code, Gemini CLI, OpenCode, Grok,
+Windsurf, Claude Desktop or any MCP client) and paste the prompt it gives you. The agent sets itself up. Then it
+can read links, create furniture models (checking renders with its own vision), trace a floor plan image into the
+house, place furniture and export. The open app updates live. Details: [docs/MCP.md](docs/MCP.md) and
+[AGENTS.md](AGENTS.md).
 
 ## Structure
 
 ```
-index.html          page shell (three.js via import map, no build step)
-css/style.css
-js/app.js           state, inventory, import, inspector, undo, persistence
-js/viewer.js        three.js scene, interaction, camera modes
-js/room.js          polygon room, walls with openings
-js/models.js        parametric furniture generators
-js/materials.js     procedural textures and materials
-shared/colors.js    colour-name → hex (used by site and worker)
-data/project.json   the house layout (edited by you or an AI agent, see AGENTS.md)
-tools/              npm start server, MCP server, CLI, headless renderer
-preview.html        render page used by the tools
-docs/MCP.md         agent setup guides
-worker/             optional Cloudflare Worker link reader for a hosted copy (see worker/README.md)
+index.html, css/        the app (no build step; libraries served from node_modules)
+js/design.js            house data model, stairs maths, validation (shared with the tools)
+js/plan.js              2D plan operations (wall union, room detection)
+js/house.js             house geometry (walls with CSG openings, slabs, stairs, railings)
+js/viewer.js            three.js viewer, floors, selection, dragging
+js/walk.js              walk-through with collisions and stairs
+js/tools.js             wall/room/door/window/stairs tools
+js/app.js               UI, designs, undo, import/export
+js/models.js            parametric furniture models
+js/effects.js           ambient occlusion (quality setting)
+js/photo.js, export.js  photoreal render, GLB export
+tools/                  npm start server, MCP server, CLI, headless renderer
+data/                   the sample house and shipped furniture models
+worker/                 optional Cloudflare Worker link reader for hosted copies
 ```
 
+Libraries: three.js, three-mesh-bvh (fast raycasting and walking), three-bvh-csg and polygon-clipping (clean
+cut-outs), camera-controls, n8ao and postprocessing (ambient occlusion), three-gpu-pathtracer (photos), dxf-parser,
+Playwright (agent renders).
+
+Tests: `npm test`.

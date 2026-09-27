@@ -1,0 +1,662 @@
+{
+  "format": 2,
+  "id": "sample-house",
+  "name": "Sample house",
+  "floors": [
+    {
+      "id": "f-psaqit",
+      "name": "Ground floor",
+      "height": 2.7,
+      "slab": 0.15,
+      "walls": [
+        {
+          "id": "w-edh0gk",
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "w-0pzwyt",
+          "a": [
+            10,
+            0
+          ],
+          "b": [
+            10,
+            8
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "w-9g8nkb",
+          "a": [
+            10,
+            8
+          ],
+          "b": [
+            0,
+            8
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "w-2pe98e",
+          "a": [
+            0,
+            8
+          ],
+          "b": [
+            0,
+            0
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "g-mid",
+          "a": [
+            6,
+            0
+          ],
+          "b": [
+            6,
+            8
+          ],
+          "thickness": 0.12
+        },
+        {
+          "id": "g-kit",
+          "a": [
+            6,
+            3.2
+          ],
+          "b": [
+            10,
+            3.2
+          ],
+          "thickness": 0.12
+        }
+      ],
+      "openings": [
+        {
+          "id": "g-front-door",
+          "type": "door",
+          "wall": "w-9g8nkb",
+          "offset": 1.6,
+          "width": 1,
+          "height": 2.1,
+          "open": false,
+          "sill": 0
+        },
+        {
+          "id": "g-living-door",
+          "type": "opening",
+          "wall": "g-mid",
+          "offset": 5.2,
+          "width": 1.2,
+          "height": 2.1,
+          "sill": 0
+        },
+        {
+          "id": "g-kitchen-door",
+          "type": "door",
+          "wall": "g-kit",
+          "offset": 0.5,
+          "width": 0.9,
+          "height": 2.1,
+          "open": true,
+          "sill": 0
+        },
+        {
+          "id": "g-win-back",
+          "type": "window",
+          "wall": "w-edh0gk",
+          "offset": 1.4,
+          "width": 2.4,
+          "height": 1.4,
+          "sill": 0.8
+        },
+        {
+          "id": "g-win-kitchen",
+          "type": "window",
+          "wall": "w-edh0gk",
+          "offset": 7.2,
+          "width": 1.6,
+          "height": 1.2,
+          "sill": 1
+        },
+        {
+          "id": "g-win-left",
+          "type": "window",
+          "wall": "w-2pe98e",
+          "offset": 2.4,
+          "width": 1.6,
+          "height": 1.4,
+          "sill": 0.8
+        },
+        {
+          "id": "g-win-front",
+          "type": "window",
+          "wall": "w-9g8nkb",
+          "offset": 5.6,
+          "width": 2.2,
+          "height": 1.4,
+          "sill": 0.8
+        }
+      ],
+      "rooms": [
+        {
+          "id": "g-room-0",
+          "name": "Living room",
+          "points": [
+            [
+              0.125,
+              0.125
+            ],
+            [
+              0.125,
+              7.875
+            ],
+            [
+              5.94,
+              7.875
+            ],
+            [
+              5.94,
+              0.125
+            ]
+          ],
+          "floorKind": "wood",
+          "floorColor": "#c49a6c"
+        },
+        {
+          "id": "g-room-1",
+          "name": "Kitchen & dining",
+          "points": [
+            [
+              6.06,
+              0.125
+            ],
+            [
+              6.06,
+              3.14
+            ],
+            [
+              9.875,
+              3.14
+            ],
+            [
+              9.875,
+              0.125
+            ]
+          ],
+          "floorKind": "tiles",
+          "floorColor": "#e8e4dc"
+        },
+        {
+          "id": "g-room-2",
+          "name": "Hall",
+          "points": [
+            [
+              6.06,
+              3.26
+            ],
+            [
+              6.06,
+              7.875
+            ],
+            [
+              9.875,
+              7.875
+            ],
+            [
+              9.875,
+              3.26
+            ]
+          ],
+          "floorKind": "wood",
+          "floorColor": "#c49a6c"
+        }
+      ],
+      "stairs": [
+        {
+          "id": "s-main",
+          "shape": "U",
+          "turn": "left",
+          "x": 9.355,
+          "z": 6.9,
+          "rot": 0,
+          "width": 1
+        }
+      ],
+      "placed": [
+        {
+          "id": "p-rug",
+          "itemId": "i-rug",
+          "x": 3,
+          "z": 3.6,
+          "rot": 90,
+          "color": "Cream"
+        },
+        {
+          "id": "p-sofa",
+          "itemId": "i-sofa",
+          "x": 3,
+          "z": 0.6,
+          "rot": 0,
+          "color": "Sage green",
+          "y": 0.012
+        },
+        {
+          "id": "p-coffee",
+          "itemId": "i-coffee",
+          "x": 3,
+          "z": 2.2,
+          "rot": 0,
+          "y": 0.012,
+          "color": "Walnut"
+        },
+        {
+          "id": "p-arm",
+          "itemId": "i-armchair",
+          "x": 1,
+          "z": 3.3,
+          "rot": 90,
+          "y": 0.012,
+          "color": "Cognac leather"
+        },
+        {
+          "id": "p-tvstand",
+          "itemId": "i-tvstand",
+          "x": 3,
+          "z": 7.66,
+          "rot": 180,
+          "color": "Oak"
+        },
+        {
+          "id": "p-tv",
+          "itemId": "i-tv",
+          "x": 3,
+          "z": 7.66,
+          "rot": 180,
+          "y": 0.5,
+          "color": "Black"
+        },
+        {
+          "id": "p-lamp",
+          "itemId": "i-lamp",
+          "x": 0.5,
+          "z": 0.5,
+          "rot": 0,
+          "color": "Linen white"
+        },
+        {
+          "id": "p-plant",
+          "itemId": "i-plant",
+          "x": 5.5,
+          "z": 0.5,
+          "rot": 0,
+          "color": "Terracotta pot"
+        },
+        {
+          "id": "p-shelf",
+          "itemId": "i-shelf",
+          "x": 5.8,
+          "z": 3,
+          "rot": 270,
+          "color": "Oak"
+        },
+        {
+          "id": "p-dining",
+          "itemId": "i-dining",
+          "x": 7.6,
+          "z": 1.7,
+          "rot": 0,
+          "color": "Oak"
+        },
+        {
+          "id": "p-ch1",
+          "itemId": "i-chair",
+          "x": 7.1,
+          "z": 0.95,
+          "rot": 0,
+          "color": "Black"
+        },
+        {
+          "id": "p-ch2",
+          "itemId": "i-chair",
+          "x": 8.1,
+          "z": 0.95,
+          "rot": 0,
+          "color": "Black"
+        },
+        {
+          "id": "p-ch3",
+          "itemId": "i-chair",
+          "x": 7.1,
+          "z": 2.45,
+          "rot": 180,
+          "color": "Black"
+        },
+        {
+          "id": "p-ch4",
+          "itemId": "i-chair",
+          "x": 8.1,
+          "z": 2.45,
+          "rot": 180,
+          "color": "Black"
+        },
+        {
+          "id": "p-side",
+          "itemId": "i-side",
+          "x": 9.6,
+          "z": 2.8,
+          "rot": 0,
+          "color": "Walnut"
+        }
+      ]
+    },
+    {
+      "id": "f-eoorwy",
+      "name": "Floor 1",
+      "height": 2.7,
+      "slab": 0.2,
+      "walls": [
+        {
+          "id": "w-mljvme",
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "w-uxjfi9",
+          "a": [
+            10,
+            0
+          ],
+          "b": [
+            10,
+            8
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "w-or731o",
+          "a": [
+            10,
+            8
+          ],
+          "b": [
+            0,
+            8
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "w-inifjz",
+          "a": [
+            0,
+            8
+          ],
+          "b": [
+            0,
+            0
+          ],
+          "thickness": 0.25,
+          "exterior": true
+        },
+        {
+          "id": "f-mid",
+          "a": [
+            5.6,
+            0
+          ],
+          "b": [
+            5.6,
+            8
+          ],
+          "thickness": 0.12
+        },
+        {
+          "id": "f-off",
+          "a": [
+            5.6,
+            2.8
+          ],
+          "b": [
+            10,
+            2.8
+          ],
+          "thickness": 0.12
+        }
+      ],
+      "openings": [
+        {
+          "id": "f-bed-door",
+          "type": "door",
+          "wall": "f-mid",
+          "offset": 6.3,
+          "width": 0.9,
+          "height": 2.1,
+          "open": true,
+          "sill": 0
+        },
+        {
+          "id": "f-office-door",
+          "type": "door",
+          "wall": "f-off",
+          "offset": 0.4,
+          "width": 0.9,
+          "height": 2.1,
+          "open": true,
+          "sill": 0
+        },
+        {
+          "id": "f-win-back",
+          "type": "window",
+          "wall": "w-mljvme",
+          "offset": 1.6,
+          "width": 2,
+          "height": 1.3,
+          "sill": 0.9
+        },
+        {
+          "id": "f-win-office",
+          "type": "window",
+          "wall": "w-mljvme",
+          "offset": 7,
+          "width": 1.6,
+          "height": 1.3,
+          "sill": 0.9
+        },
+        {
+          "id": "f-win-left",
+          "type": "window",
+          "wall": "w-inifjz",
+          "offset": 2.8,
+          "width": 1.4,
+          "height": 1.3,
+          "sill": 0.9
+        },
+        {
+          "id": "f-win-front",
+          "type": "window",
+          "wall": "w-or731o",
+          "offset": 6.2,
+          "width": 1.6,
+          "height": 1.3,
+          "sill": 0.9
+        }
+      ],
+      "rooms": [
+        {
+          "id": "f-room-0",
+          "name": "Bedroom",
+          "points": [
+            [
+              0.125,
+              0.125
+            ],
+            [
+              0.125,
+              7.875
+            ],
+            [
+              5.54,
+              7.875
+            ],
+            [
+              5.54,
+              0.125
+            ]
+          ],
+          "floorKind": "carpet",
+          "floorColor": "#cfc6b8"
+        },
+        {
+          "id": "f-room-1",
+          "name": "Office",
+          "points": [
+            [
+              5.66,
+              0.125
+            ],
+            [
+              5.66,
+              2.74
+            ],
+            [
+              9.875,
+              2.74
+            ],
+            [
+              9.875,
+              0.125
+            ]
+          ],
+          "floorKind": "wood",
+          "floorColor": "#c49a6c"
+        },
+        {
+          "id": "f-room-2",
+          "name": "Landing",
+          "points": [
+            [
+              5.66,
+              2.86
+            ],
+            [
+              5.66,
+              7.875
+            ],
+            [
+              9.875,
+              7.875
+            ],
+            [
+              9.875,
+              2.86
+            ]
+          ],
+          "floorKind": "wood",
+          "floorColor": "#c49a6c"
+        }
+      ],
+      "stairs": [],
+      "placed": [
+        {
+          "id": "p-bed",
+          "itemId": "i-bed",
+          "x": 2.8,
+          "z": 1.2,
+          "rot": 0,
+          "color": "Light grey"
+        },
+        {
+          "id": "p-n1",
+          "itemId": "i-night",
+          "x": 1.6,
+          "z": 0.35,
+          "rot": 0,
+          "color": "Oak"
+        },
+        {
+          "id": "p-n2",
+          "itemId": "i-night",
+          "x": 4,
+          "z": 0.35,
+          "rot": 0,
+          "color": "Oak"
+        },
+        {
+          "id": "p-wardrobe",
+          "itemId": "i-wardrobe",
+          "x": 2.8,
+          "z": 7.58,
+          "rot": 180,
+          "color": "White"
+        },
+        {
+          "id": "p-dresser",
+          "itemId": "i-dresser",
+          "x": 0.38,
+          "z": 5,
+          "rot": 90,
+          "color": "Walnut"
+        },
+        {
+          "id": "p-mirror",
+          "itemId": "i-mirror",
+          "x": 5.5,
+          "z": 4.2,
+          "rot": 270,
+          "color": "Brass"
+        },
+        {
+          "id": "p-desk",
+          "itemId": "i-desk",
+          "x": 7.8,
+          "z": 0.45,
+          "rot": 0,
+          "color": "Oak"
+        },
+        {
+          "id": "p-office",
+          "itemId": "i-office",
+          "x": 7.8,
+          "z": 1.25,
+          "rot": 180,
+          "color": "Black"
+        },
+        {
+          "id": "p-pouf",
+          "itemId": "i-pouf",
+          "x": 4.4,
+          "z": 3.4,
+          "rot": 0,
+          "color": "Mustard"
+        }
+      ]
+    }
+  ],
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "wallColor": "#efebe4"
+}

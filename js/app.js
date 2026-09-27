@@ -1,97 +1,187 @@
 import { Viewer, webglSupport } from './viewer.js';
+import { Walker } from './walk.js';
+import { Tools } from './tools.js';
+import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
-import { ROOM_PRESETS, signedArea, bounds, centroid, pointInPolygon, walls, nearestWall } from './room.js';
+import { openStorage } from './storage.js';
+import { newHouse, newFloor, normalize, migrate, elevations, wallFrame, stairLayout, area, pointInPolygon, closestOnSegment, DEFAULTS } from './design.js';
+import { detectRooms, footprint } from './plan.js';
 import { colorFromName } from '../shared/colors.js';
 import { guessCategory } from '../worker/src/scrape.js';
 import { WORKER_URL } from './config.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const uid = (p) => p + '-' + Math.random().toString(36).slice(2, 9);
+const uid = (p) => p + '-' + Math.random().toString(36).slice(2, 8);
 const cm = (m) => (m == null ? '?' : Math.round(m * 1000) / 10);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const LS_STATE = 'roomcraft.state.v1';
-const LS_WORKER = 'roomcraft.worker';
-
-const store = {
-  get(k) {
+const pref = {
+  get(k, d) {
     try {
-      return localStorage.getItem(k);
+      const v = localStorage.getItem('roomcraft.pref.' + k);
+      return v == null ? d : JSON.parse(v);
     } catch {
-      return null;
+      return d;
     }
   },
   set(k, v) {
     try {
-      localStorage.setItem(k, v);
+      localStorage.setItem('roomcraft.pref.' + k, JSON.stringify(v));
     } catch {}
   },
 };
 
-let state = null;
-let repoProject = null;
-let viewer = null;
+let store;
+let design;
+let library = { items: [] };
+let viewer, walker, tools;
+const ui = {
+  editing: false, tool: null, pickedColor: {}, queue: [],
+  quality: pref.get('quality', matchMedia('(pointer: coarse)').matches ? 'low' : 'high'),
+  wallExterior: false, wallThickness: DEFAULTS.interiorWall, stairShape: 'straight', stairTurn: 'left',
+};
 const history = { stack: [], index: -1 };
-const pickedColor = {}; // itemId → colour name chosen on the inventory card
-
-// ---------- persistence & undo ----------
-
-function snapshot() {
-  return JSON.stringify({ room: state.room, inventory: state.inventory, placed: state.placed });
-}
-
-function commit({ render = true } = {}) {
-  const snap = snapshot();
-  if (history.stack[history.index] !== snap) {
-    history.stack = history.stack.slice(0, history.index + 1);
-    history.stack.push(snap);
-    if (history.stack.length > 80) history.stack.shift();
-    history.index = history.stack.length - 1;
-  }
-  save();
-  if (render) renderAll();
-}
-
-let saveTimer;
-function save() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => store.set(LS_STATE, JSON.stringify(state)), 150);
-}
-
-function restore(i) {
-  if (i < 0 || i >= history.stack.length) return;
-  history.index = i;
-  Object.assign(state, JSON.parse(history.stack[i]));
-  save();
-  viewer.setRoom(state.room);
-  renderAll();
-}
-
-// When the site runs via `npm start`, the local server reads links itself (no worker needed).
-let localReader = null;
-function workerUrl() {
-  return (store.get(LS_WORKER) || WORKER_URL || localReader || '').replace(/\/+$/, '');
-}
 
 // ---------- lookups ----------
 
-const itemById = (id) => state.inventory.find((i) => i.id === id);
-const placedById = (id) => state.placed.find((p) => p.id === id);
+const floorNow = () => design.floors[viewer.activeFloor];
+const itemById = (id) => library.items.find((i) => i.id === id);
+const findPlaced = (id) => {
+  for (const f of design.floors) {
+    const p = f.placed.find((x) => x.id === id);
+    if (p) return { p, floor: f };
+  }
+  return {};
+};
 const dimsOf = (item) => {
   const def = DEFAULT_DIMS[item.category] || [0.6, 0.6, 0.6];
   return { w: item.dims?.w || def[0], d: item.dims?.d || def[1], h: item.dims?.h || def[2] };
 };
 const colorOf = (item, p) => item.colors?.find((c) => c.name === p?.color) || (p?.color?.startsWith?.('#') ? { name: 'Custom', hex: p.color } : item.colors?.[0]);
 
+// ---------- saving & undo ----------
+
+let saveTimer, libTimer, lastSaved = null, lastLibSave = 0;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      lastSaved = await store.save(design);
+      design.updatedAt = lastSaved;
+    } catch (err) {
+      toast(`Couldn't save: ${err.message}`);
+    }
+  }, 400);
+}
+function scheduleLibrarySave() {
+  clearTimeout(libTimer);
+  libTimer = setTimeout(() => {
+    lastLibSave = Date.now();
+    store.saveLibrary(library).catch((err) => toast(`Couldn't save models: ${err.message}`));
+  }, 400);
+}
+
+const snapshot = () => JSON.stringify({ design: { ...design, updatedAt: undefined, updatedBy: undefined }, library });
+
+/** Record an undo step, save, and redraw. */
+function commit({ lib = false, rebuild = true } = {}) {
+  const snap = snapshot();
+  if (history.stack[history.index] !== snap) {
+    history.stack = history.stack.slice(0, history.index + 1);
+    history.stack.push(snap);
+    if (history.stack.length > 100) history.stack.shift();
+    history.index = history.stack.length - 1;
+  }
+  scheduleSave();
+  if (lib) scheduleLibrarySave();
+  if (rebuild) viewer.setDesign(design);
+  else viewer.syncFurniture();
+  renderAll();
+}
+
+function restore(i) {
+  if (i < 0 || i >= history.stack.length) return;
+  history.index = i;
+  const snap = JSON.parse(history.stack[i]);
+  const libChanged = JSON.stringify(snap.library) !== JSON.stringify(library);
+  design = normalize(snap.design);
+  library = snap.library;
+  viewer.library = library.items;
+  scheduleSave();
+  if (libChanged) scheduleLibrarySave();
+  viewer.setDesign(design);
+  renderAll();
+}
+
+function resetHistory() {
+  history.stack = [];
+  history.index = -1;
+  commit({ rebuild: false });
+}
+
 // ---------- rendering ----------
 
 function renderAll() {
-  viewer.sync(state.placed, state.inventory);
-  renderInventory();
-  renderInspector();
+  $('#designName').textContent = design.name;
   $('#undoBtn').disabled = history.index <= 0;
   $('#redoBtn').disabled = history.index >= history.stack.length - 1;
+  $('#editBtn').classList.toggle('on', ui.editing);
+  $('#editBtn').textContent = ui.editing ? 'Done editing' : 'Edit house';
+  $('#furniturePanel').hidden = ui.editing;
+  $('#buildPanel').hidden = !ui.editing;
+  $('#qualityLabel').textContent = ui.quality === 'high' ? 'High' : 'Fast';
+  renderFloorStack();
+  if (ui.editing) renderBuildPanel();
+  else renderInventory();
+  renderInspector();
+  updateHint();
 }
+
+function updateHint() {
+  const v = viewer.view;
+  const t = ui.tool;
+  $('#hintbar').textContent =
+    v === 'walk'
+      ? ''
+      : t === 'wall'
+        ? 'Click to start a wall, click again for each corner · double-click or Esc to finish · Shift for free angles'
+        : t === 'room'
+          ? 'Click inside an area enclosed by walls to make it a room'
+          : ['door', 'window', 'opening'].includes(t)
+            ? `Click a wall to add ${t === 'opening' ? 'an opening' : `a ${t}`}`
+            : t === 'stairs'
+              ? 'Click where the stairs start; they climb away from you (rotate them afterwards)'
+              : ui.editing
+                ? 'Pick a tool on the left · drag walls, corners, doors and stairs to adjust them'
+                : v === 'plan'
+                  ? 'Drag furniture to move it · drag the blue dot to rotate · scroll to zoom · drag to pan'
+                  : 'Drag furniture to move it · drag the blue dot to rotate · drag to orbit · right-drag to pan';
+}
+
+// ---------- floor stack ----------
+
+function renderFloorStack() {
+  const ys = elevations(design);
+  const el = $('#floorStack');
+  el.innerHTML =
+    design.floors
+      .map((f, i) => ({ f, i }))
+      .reverse()
+      .map(({ f, i }) => `<button class="${i === viewer.activeFloor ? 'on' : ''}" data-floor="${i}" title="${esc(f.name)} · level ${cm(ys[i])} cm"><span>${i === 0 ? 'G' : i}</span><em>${esc(f.name)}</em></button>`)
+      .join('') +
+    (viewer.view === '3d' ? `<button class="walls" id="wallModeBtn" title="Show walls full height or cut like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '');
+  $$('[data-floor]', el).forEach((b) => (b.onclick = () => setFloor(+b.dataset.floor)));
+  const wm = $('#wallModeBtn', el);
+  if (wm) wm.onclick = () => (viewer.setWallMode(viewer.wallMode === 'cut' ? 'up' : 'cut'), pref.set('wallMode', viewer.wallMode), renderFloorStack());
+}
+
+function setFloor(i) {
+  viewer.setActiveFloor(i);
+  if (viewer.view === 'walk') walker.start(viewer.activeFloor);
+  renderAll();
+}
+
+// ---------- furniture inventory ----------
 
 const ICONS = {
   default: '<svg viewBox="0 0 32 32"><rect x="5" y="11" width="22" height="12" rx="3"/><path d="M8 23v3M24 23v3"/></svg>',
@@ -102,32 +192,26 @@ const ICONS = {
   rug: '<svg viewBox="0 0 32 32"><rect x="5" y="9" width="22" height="14" rx="1"/><rect x="9" y="12" width="14" height="8"/></svg>',
 };
 const iconFor = (cat) => ICONS[cat] || ICONS[{ armchair: 'sofa', floorlamp: 'lamp' }[cat]] || ICONS.default;
+const placedCount = (itemId) => design.floors.reduce((n, f) => n + f.placed.filter((p) => p.itemId === itemId).length, 0);
 
 function renderInventory() {
   const q = $('#invSearch').value.trim().toLowerCase();
-  const list = state.inventory.filter((i) => !q || i.name.toLowerCase().includes(q) || (CATEGORY_LABELS[i.category] || '').toLowerCase().includes(q));
-  $('#invCount').textContent = state.inventory.length;
+  const list = library.items.filter((i) => !q || i.name.toLowerCase().includes(q) || (CATEGORY_LABELS[i.category] || '').toLowerCase().includes(q));
+  $('#invCount').textContent = library.items.length;
   const el = $('#inventory');
-  if (!state.inventory.length) {
-    el.innerHTML = '<div class="empty">Your inventory is empty.<br>Paste a product link above or add a custom item.</div>';
-    return;
-  }
-  if (!list.length) {
-    el.innerHTML = '<div class="empty">No matches.</div>';
-    return;
-  }
+  if (!library.items.length) return (el.innerHTML = '<div class="empty">No models yet.<br>Paste a product link above or add a custom model.</div>');
+  if (!list.length) return (el.innerHTML = '<div class="empty">No matches.</div>');
   el.innerHTML = list
     .map((i) => {
-      const d = i.dims || {};
-      const missing = !d.w || !d.d || !d.h;
-      const inRoom = state.placed.filter((p) => p.itemId === i.id).length;
-      const pick = pickedColor[i.id] || i.colors?.[0]?.name;
+      const d = dimsOf(i);
+      const n = placedCount(i.id);
+      const pick = ui.pickedColor[i.id] || i.colors?.[0]?.name;
       return `<div class="card" draggable="true" data-id="${esc(i.id)}" title="Drag into the room">
         <div class="thumb" style="${i.image ? `background-image:url('${esc(i.image)}')` : ''}">${i.image ? '' : iconFor(i.category)}</div>
         <div>
           <div class="nm">${esc(i.name)}</div>
           ${i.verified === false ? '<div class="badge-unverified" title="Added by an AI agent and not yet checked against a render">Unverified</div>' : ''}
-          <div class="sz ${missing ? 'missing' : ''}">${missing ? '⚠ Size needed · ' : ''}${cm(dimsOf(i).w)} × ${cm(dimsOf(i).d)} × ${cm(dimsOf(i).h)} cm${inRoom ? ` · ${inRoom} in room` : ''}</div>
+          <div class="sz ${i.needsDims ? 'missing' : ''}">${i.needsDims ? '⚠ Check size · ' : ''}${cm(d.w)} × ${cm(d.d)} × ${cm(d.h)} cm${n ? ` · ${n} placed` : ''}</div>
           <div class="swatches">${(i.colors || []).slice(0, 10).map((c) => `<button class="sw ${c.name === pick ? 'on' : ''}" data-color="${esc(c.name)}" title="${esc(c.name)}" style="background:${esc(c.hex)}"></button>`).join('')}${i.colors?.length > 10 ? `<span class="hint">+${i.colors.length - 10}</span>` : ''}</div>
         </div>
         <div class="card-actions">
@@ -139,24 +223,32 @@ function renderInventory() {
     .join('');
 }
 
-function presetSvg(pts) {
-  const b = bounds(pts);
-  const s = Math.min(34 / (b.maxX - b.minX), 26 / (b.maxZ - b.minZ));
-  const ox = (38 - (b.maxX - b.minX) * s) / 2;
-  const oz = (30 - (b.maxZ - b.minZ) * s) / 2;
-  return `<svg viewBox="0 0 38 30"><polygon points="${pts.map(([x, z]) => `${ox + (x - b.minX) * s},${oz + (z - b.minZ) * s}`).join(' ')}"/></svg>`;
-}
+// ---------- inspector ----------
 
 function renderInspector() {
   const el = $('#inspector');
-  const sel = viewer.selectedId && placedById(viewer.selectedId);
-  if (viewer.editRoom) return renderRoomEdit(el);
-  if (sel) return renderItemInspector(el, sel);
-  return renderRoomOverview(el);
+  const s = viewer.sel;
+  if (viewer.view === 'walk') return (el.innerHTML = walkInspector());
+  if (s?.type === 'item') return itemInspector(el, s.id);
+  if (s?.type === 'wall') return wallInspector(el, s.id);
+  if (s?.type === 'opening') return openingInspector(el, s.id);
+  if (s?.type === 'stairs') return stairsInspector(el, s.id);
+  if (s?.type === 'room') return roomInspector(el, s.id);
+  return floorInspector(el);
 }
 
-function renderItemInspector(el, p) {
-  const item = itemById(p.itemId);
+function walkInspector() {
+  const f = floorNow();
+  return `<div class="insp"><h3>Walking</h3><div class="sub">You're on ${esc(f.name)}</div>
+    <div class="tip">Click the view to look around with your mouse. <b>W A S D</b> or the arrow keys to walk, <b>Shift</b> to hurry, scroll to step. Walk onto the stairs to change floors. <b>Esc</b> releases the mouse; press it again to leave.</div>
+    <div class="group" style="margin-top:14px"><button class="btn" style="width:100%" id="leaveWalk">Back to 3D view</button></div></div>`;
+}
+
+const field = (label, attrs) => `<label>${label}<input ${attrs}></label>`;
+
+function itemInspector(el, id) {
+  const { p, floor } = findPlaced(id);
+  const item = p && itemById(p.itemId);
   if (!item) return (el.innerHTML = '');
   const d = dimsOf(item);
   const cur = colorOf(item, p);
@@ -164,387 +256,435 @@ function renderItemInspector(el, p) {
   el.innerHTML = `<div class="insp">
     ${item.image ? `<div class="hero" style="background-image:url('${esc(item.image)}')"></div>` : ''}
     <h3>${esc(item.name)}</h3>
-    <div class="sub">${esc(CATEGORY_LABELS[item.category] || item.category)}${item.price ? ` · ${esc(item.currency || '')} ${esc(item.price)}` : ''}${item.url ? ` · <a href="${esc(item.url)}" target="_blank" rel="noopener">View product ↗</a>` : ''}</div>
+    <div class="sub">${esc(CATEGORY_LABELS[item.category] || item.category)} · ${esc(floor.name)}${item.price ? ` · ${esc(item.currency || '')} ${esc(item.price)}` : ''}${item.url ? ` · <a href="${esc(item.url)}" target="_blank" rel="noopener">Product ↗</a>` : ''}</div>
+    ${item.verified === false ? '<div class="note">Added by an AI agent and not yet visually checked.</div>' : ''}
     <div class="group"><div class="lbl">Colour <span>${esc(cur?.name || '')}</span></div>
       <div class="color-list">
         ${(item.colors || []).map((c) => `<button class="color-chip ${!custom && c.name === cur?.name ? 'on' : ''}" data-color="${esc(c.name)}"><span class="dot" style="background:${esc(c.hex)}"></span>${esc(c.name)}</button>`).join('')}
         <label class="color-chip ${custom ? 'on' : ''}" title="Any colour"><input type="color" id="customColor" value="${esc(custom ? p.color : cur?.hex || '#cccccc')}">Custom</label>
       </div>
     </div>
-    <div class="group"><div class="lbl">Size <button class="btn small ghost" id="editSize">Edit item</button></div>
-      <div>${cm(d.w)} W × ${cm(d.d)} D × ${cm(d.h)} H cm</div>
-    </div>
+    <div class="group"><div class="lbl">Size <button class="btn small ghost" id="editSize">Edit model</button></div><div>${cm(d.w)} W × ${cm(d.d)} D × ${cm(d.h)} H cm</div></div>
     <div class="group"><div class="lbl">Rotate <span>${Math.round(p.rot || 0)}°</span></div>
-      <div class="row">
-        <button class="btn small" data-rot="-90" title="Shift+R">↺ 90°</button>
-        <button class="btn small" data-rot="-15">↺ 15°</button>
-        <button class="btn small" data-rot="15">↻ 15°</button>
-        <button class="btn small" data-rot="90" title="R">↻ 90°</button>
-      </div>
+      <div class="row"><button class="btn small" data-rot="-90">↺ 90°</button><button class="btn small" data-rot="-15">↺ 15°</button><button class="btn small" data-rot="15">↻ 15°</button><button class="btn small" data-rot="90">↻ 90°</button></div>
     </div>
     <div class="group"><div class="lbl">Position (cm)</div>
-      <div class="num-row">
-        <label>X<input type="number" step="1" data-pos="x" value="${cm(p.x)}"></label>
-        <label>Z<input type="number" step="1" data-pos="z" value="${cm(p.z)}"></label>
-        <label>Lift<input type="number" step="1" min="0" data-pos="y" value="${cm(p.y || 0)}"></label>
-      </div>
+      <div class="num-row">${field('X', `type="number" step="1" data-pos="x" value="${cm(p.x)}"`)}${field('Z', `type="number" step="1" data-pos="z" value="${cm(p.z)}"`)}${field('Lift', `type="number" step="1" min="0" data-pos="y" value="${cm(p.y || 0)}"`)}</div>
     </div>
+    ${design.floors.length > 1 ? `<div class="group"><div class="lbl">Floor</div><select id="moveFloor">${design.floors.map((f) => `<option value="${esc(f.id)}" ${f === floor ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>` : ''}
     ${item.modelUrl ? `<div class="group"><label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" id="useModel" ${item.useModel !== false ? 'checked' : ''}> Use the store's 3D model</label></div>` : ''}
-    <div class="group">
-      <div class="row">
-        <button class="btn small" id="wallBtn" title="Push its back flat against the nearest wall">Against wall</button>
-        <button class="btn small" id="dupBtn" title="Ctrl+D">Duplicate</button>
-      </div>
-      <div class="row" style="margin-top:6px"><button class="btn small danger" id="removeBtn" title="Delete">Remove from room</button></div>
-    </div>
+    <div class="group"><div class="row"><button class="btn small" id="wallBtn">Against wall</button><button class="btn small" id="dupBtn" title="Ctrl+D">Duplicate</button></div>
+      <div class="row" style="margin-top:6px"><button class="btn small danger" id="removeBtn" title="Delete">Remove</button></div></div>
   </div>`;
-  $$('.color-chip[data-color]', el).forEach((b) => (b.onclick = () => updatePlaced(p.id, { color: b.dataset.color })));
-  $('#customColor', el).oninput = (e) => {
-    const q = placedById(p.id);
-    q.color = e.target.value;
-    viewer.sync(state.placed, state.inventory);
-  };
-  $('#customColor', el).onchange = () => commit();
+  $$('.color-chip[data-color]', el).forEach((b) => (b.onclick = () => ((p.color = b.dataset.color), commit({ rebuild: false }))));
+  $('#customColor', el).oninput = (e) => ((p.color = e.target.value), viewer.syncFurniture());
+  $('#customColor', el).onchange = () => commit({ rebuild: false });
   $('#editSize', el).onclick = () => openItemDialog(item);
-  $$('[data-rot]', el).forEach((b) => (b.onclick = () => rotateSelected(+b.dataset.rot)));
+  $$('[data-rot]', el).forEach((b) => (b.onclick = () => rotateItem(p, +b.dataset.rot)));
   $$('[data-pos]', el).forEach((inp) => (inp.onchange = () => {
     const v = parseFloat(inp.value) / 100;
-    if (Number.isFinite(v)) updatePlaced(p.id, { [inp.dataset.pos]: Math.max(inp.dataset.pos === 'y' ? 0 : -1e9, v) });
+    if (Number.isFinite(v)) (p[inp.dataset.pos] = inp.dataset.pos === 'y' ? Math.max(0, v) : v), commit({ rebuild: false });
   }));
-  if ($('#useModel', el)) $('#useModel', el).onchange = (e) => ((item.useModel = e.target.checked), commit());
-  $('#wallBtn', el).onclick = () => againstWall(p.id);
-  $('#dupBtn', el).onclick = () => duplicate(p.id);
-  $('#removeBtn', el).onclick = () => removePlaced(p.id);
-}
-
-function renderRoomOverview(el) {
-  const r = state.room;
-  const area = Math.abs(signedArea(r.points));
-  el.innerHTML = `<div class="insp">
-    <h3>Room</h3>
-    <div class="sub">${area.toFixed(1)} m² · ${r.points.length} walls · ${state.placed.length} items</div>
-    <div class="group"><div class="lbl">Start from a shape</div>
-      <div class="preset-grid">${Object.entries(ROOM_PRESETS).map(([k, f]) => `<button class="preset" data-preset="${esc(k)}">${presetSvg(f())}${esc(k)}</button>`).join('')}
-        <button class="preset" id="customShape"><svg viewBox="0 0 38 30"><polygon points="4,4 30,4 34,14 24,26 4,26"/></svg>Custom…</button>
-      </div>
-    </div>
-    <div class="group"><div class="lbl">Ceiling height</div>
-      <div class="num-row" style="grid-template-columns:1fr"><label><input type="number" id="roomH" min="180" max="800" step="5" value="${cm(r.height)}"></label></div>
-    </div>
-    <div class="group"><div class="lbl">Floor</div>
-      <div class="swatch-input">
-        <select id="floorKind">${['wood', 'tiles', 'carpet', 'concrete'].map((k) => `<option ${r.floorKind === k ? 'selected' : ''}>${k}</option>`).join('')}</select>
-        <input type="color" id="floorColor" value="${esc(r.floorColor)}">
-      </div>
-    </div>
-    <div class="group"><div class="lbl">Walls</div>
-      <div class="swatch-input"><input type="color" id="wallColor" value="${esc(r.wallColor)}"><span class="hint">Wall colour</span></div>
-    </div>
-    <div class="group"><button class="btn" style="width:100%" id="editShapeBtn">Edit shape, doors & windows</button></div>
-    ${state.placed.length ? `<div class="group"><div class="lbl">In this room</div><div class="cards" id="placedList">${state.placed
-      .map((p) => {
-        const it = itemById(p.itemId);
-        const c = it && colorOf(it, p);
-        return it ? `<button class="btn small ghost" style="text-align:left;display:flex;gap:8px;align-items:center" data-sel="${esc(p.id)}"><span class="sw" style="background:${esc(c?.hex || '#ccc')}"></span>${esc(it.name)}</button>` : '';
-      })
-      .join('')}</div></div>` : ''}
-  </div>`;
-  $$('[data-preset]', el).forEach((b) => (b.onclick = () => applyPreset(b.dataset.preset)));
-  $('#customShape', el).onclick = () => setEditRoom(true);
-  $('#roomH', el).onchange = (e) => {
-    const v = parseFloat(e.target.value);
-    if (v >= 150) (state.room.height = v / 100), viewer.setRoom(state.room), commit();
+  if ($('#moveFloor', el)) $('#moveFloor', el).onchange = (e) => {
+    const to = design.floors.find((f) => f.id === e.target.value);
+    floor.placed = floor.placed.filter((x) => x !== p);
+    to.placed.push(p);
+    commit({ rebuild: false });
+    viewer.setActiveFloor(design.floors.indexOf(to));
+    viewer.select({ type: 'item', id: p.id });
+    renderAll();
   };
-  $('#floorKind', el).onchange = (e) => ((state.room.floorKind = e.target.value), viewer.setRoom(state.room), commit());
-  $('#floorColor', el).oninput = (e) => ((state.room.floorColor = e.target.value), viewer.setRoom(state.room));
-  $('#floorColor', el).onchange = () => commit();
-  $('#wallColor', el).oninput = (e) => ((state.room.wallColor = e.target.value), viewer.setRoom(state.room));
+  if ($('#useModel', el)) $('#useModel', el).onchange = (e) => ((item.useModel = e.target.checked), commit({ lib: true, rebuild: false }));
+  $('#wallBtn', el).onclick = () => (againstWall(p, floor), commit({ rebuild: false }));
+  $('#dupBtn', el).onclick = () => duplicate(id);
+  $('#removeBtn', el).onclick = () => deleteSelection();
+}
+
+function wallInspector(el, id) {
+  const f = floorNow();
+  const w = f.walls.find((x) => x.id === id);
+  if (!w) return (el.innerHTML = '');
+  const { len } = wallFrame(w);
+  const ops = f.openings.filter((o) => o.wall === id);
+  const edit = ui.editing;
+  el.innerHTML = `<div class="insp"><h3>Wall</h3><div class="sub">${esc(f.name)} · ${w.exterior ? 'exterior' : 'interior'} · ${cm(len)} cm</div>
+    ${edit ? `<div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Length (cm)', `type="number" min="10" step="1" id="wLen" value="${cm(len)}"`)}${field('Thickness (cm)', `type="number" min="5" max="60" step="1" id="wThick" value="${cm(w.thickness)}"`)}</div></div>
+    <div class="group"><label class="row" style="gap:8px"><input type="checkbox" id="wExt" ${w.exterior ? 'checked' : ''}> Exterior wall</label></div>
+    <div class="group"><div class="lbl">Add to this wall</div><div class="row"><button class="btn small" data-add="door">+ Door</button><button class="btn small" data-add="window">+ Window</button><button class="btn small" data-add="opening">+ Opening</button></div></div>` : ''}
+    ${ops.length ? `<div class="group"><div class="lbl">On this wall</div>${ops.map((o) => `<button class="btn small ghost list-btn" data-op="${esc(o.id)}">${o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening'} · ${cm(o.width)} cm</button>`).join('')}</div>` : ''}
+    ${edit ? `<div class="group"><div class="row"><button class="btn small" id="wSplit">Split in two</button><button class="btn small danger" id="wDel">Delete wall</button></div></div>
+    <div class="tip">Drag the wall to move it, or drag the dots at its ends. Connected walls follow. Hold Shift for free movement.</div>` : '<div class="tip">Turn on <b>Edit house</b> to change walls.</div>'}</div>`;
+  $$('[data-op]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'opening', id: b.dataset.op })));
+  if (!edit) return;
+  $('#wLen', el).onchange = (e) => {
+    const L = parseFloat(e.target.value) / 100;
+    if (!(L > 0.1)) return;
+    const { dir } = wallFrame(w);
+    const old = w.b.slice();
+    const nb = [+(w.a[0] + dir[0] * L).toFixed(4), +(w.a[1] + dir[1] * L).toFixed(4)];
+    for (const o of f.walls) for (const k of ['a', 'b']) if (Math.hypot(o[k][0] - old[0], o[k][1] - old[1]) < 0.01) o[k] = nb.slice();
+    commit();
+  };
+  $('#wThick', el).onchange = (e) => {
+    const t = parseFloat(e.target.value) / 100;
+    if (t >= 0.05) (w.thickness = t), commit();
+  };
+  $('#wExt', el).onchange = (e) => ((w.exterior = e.target.checked), commit());
+  $$('[data-add]', el).forEach((b) => (b.onclick = () => {
+    const type = b.dataset.add;
+    const width = Math.min(type === 'window' ? 1.2 : 0.9, len - 0.2);
+    if (width < 0.3) return toast('This wall is too short for that.');
+    const oid = uid('o');
+    f.openings.push({ id: oid, type, wall: w.id, offset: +((len - width) / 2).toFixed(3), width, height: type === 'window' ? 1.3 : Math.min(2.1, f.height - 0.1), sill: type === 'window' ? 0.9 : 0 });
+    commit();
+    viewer.select({ type: 'opening', id: oid });
+  }));
+  $('#wSplit', el).onclick = () => {
+    const mid = [+((w.a[0] + w.b[0]) / 2).toFixed(4), +((w.a[1] + w.b[1]) / 2).toFixed(4)];
+    const nw = { ...w, id: uid('w'), a: mid, b: w.b.slice() };
+    for (const o of f.openings.filter((o) => o.wall === w.id && o.offset >= len / 2)) (o.wall = nw.id), (o.offset -= len / 2);
+    w.b = mid;
+    f.walls.push(nw);
+    commit();
+  };
+  $('#wDel', el).onclick = () => deleteSelection();
+}
+
+function openingInspector(el, id) {
+  const f = floorNow();
+  const o = f.openings.find((x) => x.id === id);
+  if (!o) return (el.innerHTML = '');
+  const w = f.walls.find((x) => x.id === o.wall);
+  const { len } = wallFrame(w);
+  const name = o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening';
+  if (!ui.editing) return (el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · ${cm(o.width)} × ${cm(o.height)} cm</div><div class="tip">Turn on <b>Edit house</b> to change it.</div></div>`);
+  el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · wall ${cm(len)} cm</div>
+    <div class="group"><div class="lbl">Type</div><div class="seg small-seg">${['door', 'window', 'opening'].map((t) => `<button data-type="${t}" class="${o.type === t ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div></div>
+    <div class="group"><div class="num-row">${field('Width', `type="number" min="30" step="1" data-k="width" value="${cm(o.width)}"`)}${field('Height', `type="number" min="30" step="1" data-k="height" value="${cm(o.height)}"`)}${o.type === 'window' ? field('Sill', `type="number" min="0" step="1" data-k="sill" value="${cm(o.sill)}"`) : field('From corner', `type="number" min="0" step="1" data-k="offset" value="${cm(o.offset)}"`)}</div>
+    ${o.type === 'window' ? `<div class="num-row" style="margin-top:6px">${field('From corner', `type="number" min="0" step="1" data-k="offset" value="${cm(o.offset)}"`)}</div>` : ''}</div>
+    ${o.type === 'door' ? `<div class="group"><label class="row" style="gap:8px"><input type="checkbox" id="oOpen" ${o.open ? 'checked' : ''}> Shown open</label><div class="row" style="margin-top:8px"><button class="btn small" id="oSwing">Flip swing side</button></div></div>` : ''}
+    <div class="group"><button class="btn small danger" id="oDel">Delete</button></div>
+    <div class="tip">Drag it along the wall to move it.</div></div>`;
+  $$('[data-type]', el).forEach((b) => (b.onclick = () => {
+    o.type = b.dataset.type;
+    if (o.type === 'window') Object.assign(o, { sill: 0.9, height: Math.min(o.height, 1.4) });
+    else Object.assign(o, { sill: 0, height: Math.min(2.1, f.height - 0.1) });
+    commit();
+  }));
+  $$('[data-k]', el).forEach((inp) => (inp.onchange = () => {
+    const v = parseFloat(inp.value) / 100;
+    if (!Number.isFinite(v) || v < 0) return;
+    o[inp.dataset.k] = v;
+    o.width = Math.min(o.width, len - 0.04);
+    o.offset = Math.max(0.02, Math.min(len - o.width - 0.02, o.offset));
+    commit();
+  }));
+  if ($('#oOpen', el)) $('#oOpen', el).onchange = (e) => ((o.open = e.target.checked), commit());
+  if ($('#oSwing', el)) $('#oSwing', el).onclick = () => ((o.swing = o.swing === 'out' ? 'in' : 'out'), commit());
+  $('#oDel', el).onclick = () => deleteSelection();
+}
+
+function stairsInspector(el, id) {
+  const f = floorNow();
+  const s = f.stairs.find((x) => x.id === id);
+  if (!s) return (el.innerHTML = '');
+  const ys = elevations(design);
+  const fi = viewer.activeFloor;
+  const H = ys[fi + 1] - ys[fi];
+  const L = stairLayout(s, H);
+  const stats = `<div class="stat-grid"><div><b>${L.n}</b><span>steps</span></div><div><b>${Math.round(L.riser * 1000)}</b><span>mm rise</span></div><div><b>${Math.round(L.going * 1000)}</b><span>mm tread</span></div><div><b>${cm(H)}</b><span>cm climb</span></div></div>`;
+  if (!ui.editing) return (el.innerHTML = `<div class="insp"><h3>Stairs</h3><div class="sub">${esc(f.name)} → ${esc(design.floors[fi + 1]?.name || '')}</div>${stats}<div class="tip">Turn on <b>Edit house</b> to change them.</div></div>`);
+  el.innerHTML = `<div class="insp"><h3>Stairs</h3><div class="sub">${esc(f.name)} → ${esc(design.floors[fi + 1]?.name || '')}</div>${stats}
+    <div class="group"><div class="lbl">Shape</div><div class="seg small-seg">${[['straight', 'Straight'], ['L', 'L-turn'], ['U', 'U-turn']].map(([k, t]) => `<button data-shape="${k}" class="${s.shape === k ? 'on' : ''}">${t}</button>`).join('')}</div></div>
+    ${s.shape !== 'straight' ? `<div class="group"><div class="lbl">Turns</div><div class="seg small-seg">${['left', 'right'].map((k) => `<button data-turn="${k}" class="${s.turn === k ? 'on' : ''}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>` : ''}
+    <div class="group"><div class="num-row" style="grid-template-columns:1fr">${field('Width (cm)', `type="number" min="60" max="200" step="5" id="sWidth" value="${cm(s.width)}"`)}</div></div>
+    <div class="group"><div class="lbl">Rotate <span>${Math.round(s.rot || 0)}°</span></div><div class="row"><button class="btn small" data-srot="-90">↺ 90°</button><button class="btn small" data-srot="90">↻ 90°</button></div></div>
+    <div class="group"><button class="btn small danger" id="sDel">Delete stairs</button></div>
+    <div class="tip">Step height and tread depth follow real building rules (max 18 cm rise, 2 × rise + tread ≈ 63 cm) and adjust to the floor-to-floor height automatically. The stairwell is cut in the floor above.</div></div>`;
+  $$('[data-shape]', el).forEach((b) => (b.onclick = () => ((s.shape = b.dataset.shape), commit())));
+  $$('[data-turn]', el).forEach((b) => (b.onclick = () => ((s.turn = b.dataset.turn), commit())));
+  $('#sWidth', el).onchange = (e) => {
+    const v = parseFloat(e.target.value) / 100;
+    if (v >= 0.6) (s.width = v), commit();
+  };
+  $$('[data-srot]', el).forEach((b) => (b.onclick = () => ((s.rot = ((((s.rot || 0) + +b.dataset.srot) % 360) + 360) % 360), commit())));
+  $('#sDel', el).onclick = () => deleteSelection();
+}
+
+function roomInspector(el, id) {
+  const f = floorNow();
+  const r = f.rooms.find((x) => x.id === id);
+  if (!r) return (el.innerHTML = '');
+  const items = f.placed.filter((p) => pointInPolygon(p.x, p.z, r.points));
+  el.innerHTML = `<div class="insp"><h3>${esc(r.name || 'Room')}</h3><div class="sub">${esc(f.name)} · ${Math.abs(area(r.points)).toFixed(1)} m²</div>
+    <div class="group"><label class="field-label">Name<input id="rName" value="${esc(r.name || '')}"></label></div>
+    <div class="group"><div class="lbl">Floor finish</div><div class="swatch-input"><select id="rKind">${['wood', 'tiles', 'carpet', 'concrete'].map((k) => `<option ${r.floorKind === k ? 'selected' : ''}>${k}</option>`).join('')}</select><input type="color" id="rColor" value="${esc(r.floorColor || '#c49a6c')}"></div></div>
+    ${items.length ? `<div class="group"><div class="lbl">In this room</div>${items.map((p) => `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}">${esc(itemById(p.itemId)?.name || 'Item')}</button>`).join('')}</div>` : ''}
+    ${ui.editing ? '<div class="group"><button class="btn small danger" id="rDel">Remove room floor</button></div>' : ''}</div>`;
+  $('#rName', el).onchange = (e) => ((r.name = e.target.value.trim()), commit());
+  $('#rKind', el).onchange = (e) => ((r.floorKind = e.target.value), commit());
+  $('#rColor', el).oninput = (e) => (r.floorColor = e.target.value);
+  $('#rColor', el).onchange = () => commit();
+  $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'item', id: b.dataset.sel })));
+  if ($('#rDel', el)) $('#rDel', el).onclick = () => deleteSelection();
+}
+
+function floorInspector(el) {
+  const f = floorNow();
+  const ys = elevations(design);
+  const fi = viewer.activeFloor;
+  const gross = footprint(f).reduce((s, p) => s + Math.abs(area(p[0].slice(0, -1))), 0);
+  el.innerHTML = `<div class="insp"><h3>${esc(f.name)}</h3><div class="sub">Level ${cm(ys[fi])} cm · ${gross.toFixed(1)} m² · ${f.rooms.length} rooms · ${f.placed.length} items</div>
+    ${ui.editing ? `<div class="group"><label class="field-label">Floor name<input id="fName" value="${esc(f.name)}"></label></div>
+    <div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Ceiling height (cm)', `type="number" min="200" max="600" step="5" id="fHeight" value="${cm(f.height)}"`)}${field(fi === 0 ? 'Ground slab (cm)' : 'Floor slab (cm)', `type="number" min="5" max="60" step="1" id="fSlab" value="${cm(f.slab)}"`)}</div></div>` : ''}
+    ${f.rooms.length ? `<div class="group"><div class="lbl">Rooms</div>${f.rooms.map((r) => `<button class="btn small ghost list-btn" data-room="${esc(r.id)}"><span>${esc(r.name || 'Room')}</span><em>${Math.abs(area(r.points)).toFixed(1)} m²</em></button>`).join('')}</div>` : ''}
+    ${f.placed.length ? `<div class="group"><div class="lbl">Furniture</div>${f.placed.map((p) => {
+      const it = itemById(p.itemId);
+      const c = it && colorOf(it, p);
+      return it ? `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}"><span class="sw" style="background:${esc(c?.hex || '#ccc')}"></span>${esc(it.name)}</button>` : '';
+    }).join('')}</div>` : ''}
+    ${!ui.editing ? `<div class="group"><button class="btn" style="width:100%" id="walkHere">Walk through ${esc(f.name)}</button></div><div class="group"><button class="btn" style="width:100%" id="editHouse">Edit walls, rooms &amp; stairs</button></div>` : ''}
+    <div class="group"><div class="lbl">House</div>
+      ${ui.editing ? `<label class="field-label">Name<input id="hName" value="${esc(design.name)}"></label>` : ''}
+      <div class="swatch-input" style="margin-top:6px"><input type="color" id="wallColor" value="${esc(design.wallColor || '#efebe4')}"><span class="hint">Wall colour</span></div>
+    </div></div>`;
+  $$('[data-room]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'room', id: b.dataset.room })));
+  $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'item', id: b.dataset.sel })));
+  if ($('#fName', el)) $('#fName', el).onchange = (e) => ((f.name = e.target.value.trim() || f.name), commit());
+  if ($('#fHeight', el)) $('#fHeight', el).onchange = (e) => {
+    const v = parseFloat(e.target.value) / 100;
+    if (v >= 2) (f.height = v), commit();
+  };
+  if ($('#fSlab', el)) $('#fSlab', el).onchange = (e) => {
+    const v = parseFloat(e.target.value) / 100;
+    if (v >= 0.05) (f.slab = v), commit();
+  };
+  if ($('#hName', el)) $('#hName', el).onchange = (e) => ((design.name = e.target.value.trim() || design.name), commit());
+  $('#wallColor', el).oninput = (e) => (design.wallColor = e.target.value);
   $('#wallColor', el).onchange = () => commit();
-  $('#editShapeBtn', el).onclick = () => setEditRoom(true);
-  $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select(b.dataset.sel)));
+  if ($('#walkHere', el)) $('#walkHere', el).onclick = () => setView('walk');
+  if ($('#editHouse', el)) $('#editHouse', el).onclick = () => setEditing(true);
 }
 
-function renderRoomEdit(el) {
-  const r = state.room;
-  const ws = walls(r.points);
-  const wi = viewer.selectedWall;
-  const vi = viewer.selectedVertex;
-  let body = '';
-  if (wi != null && ws[wi]) {
-    const w = ws[wi];
-    const ops = (r.openings || []).filter((o) => o.wall === wi);
-    body = `<div class="group"><div class="lbl">Wall ${wi + 1}</div>
-        <div class="num-row" style="grid-template-columns:1fr"><label>Length (cm)<input type="number" id="wallLen" min="20" step="1" value="${cm(w.len)}"></label></div>
-      </div>
-      <div class="group"><div class="row"><button class="btn small" id="addDoor">+ Door</button><button class="btn small" id="addWindow">+ Window</button><button class="btn small" id="splitWall" title="Adds a corner in the middle of this wall">Split</button></div></div>
-      ${ops
-        .map(
-          (o) => `<div class="opening" data-op="${esc(o.id)}"><div class="top">${o.type === 'door' ? 'Door' : 'Window'}<button class="btn small ghost danger" data-del>Remove</button></div>
-          <div class="num-row">
-            <label>From corner<input type="number" data-k="offset" value="${cm(o.offset)}"></label>
-            <label>Width<input type="number" data-k="width" value="${cm(o.width)}"></label>
-            <label>Height<input type="number" data-k="height" value="${cm(o.height)}"></label>
-            ${o.type === 'window' ? `<label>Sill<input type="number" data-k="sill" value="${cm(o.sill)}"></label>` : `<label style="flex-direction:row;align-items:center;gap:6px;margin-top:16px"><input type="checkbox" data-k="open" ${o.open ? 'checked' : ''}>Open</label>`}
-          </div></div>`
-        )
-        .join('')}`;
-  } else if (vi != null && r.points[vi]) {
-    const [x, z] = r.points[vi];
-    body = `<div class="group"><div class="lbl">Corner ${vi + 1}</div>
-      <div class="num-row" style="grid-template-columns:1fr 1fr"><label>X (cm)<input type="number" data-v="0" value="${cm(x)}"></label><label>Z (cm)<input type="number" data-v="1" value="${cm(z)}"></label></div></div>
-      <div class="group"><button class="btn small danger" id="delCorner" ${r.points.length <= 3 ? 'disabled' : ''}>Delete corner</button></div>`;
-  } else {
-    body = `<div class="tip">• <b>Drag</b> the blue corners to reshape (they snap to straight walls; hold Shift for any angle).<br>• <b>Double-click</b> a wall to add a corner.<br>• <b>Click</b> a wall to set its length and add doors or windows.</div>`;
-  }
-  el.innerHTML = `<div class="insp"><h3>Edit room</h3><div class="sub">${Math.abs(signedArea(r.points)).toFixed(1)} m² floor area</div>${body}
-    <div class="group" style="margin-top:14px"><button class="btn primary" style="width:100%" id="doneEdit">Done</button></div></div>`;
-  $('#doneEdit', el).onclick = () => setEditRoom(false);
-  if (wi != null && ws[wi]) {
-    $('#wallLen', el).onchange = (e) => setWallLength(wi, parseFloat(e.target.value) / 100);
-    $('#addDoor', el).onclick = () => addOpening(wi, 'door');
-    $('#addWindow', el).onclick = () => addOpening(wi, 'window');
-    $('#splitWall', el).onclick = () => {
-      const w = ws[wi];
-      insertCorner(wi, [+((w.a[0] + w.b[0]) / 2).toFixed(3), +((w.a[1] + w.b[1]) / 2).toFixed(3)]);
-    };
-    $$('.opening', el).forEach((box) => {
-      const o = r.openings.find((x) => x.id === box.dataset.op);
-      $('[data-del]', box).onclick = () => ((r.openings = r.openings.filter((x) => x !== o)), viewer.setRoom(r), commit());
-      $$('[data-k]', box).forEach((inp) => (inp.onchange = () => {
-        if (inp.type === 'checkbox') o[inp.dataset.k] = inp.checked;
-        else {
-          const v = parseFloat(inp.value) / 100;
-          if (Number.isFinite(v) && v >= 0) o[inp.dataset.k] = v;
-        }
-        viewer.setRoom(r);
-        commit();
-      }));
-    });
-  }
-  if (vi != null && r.points[vi]) {
-    $$('[data-v]', el).forEach((inp) => (inp.onchange = () => {
-      const v = parseFloat(inp.value) / 100;
-      if (!Number.isFinite(v)) return;
-      r.points[vi][+inp.dataset.v] = v;
-      viewer.setRoom(r);
-      commit();
-    }));
-    $('#delCorner', el).onclick = () => deleteCorner(vi);
-  }
-}
+// ---------- build panel (edit mode) ----------
 
-// ---------- room operations ----------
+const TOOLS = [
+  ['select', 'Select', '<path d="M5 3l14 8-6 2-2 6z"/>'],
+  ['wall', 'Wall', '<path d="M3 17h18M3 17V7h18v10M8 7v10M14 7v10"/>'],
+  ['room', 'Room', '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M9 9h6v6H9z"/>'],
+  ['door', 'Door', '<path d="M6 21V4h10v17M4 21h16"/><circle cx="13" cy="13" r="1"/>'],
+  ['window', 'Window', '<rect x="4" y="5" width="16" height="14"/><path d="M12 5v14M4 12h16"/>'],
+  ['opening', 'Opening', '<path d="M5 21V8a7 7 0 0 1 14 0v13"/>'],
+  ['stairs', 'Stairs', '<path d="M4 20h4v-4h4v-4h4V8h4"/>'],
+];
 
-function setEditRoom(on) {
-  viewer.setEditRoom(on);
-  $('#editRoomBtn').classList.toggle('on', on);
-  $('#editRoomBtn').textContent = on ? 'Done editing' : 'Edit room';
-  updateHint();
-  renderInspector();
-}
-
-function applyPreset(name) {
-  const cur = bounds(state.room.points);
-  const W = +(cur.maxX - cur.minX).toFixed(2);
-  const D = +(cur.maxZ - cur.minZ).toFixed(2);
-  const pts = ROOM_PRESETS[name](Math.max(W, name === 'rectangle' ? 2 : 4), Math.max(D, name === 'rectangle' ? 2 : 3.5)).map(([x, z]) => [+x.toFixed(3), +z.toFixed(3)]);
-  state.room.points = pts;
-  state.room.openings = (state.room.openings || []).filter((o) => o.wall < pts.length);
-  keepItemsInside();
-  viewer.setRoom(state.room, { refit: true });
-  commit();
-  toast(`Room set to ${name}. Use Edit room to fine-tune.`);
-}
-
-function setWallLength(i, len) {
-  if (!(len > 0.2)) return;
-  const pts = state.room.points;
-  const n = pts.length;
-  const a = pts[i];
-  const b = pts[(i + 1) % n];
-  const cur = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  const dx = ((b[0] - a[0]) / cur) * (len - cur);
-  const dz = ((b[1] - a[1]) / cur) * (len - cur);
-  // Move the wall's end corner and the next one together, so neighbouring walls keep their angle.
-  const j = (i + 1) % n;
-  const k = (i + 2) % n;
-  pts[j] = [+(pts[j][0] + dx).toFixed(3), +(pts[j][1] + dz).toFixed(3)];
-  if (n > 3 && k !== i) pts[k] = [+(pts[k][0] + dx).toFixed(3), +(pts[k][1] + dz).toFixed(3)];
-  keepItemsInside();
-  viewer.setRoom(state.room);
-  commit();
-}
-
-function insertCorner(wallIndex, pt) {
-  state.room.points.splice(wallIndex + 1, 0, pt);
-  // Openings on later walls shift index by one.
-  for (const o of state.room.openings || []) if (o.wall > wallIndex) o.wall++;
-  viewer.selectedWall = null;
-  viewer.selectedVertex = wallIndex + 1;
-  viewer.setRoom(state.room);
-  commit();
-}
-
-function deleteCorner(i) {
-  if (state.room.points.length <= 3) return;
-  state.room.points.splice(i, 1);
-  state.room.openings = (state.room.openings || []).filter((o) => o.wall !== i && o.wall !== (i - 1 + state.room.points.length + 1) % (state.room.points.length + 1));
-  for (const o of state.room.openings) if (o.wall > i) o.wall--;
-  viewer.selectedVertex = null;
-  keepItemsInside();
-  viewer.setRoom(state.room);
-  commit();
-}
-
-function addOpening(wi, type) {
-  const w = walls(state.room.points)[wi];
-  const width = type === 'door' ? Math.min(0.9, w.len - 0.2) : Math.min(1.2, w.len - 0.3);
-  if (width < 0.3) return toast('This wall is too short for that.');
-  state.room.openings ||= [];
-  state.room.openings.push({ id: uid('o'), type, wall: wi, offset: +((w.len - width) / 2).toFixed(2), width, height: type === 'door' ? 2.1 : 1.3, sill: type === 'door' ? 0 : 0.85, open: false });
-  viewer.setRoom(state.room);
-  commit();
-}
-
-function keepItemsInside() {
-  const pts = state.room.points;
-  const [cx, cz] = centroid(pts);
-  for (const p of state.placed) {
-    if (!pointInPolygon(p.x, p.z, pts)) {
-      p.x = pointInPolygon(cx, cz, pts) ? cx : pts[0][0] + 0.5;
-      p.z = pointInPolygon(cx, cz, pts) ? cz : pts[0][1] + 0.5;
+function renderBuildPanel() {
+  const el = $('#buildPanel');
+  const t = ui.tool || 'select';
+  const fi = viewer.activeFloor;
+  el.innerHTML = `<section>
+      <h2>Build · ${esc(floorNow().name)}</h2>
+      <div class="tool-grid">${TOOLS.map(([k, name, svg]) => `<button class="tool ${t === k ? 'on' : ''}" data-tool="${k}"><svg viewBox="0 0 24 24">${svg}</svg>${name}</button>`).join('')}</div>
+      ${t === 'wall' ? `<div class="tool-opts"><div class="seg small-seg"><button data-ext="0" class="${!ui.wallExterior ? 'on' : ''}">Interior</button><button data-ext="1" class="${ui.wallExterior ? 'on' : ''}">Exterior</button></div>
+        <label class="inline-field">Thickness <input type="number" id="wallT" min="5" max="60" step="1" value="${cm(ui.wallThickness)}"> cm</label></div>` : ''}
+      ${t === 'stairs' ? `<div class="tool-opts"><div class="seg small-seg">${[['straight', 'Straight'], ['L', 'L-turn'], ['U', 'U-turn']].map(([k, n]) => `<button data-sshape="${k}" class="${ui.stairShape === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+        ${ui.stairShape !== 'straight' ? `<div class="seg small-seg">${['left', 'right'].map((k) => `<button data-sturn="${k}" class="${ui.stairTurn === k ? 'on' : ''}">Turn ${k}</button>`).join('')}</div>` : ''}</div>` : ''}
+      <div class="row" style="margin-top:10px"><button class="btn small" id="detectRooms" title="Create rooms for every area enclosed by walls">Detect rooms</button></div>
+    </section>
+    <section>
+      <h2>Floors</h2>
+      <div class="floor-list">${design.floors.map((f, i) => ({ f, i })).reverse().map(({ f, i }) => `<button class="floor-row ${i === fi ? 'on' : ''}" data-f="${i}"><span class="badge">${i === 0 ? 'G' : i}</span><span>${esc(f.name)}</span><em>${f.rooms.length} rooms</em></button>`).join('')}</div>
+      <div class="row" style="margin-top:8px"><button class="btn small" id="addFloor">+ Floor above</button><button class="btn small danger ghost" id="delFloor" ${design.floors.length < 2 ? 'disabled' : ''}>Delete floor</button></div>
+    </section>
+    <section>
+      <h2>Start over</h2>
+      <div class="row"><button class="btn small" id="newHouse2">New house…</button><button class="btn small" id="dxf2">Import DXF…</button></div>
+      <p class="hint" style="margin-top:8px">Have a floor plan image? Give it to your AI agent (see <b>Agents</b>) and it will trace it into this house.</p>
+    </section>`;
+  $$('[data-tool]', el).forEach((b) => (b.onclick = () => setTool(b.dataset.tool === 'select' ? null : b.dataset.tool)));
+  $$('[data-ext]', el).forEach((b) => (b.onclick = () => {
+    ui.wallExterior = b.dataset.ext === '1';
+    ui.wallThickness = ui.wallExterior ? DEFAULTS.exteriorWall : DEFAULTS.interiorWall;
+    renderBuildPanel();
+  }));
+  if ($('#wallT', el)) $('#wallT', el).onchange = (e) => (ui.wallThickness = Math.max(0.05, parseFloat(e.target.value) / 100 || ui.wallThickness));
+  $$('[data-sshape]', el).forEach((b) => (b.onclick = () => ((ui.stairShape = b.dataset.sshape), renderBuildPanel())));
+  $$('[data-sturn]', el).forEach((b) => (b.onclick = () => ((ui.stairTurn = b.dataset.sturn), renderBuildPanel())));
+  $('#detectRooms', el).onclick = () => {
+    const f = floorNow();
+    const found = detectRooms(f);
+    let added = 0;
+    for (const pts of found) {
+      const [cx, cz] = pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
+      const existing = f.rooms.find((r) => pointInPolygon(cx, cz, r.points));
+      if (existing) existing.points = pts;
+      else (f.rooms.push({ id: uid('r'), name: `Room ${f.rooms.length + 1}`, points: pts, floorKind: 'wood', floorColor: '#c49a6c' }), added++);
     }
-  }
+    commit();
+    toast(found.length ? `${found.length} enclosed area${found.length > 1 ? 's' : ''} found, ${added} new room${added === 1 ? '' : 's'}.` : 'No fully enclosed areas yet. Close the walls first.');
+  };
+  $$('[data-f]', el).forEach((b) => (b.onclick = () => setFloor(+b.dataset.f)));
+  $('#addFloor', el).onclick = addFloorAbove;
+  $('#delFloor', el).onclick = deleteFloor;
+  $('#newHouse2', el).onclick = () => $('#newHouseDialog').showModal();
+  $('#dxf2', el).onclick = () => $('#dxfFile').click();
 }
 
-// ---------- item operations ----------
+function setTool(name) {
+  ui.tool = name;
+  tools.set(name);
+  if (name && viewer.view === 'walk') setView('3d');
+  renderAll();
+}
 
-function updatePlaced(id, patch) {
-  const p = placedById(id);
-  if (!p) return;
-  Object.assign(p, patch);
+function addFloorAbove() {
+  const top = design.floors.at(-1);
+  const f = newFloor(design.floors.length, { height: top.height });
+  // Copy the exterior walls so the new storey sits on the one below.
+  f.walls = top.walls.filter((w) => w.exterior).map((w) => ({ ...w, id: uid('w'), a: w.a.slice(), b: w.b.slice() }));
+  if (!f.walls.length) f.walls = top.walls.map((w) => ({ ...w, id: uid('w'), a: w.a.slice(), b: w.b.slice() }));
+  f.rooms = detectRooms(f).map((pts, i) => ({ id: uid('r'), name: `Room ${i + 1}`, points: pts, floorKind: 'wood', floorColor: '#c49a6c' }));
+  design.floors.push(f);
   commit();
+  setFloor(design.floors.length - 1);
+  toast(`${f.name} added. Place stairs on the floor below to reach it.`);
 }
 
-function rotateSelected(delta) {
-  const p = viewer.selectedId && placedById(viewer.selectedId);
-  if (!p) return;
+function deleteFloor() {
+  const i = viewer.activeFloor;
+  const f = design.floors[i];
+  if (design.floors.length < 2) return;
+  if (!confirm(`Delete ${f.name} with its walls, rooms and ${f.placed.length} items?`)) return;
+  design.floors.splice(i, 1);
+  viewer.activeFloor = Math.max(0, i - 1);
+  commit();
+  setFloor(viewer.activeFloor);
+  toast('Floor deleted.', { undo: true });
+}
+
+function setEditing(on) {
+  ui.editing = on;
+  if (!on && ui.tool) setTool(null);
+  if (on && viewer.view === 'walk') setView('3d');
+  viewer.select(null);
+  renderAll();
+}
+
+// ---------- furniture operations ----------
+
+function rotateItem(p, delta) {
   p.rot = ((((p.rot || 0) + delta) % 360) + 360) % 360;
-  viewer.sync(state.placed, state.inventory);
+  viewer.syncFurniture();
   const rec = viewer.items.get(p.id);
   const c = rec && viewer.constrain(rec, p.x, p.z, false);
   if (c) Object.assign(p, { x: c.x, z: c.z });
-  commit();
+  commit({ rebuild: false });
 }
 
-function footprint(p) {
+function footprintOf(p) {
   const it = itemById(p.itemId);
   if (!it) return null;
   const d = dimsOf(it);
   const a = ((p.rot || 0) * Math.PI) / 180;
-  const hw = Math.abs(Math.cos(a)) * d.w / 2 + Math.abs(Math.sin(a)) * d.d / 2;
-  const hd = Math.abs(Math.sin(a)) * d.w / 2 + Math.abs(Math.cos(a)) * d.d / 2;
+  const hw = (Math.abs(Math.cos(a)) * d.w) / 2 + (Math.abs(Math.sin(a)) * d.d) / 2;
+  const hd = (Math.abs(Math.sin(a)) * d.w) / 2 + (Math.abs(Math.cos(a)) * d.d) / 2;
   return { x0: p.x - hw, x1: p.x + hw, z0: p.z - hd, z1: p.z + hd, rug: it.category === 'rug' };
 }
 
-/** Nearest free floor spot to `at` (or the room centre) where the item fits without overlapping. */
-function findSpot(item, at) {
-  const pts = state.room.points;
+/** Nearest free floor spot (inside a room, clear of walls and furniture) to what the camera is looking at. */
+function findSpot(item, floor) {
   const d = dimsOf(item);
-  const [cx, cz] = at || centroid(pts);
-  if (at) return at;
-  const others = state.placed.map(footprint).filter((f) => f && !(item.category !== 'rug' && f.rug));
-  const fits = (x, z) => {
+  const regions = floor.rooms.length ? floor.rooms.map((r) => r.points) : footprint(floor).map((p) => p[0].slice(0, -1));
+  if (!regions.length) return [0, 0];
+  const tgt = viewer.controls.getTarget ? viewer.controls.getTarget(viewer.persp.position.clone()) : { x: 0, z: 0 };
+  const others = floor.placed.map(footprintOf).filter((f) => f && !(item.category !== 'rug' && f.rug));
+  const clear = (x, z) => {
     const corners = [[x - d.w / 2, z - d.d / 2], [x + d.w / 2, z - d.d / 2], [x + d.w / 2, z + d.d / 2], [x - d.w / 2, z + d.d / 2]];
-    if (!corners.every(([px, pz]) => pointInPolygon(px, pz, pts))) return false;
+    if (!regions.some((r) => corners.every(([px, pz]) => pointInPolygon(px, pz, r)))) return false;
+    if (floor.walls.some((w) => corners.some((c) => closestOnSegment(c, w.a, w.b).dist < w.thickness / 2 + 0.02))) return false;
     return !others.some((f) => x + d.w / 2 > f.x0 && x - d.w / 2 < f.x1 && z + d.d / 2 > f.z0 && z - d.d / 2 < f.z1);
   };
-  const b = bounds(pts);
+  const xs = regions.flat().map((p) => p[0]), zs = regions.flat().map((p) => p[1]);
   let best = null;
-  for (let x = b.minX + d.w / 2; x <= b.maxX - d.w / 2 + 1e-6; x += 0.1)
-    for (let z = b.minZ + d.d / 2; z <= b.maxZ - d.d / 2 + 1e-6; z += 0.1) {
-      if (!fits(x, z)) continue;
-      const dist = Math.hypot(x - cx, z - cz);
+  for (let x = Math.min(...xs) + d.w / 2; x <= Math.max(...xs) - d.w / 2 + 1e-6; x += 0.1)
+    for (let z = Math.min(...zs) + d.d / 2; z <= Math.max(...zs) - d.d / 2 + 1e-6; z += 0.1) {
+      if (!clear(x, z)) continue;
+      const dist = Math.hypot(x - tgt.x, z - tgt.z);
       if (!best || dist < best[2]) best = [x, z, dist];
     }
   if (best) return [best[0], best[1]];
-  // Room is full: fall back to anywhere inside.
-  if (pointInPolygon(cx, cz, pts)) return [cx, cz];
-  for (let t = 0.1; t <= 1; t += 0.1) {
-    const px = pts[0][0] + (cx - pts[0][0]) * t;
-    const pz = pts[0][1] + (cz - pts[0][1]) * t;
-    if (pointInPolygon(px, pz, pts)) return [px, pz];
-  }
-  return [cx, cz];
+  const r = regions[0];
+  return r.reduce((s, p) => [s[0] + p[0] / r.length, s[1] + p[1] / r.length], [0, 0]);
 }
 
-function addToRoom(itemId, at, { rot, color, lift, againstWall: wall, select = true } = {}) {
+function addToRoom(itemId, at) {
   const item = itemById(itemId);
   if (!item) return;
-  const [x, z] = findSpot(item, at);
-  const colorName = color && item.colors?.some((c) => c.name === color) ? color : /^#[0-9a-f]{6}$/i.test(color || '') ? color : null;
-  const p = { id: uid('p'), itemId, x: +x.toFixed(3), z: +z.toFixed(3), rot: rot != null ? ((+rot % 360) + 360) % 360 : 0, color: colorName || pickedColor[itemId] || item.colors?.[0]?.name || null };
-  state.placed.push(p);
-  viewer.sync(state.placed, state.inventory);
+  if (viewer.view === 'walk') setView('3d');
+  const floor = floorNow();
+  const [x, z] = at || findSpot(item, floor);
+  const p = { id: uid('p'), itemId, x: +x.toFixed(3), z: +z.toFixed(3), rot: 0, color: ui.pickedColor[itemId] || item.colors?.[0]?.name || null };
+  floor.placed.push(p);
+  viewer.syncFurniture();
   const rec = viewer.items.get(p.id);
   const c = rec && viewer.constrain(rec, p.x, p.z, false);
   if (c) Object.assign(p, c);
-  if (lift != null) p.y = lift;
-  if (Number.isInteger(wall)) placeAgainstWall(p, wall, at ? undefined : undefined);
-  else if (wall || (!at && ['curtain', 'mirror', 'wardrobe', 'bookshelf'].includes(item.category))) placeAgainstWall(p);
-  if (!select) return p;
-  commit({ render: false });
-  renderAll();
-  viewer.select(p.id);
+  if (!at && ['curtain', 'mirror', 'wardrobe', 'bookshelf', 'tvstand', 'sideboard', 'dresser'].includes(item.category)) againstWall(p, floor);
   $('#leftPanel').classList.remove('open');
-  return p;
+  commit({ rebuild: false });
+  viewer.select({ type: 'item', id: p.id });
 }
 
-function placeAgainstWall(p, wallIndex, along) {
+function againstWall(p, floor) {
   const item = itemById(p.itemId);
-  let w;
-  if (Number.isInteger(wallIndex) && walls(state.room.points)[wallIndex]) {
-    // A specific wall: centre on it, or `along` metres from its start corner.
-    const ww = walls(state.room.points)[wallIndex];
-    const t = along != null ? Math.max(0, Math.min(ww.len, along)) : ww.len / 2;
-    w = { ...ww, q: [ww.a[0] + ww.dir[0] * t, ww.a[1] + ww.dir[1] * t] };
-  } else w = nearestWall(p.x, p.z, state.room.points);
-  if (!w) return;
   const d = dimsOf(item);
-  p.rot = Math.round((Math.atan2(w.inward[0], w.inward[1]) * 180) / Math.PI + 360) % 360;
-  p.x = +(w.q[0] + w.inward[0] * (d.d / 2 + 0.005)).toFixed(3);
-  p.z = +(w.q[1] + w.inward[1] * (d.d / 2 + 0.005)).toFixed(3);
-  viewer.sync(state.placed, state.inventory);
+  let best = null;
+  for (const w of floor.walls) {
+    const c = closestOnSegment([p.x, p.z], w.a, w.b);
+    if (!best || c.dist < best.dist) best = { w, ...c };
+  }
+  if (!best) return;
+  const { normal } = wallFrame(best.w);
+  const side = Math.sign((p.x - best.q[0]) * normal[0] + (p.z - best.q[1]) * normal[1]) || 1;
+  const n = [normal[0] * side, normal[1] * side];
+  p.rot = Math.round((Math.atan2(n[0], n[1]) * 180) / Math.PI + 360) % 360;
+  p.x = +(best.q[0] + n[0] * (best.w.thickness / 2 + d.d / 2 + 0.005)).toFixed(3);
+  p.z = +(best.q[1] + n[1] * (best.w.thickness / 2 + d.d / 2 + 0.005)).toFixed(3);
+  viewer.syncFurniture();
   const rec = viewer.items.get(p.id);
   const c = rec && viewer.constrain(rec, p.x, p.z, true);
   if (c) Object.assign(p, { x: c.x, z: c.z });
 }
 
-function againstWall(id) {
-  const p = placedById(id);
-  if (!p) return;
-  placeAgainstWall(p);
-  commit();
-}
-
 function duplicate(id) {
-  const p = placedById(id);
+  const { p, floor } = findPlaced(id);
   if (!p) return;
-  const q = { ...p, id: uid('p'), x: p.x + 0.3, z: p.z + 0.3 };
-  if (!pointInPolygon(q.x, q.z, state.room.points)) Object.assign(q, { x: p.x - 0.3, z: p.z - 0.3 });
-  state.placed.push(q);
-  commit();
-  viewer.select(q.id);
+  const q = { ...p, id: uid('p'), x: +(p.x + 0.3).toFixed(3), z: +(p.z + 0.3).toFixed(3) };
+  floor.placed.push(q);
+  commit({ rebuild: false });
+  viewer.select({ type: 'item', id: q.id });
 }
 
-function removePlaced(id) {
-  state.placed = state.placed.filter((p) => p.id !== id);
+function deleteSelection() {
+  const s = viewer.sel;
+  if (!s) return;
+  const f = floorNow();
+  if (s.type === 'item') {
+    const { floor } = findPlaced(s.id);
+    if (floor) floor.placed = floor.placed.filter((p) => p.id !== s.id);
+  } else if (!ui.editing) return;
+  else if (s.type === 'wall') {
+    f.walls = f.walls.filter((w) => w.id !== s.id);
+    f.openings = f.openings.filter((o) => o.wall !== s.id);
+  } else if (s.type === 'opening') f.openings = f.openings.filter((o) => o.id !== s.id);
+  else if (s.type === 'stairs') f.stairs = f.stairs.filter((x) => x.id !== s.id);
+  else if (s.type === 'room') f.rooms = f.rooms.filter((r) => r.id !== s.id);
   viewer.select(null);
-  commit();
-  toast('Removed from room.', { undo: true });
+  commit({ rebuild: s.type !== 'item' });
+  toast('Deleted.', { undo: true });
 }
 
-// ---------- item editor ----------
+// ---------- model editor ----------
 
 let editing = null;
 
@@ -553,7 +693,6 @@ function colorRow(c = { name: '', hex: '#cccccc' }) {
   row.className = 'color-row';
   row.innerHTML = `<input type="color" value="${esc(c.hex || '#cccccc')}"><input type="text" placeholder="Colour name, e.g. Light beige" value="${esc(c.name)}"><button type="button" title="Remove">×</button>`;
   const [pick, name] = $$('input', row);
-  // Typing a colour name suggests a matching swatch until the user picks one by hand.
   let manual = !!c.name;
   pick.oninput = () => (manual = true);
   name.oninput = () => {
@@ -567,7 +706,7 @@ function colorRow(c = { name: '', hex: '#cccccc' }) {
 function openItemDialog(item, { note, isNew } = {}) {
   editing = { item, isNew };
   const f = $('#itemForm');
-  $('#itemDialogTitle').textContent = isNew ? 'Add item' : 'Edit item';
+  $('#itemDialogTitle').textContent = isNew ? 'New model' : 'Edit model';
   $('#itemNote').hidden = !note;
   $('#itemNote').textContent = note || '';
   const d = item.dims || {};
@@ -588,15 +727,13 @@ function openItemDialog(item, { note, isNew } = {}) {
   for (const c of item.colors?.length ? item.colors : [{ name: '', hex: '#cccccc' }]) rows.appendChild(colorRow(c));
   $('#deleteItemBtn').hidden = !!isNew;
   $('#itemDialog').showModal();
-  if (!note) f.name.focus();
 }
 
 function saveItemDialog() {
   const f = $('#itemForm');
   const { item, isNew } = editing;
   const num = (v) => Math.max(0.005, parseFloat(v) / 100);
-  item.name = f.name.value.trim() || 'Untitled item';
-  const oldCat = item.category;
+  item.name = f.name.value.trim() || 'Untitled model';
   item.category = f.category.value;
   item.url = f.url.value.trim() || null;
   item.dims = { w: num(f.w.value), d: num(f.d.value), h: num(f.h.value) };
@@ -612,20 +749,21 @@ function saveItemDialog() {
     .filter((c, i, a) => a.findIndex((x) => x.name === c.name) === i);
   if (!item.colors.length) item.colors = [{ name: 'Default', hex: '#b8b2a7' }];
   delete item.needsDims;
-  // Keep placed colours valid.
-  for (const p of state.placed) if (p.itemId === item.id && p.color && !p.color.startsWith('#') && !item.colors.some((c) => c.name === p.color)) p.color = item.colors[0].name;
-  if (isNew && !itemById(item.id)) state.inventory.unshift(item);
-  commit();
-  if (isNew) toast(`“${item.name}” added to inventory.`, { action: ['Add to room', () => addToRoom(item.id)] });
-  void oldCat;
+  for (const fl of design.floors) for (const p of fl.placed) if (p.itemId === item.id && p.color && !p.color.startsWith('#') && !item.colors.some((c) => c.name === p.color)) p.color = item.colors[0].name;
+  if (isNew && !itemById(item.id)) library.items.unshift(item);
+  commit({ lib: true, rebuild: false });
+  if (isNew) toast(`“${item.name}” added to your models.`, { action: ['Add to room', () => addToRoom(item.id)] });
 }
 
 // ---------- importing links ----------
 
-const queue = [];
+function workerUrl() {
+  const custom = pref.get('worker', '') || WORKER_URL;
+  return (custom || (store.kind === 'device' ? location.origin + location.pathname.replace(/\/[^/]*$/, '') : '')).replace(/\/+$/, '');
+}
 
 function renderQueue() {
-  $('#queue').innerHTML = queue
+  $('#queue').innerHTML = ui.queue
     .slice(-6)
     .reverse()
     .map((q) => `<li class="${q.status === 'error' ? 'err' : q.status === 'warn' ? 'warn' : ''}" data-q="${q.id}">
@@ -636,17 +774,14 @@ function renderQueue() {
     .join('');
   $$('#queue [data-dismiss]').forEach((b) => (b.onclick = () => {
     const id = b.closest('li').dataset.q;
-    queue.splice(queue.findIndex((q) => q.id === id), 1);
+    ui.queue.splice(ui.queue.findIndex((q) => q.id === id), 1);
     renderQueue();
   }));
-  $$('#queue [data-edit]').forEach((a) => (a.onclick = () => {
-    const it = itemById(a.dataset.edit);
-    if (it) openItemDialog(it);
-  }));
+  $$('#queue [data-edit]').forEach((a) => (a.onclick = () => itemById(a.dataset.edit) && openItemDialog(itemById(a.dataset.edit))));
   $$('#queue [data-add]').forEach((a) => (a.onclick = () => addToRoom(a.dataset.add)));
   $$('#queue [data-manual]').forEach((a) => (a.onclick = () => {
-    const q = queue.find((x) => x.id === a.dataset.manual);
-    openItemDialog(guessFromUrl(q.url), { isNew: true, note: 'We could not read this page automatically. Check the name and enter the size from the product page.' });
+    const q = ui.queue.find((x) => x.id === a.dataset.manual);
+    openItemDialog(guessFromUrl(q.url), { isNew: true, note: "We couldn't read this page automatically. Check the name and enter the size from the product page." });
   }));
 }
 
@@ -659,23 +794,17 @@ export function extractUrls(text) {
   return out;
 }
 
-function titleCase(s) {
-  return s.replace(/\b([a-z])/g, (c) => c.toUpperCase());
-}
-
 function guessFromUrl(url) {
-  let name = 'New item';
+  let name = 'New model';
   try {
     const u = new URL(url);
     const segs = u.pathname.split('/').filter(Boolean);
     const dp = segs.findIndex((s) => /^(dp|gp|product|products|p|item|itm|pd)$/i.test(s));
     let seg = (dp > 0 && /[a-z]-/i.test(segs[dp - 1]) ? segs[dp - 1] : null) || [...segs].reverse().find((s) => /[a-z]{3,}.*[-_+]/i.test(s)) || segs.at(-1) || u.hostname;
     seg = decodeURIComponent(seg).replace(/\.(html?|aspx?|php)$/i, '').replace(/[-_+]+/g, ' ').replace(/\b(s?\d{6,}|[A-Z0-9]{10})\b/g, '').replace(/\s+/g, ' ').trim();
-    if (seg) name = titleCase(seg).slice(0, 80);
+    if (seg) name = seg.replace(/\b([a-z])/g, (c) => c.toUpperCase()).slice(0, 80);
   } catch {}
   const category = guessCategory(name);
-  // Colour = last colour word in the name, plus a modifier before it ("Light beige").
-  // Ignore furniture names that contain colour words ("coffee table").
   const words = name.replace(/coffee table/gi, '').split(' ').filter(Boolean);
   let color = null;
   for (let i = words.length - 1; i >= 0 && !color; i--) {
@@ -697,21 +826,12 @@ function itemFromProduct(prod) {
     const hex = colorFromName(prod.name);
     colors = [{ name: hex ? 'As shown' : 'Default', hex: hex || '#b8b2a7' }];
   }
-  // Rugs are flat; if the store listed only two numbers, the second is length.
   if (cat === 'rug' && d.w && d.d == null && d.h) Object.assign(d, { d: d.h, h: 0.012 });
   if (cat === 'rug' && (!d.h || d.h > 0.05)) d.h = 0.012;
   return {
-    id: uid('i'),
-    name: prod.name || 'Imported item',
-    category: cat,
-    url: prod.url,
-    image: prod.image || null,
-    price: prod.price || null,
-    currency: prod.currency || null,
-    modelUrl: prod.modelUrl || null,
-    dims: { w: d.w || def[0], d: d.d || def[1], h: d.h || def[2] },
-    needsDims: !(d.w && d.d && d.h),
-    colors,
+    id: uid('i'), name: prod.name || 'Imported model', category: cat, url: prod.url, image: prod.image || null,
+    price: prod.price || null, currency: prod.currency || null, modelUrl: prod.modelUrl || null,
+    dims: { w: d.w || def[0], d: d.d || def[1], h: d.h || def[2] }, needsDims: !(d.w && d.d && d.h), colors,
   };
 }
 
@@ -719,24 +839,20 @@ async function importUrls(urls) {
   if (!urls.length) return toast('No links found. Paste a full link starting with https://');
   const base = workerUrl();
   for (const url of urls) {
-    const existing = state.inventory.find((i) => i.url === url);
+    const existing = library.items.find((i) => i.url === url);
     const q = { id: uid('q'), url, status: 'pending', title: url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60) };
-    queue.push(q);
+    ui.queue.push(q);
     if (existing) {
-      Object.assign(q, { status: 'ok', title: existing.name, message: `Already in your inventory · <a data-add="${existing.id}">Add to room</a>` });
+      Object.assign(q, { status: 'ok', title: existing.name, message: `Already in your models · <a data-add="${existing.id}">Add to room</a>` });
       continue;
     }
     renderQueue();
     if (!base) {
       const item = guessFromUrl(url);
       item.needsDims = true;
-      state.inventory.unshift(item);
-      commit();
-      Object.assign(q, {
-        status: 'warn',
-        title: item.name,
-        message: `Link reader not set up, so the size is a typical guess. <a data-edit="${item.id}">Enter the real size</a> · <a onclick="document.querySelector('[data-act=settings]').click()">Set up</a>`,
-      });
+      library.items.unshift(item);
+      commit({ lib: true, rebuild: false });
+      Object.assign(q, { status: 'warn', title: item.name, message: `Run Roomcraft with <code>npm start</code> to read links. Size is a typical guess: <a data-edit="${item.id}">enter the real size</a>` });
       continue;
     }
     try {
@@ -744,17 +860,12 @@ async function importUrls(urls) {
       const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
       if (!data.ok) throw new Error(data.error || 'Could not read the page.');
       const item = itemFromProduct(data.product);
-      state.inventory.unshift(item);
-      commit();
-      const bits = [];
-      bits.push(`${cm(item.dims.w)} × ${cm(item.dims.d)} × ${cm(item.dims.h)} cm`);
+      library.items.unshift(item);
+      commit({ lib: true, rebuild: false });
+      const bits = [`${cm(item.dims.w)} × ${cm(item.dims.d)} × ${cm(item.dims.h)} cm`];
       if (item.colors.length > 1) bits.push(`${item.colors.length} colours`);
       if (item.modelUrl) bits.push('3D model found');
-      Object.assign(q, {
-        status: item.needsDims ? 'warn' : 'ok',
-        title: item.name,
-        message: (item.needsDims ? `Size partly guessed. <a data-edit="${item.id}">Check size</a> · ` : '') + bits.join(' · ') + ` · <a data-add="${item.id}">Add to room</a>`,
-      });
+      Object.assign(q, { status: item.needsDims ? 'warn' : 'ok', title: item.name, message: (item.needsDims ? `Size partly guessed. <a data-edit="${item.id}">Check size</a> · ` : '') + bits.join(' · ') + ` · <a data-add="${item.id}">Add to room</a>` });
     } catch (err) {
       Object.assign(q, { status: 'error', message: `${esc(err.message || err)} <a data-manual="${q.id}">Add manually</a>` });
     }
@@ -763,35 +874,90 @@ async function importUrls(urls) {
   renderQueue();
 }
 
+// ---------- designs ----------
 
-// ---------- misc UI ----------
-
-let toastTimer;
-function toast(msg, { undo, action } = {}) {
-  const t = $('#toast');
-  t.innerHTML = esc(msg) + (undo ? '<button data-t="undo">Undo</button>' : '') + (action ? `<button data-t="act">${esc(action[0])}</button>` : '');
-  t.classList.add('show');
-  if (undo) $('[data-t=undo]', t).onclick = () => (restore(history.index - 1), t.classList.remove('show'));
-  if (action) $('[data-t=act]', t).onclick = () => (action[1](), t.classList.remove('show'));
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), action || undo ? 6000 : 3000);
+async function openDesign(id) {
+  design = await store.load(id);
+  await store.setActive(id).catch(() => {});
+  lastSaved = design.updatedAt;
+  viewer.select(null);
+  viewer.activeFloor = 0;
+  viewer.setDesign(design, { refit: true, force: true });
+  if (viewer.view === 'walk') walker.start(0);
+  resetHistory();
+  renderAll();
 }
 
-function updateHint() {
-  const v = viewer.view;
-  $('#hintbar').textContent = viewer.editRoom
-    ? 'Drag corners to reshape · Double-click a wall to add a corner · Click a wall for doors & windows'
-    : v === 'eye'
-      ? 'W A S D or scroll to walk · Drag to look around'
-      : v === 'plan'
-        ? 'Drag items to move · Drag the blue dot to rotate · Scroll to zoom · Drag empty space to pan'
-        : 'Drag items to move · Drag the blue dot to rotate · Drag empty space to orbit · Right-drag to pan';
+async function renderDesignList() {
+  const list = await store.list();
+  $('#storageNote').textContent = store.kind === 'device' ? 'Saved on this computer (designs/ folder)' : 'Saved in this browser. Run npm start to save to your computer.';
+  $('#designList').innerHTML = list
+    .map((d) => `<div class="design-row ${d.id === design.id ? 'on' : ''}" data-id="${esc(d.id)}">
+      <div class="dr-main"><b>${esc(d.name || 'Untitled')}</b><span>${d.floors} floor${d.floors === 1 ? '' : 's'} · ${d.updatedAt ? new Date(d.updatedAt).toLocaleString() : ''}${d.updatedBy === 'agent' ? ' · edited by agent' : ''}</span></div>
+      <div class="dr-actions">
+        ${d.id === design.id ? '<span class="pill">Open</span>' : '<button class="btn small primary" data-open>Open</button>'}
+        <button class="btn small ghost" data-dup>Duplicate</button>
+        <button class="btn small ghost" data-rename>Rename</button>
+        <button class="btn small ghost danger" data-del ${list.length < 2 ? 'disabled' : ''}>Delete</button>
+      </div></div>`)
+    .join('');
+  $$('#designList .design-row').forEach((row) => {
+    const id = row.dataset.id;
+    $('[data-open]', row)?.addEventListener('click', async () => {
+      await openDesign(id);
+      $('#designsDialog').close();
+    });
+    $('[data-dup]', row).onclick = async () => {
+      const d = id === design.id ? JSON.parse(JSON.stringify(design)) : await store.load(id);
+      d.id = uid('d');
+      d.name = `${d.name} (copy)`;
+      await store.save(d);
+      renderDesignList();
+    };
+    $('[data-rename]', row).onclick = async () => {
+      const d = id === design.id ? design : await store.load(id);
+      const name = prompt('Design name', d.name);
+      if (!name?.trim()) return;
+      d.name = name.trim();
+      if (id === design.id) commit({ rebuild: false });
+      else await store.save(d);
+      renderDesignList();
+    };
+    $('[data-del]', row).onclick = async () => {
+      if (!confirm('Delete this design? This cannot be undone.')) return;
+      await store.remove(id);
+      if (id === design.id) await openDesign((await store.list())[0].id);
+      renderDesignList();
+    };
+  });
 }
 
-function setView(v) {
-  viewer.setView(v);
-  $$('#viewSeg button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
-  updateHint();
+async function createHouse(opts) {
+  const d = newHouse(opts);
+  await store.save(d);
+  await openDesign(d.id);
+  toast(`“${d.name}” created. Use Edit house to draw rooms, or give your agent a floor plan.`);
+}
+
+async function importDesignFile(file) {
+  try {
+    const data = JSON.parse(await file.text());
+    const d = migrate(data);
+    d.id = uid('d');
+    // Bring along any models the design uses that this device doesn't have yet.
+    const ids = new Set(library.items.map((i) => i.id));
+    const incoming = (data.inventory || []).filter((i) => i?.id && !ids.has(i.id));
+    if (incoming.length) {
+      library.items.push(...incoming);
+      await store.saveLibrary(library);
+    }
+    delete d.inventory;
+    await store.save(d);
+    await openDesign(d.id);
+    toast(`Imported “${d.name}”${incoming.length ? ` with ${incoming.length} new model${incoming.length > 1 ? 's' : ''}` : ''}.`);
+  } catch (err) {
+    toast(`That isn't a Roomcraft design file (${err.message}).`);
+  }
 }
 
 function download(name, href) {
@@ -803,163 +969,349 @@ function download(name, href) {
   a.remove();
 }
 
-function normalizeProject(p) {
-  const room = p.room || {};
-  return {
-    room: {
-      points: Array.isArray(room.points) && room.points.length >= 3 ? room.points : ROOM_PRESETS.rectangle(),
-      height: room.height || 2.6,
-      floorKind: room.floorKind || 'wood',
-      floorColor: room.floorColor || '#c49a6c',
-      wallColor: room.wallColor || '#efebe4',
-      openings: room.openings || [],
-    },
-    inventory: Array.isArray(p.inventory) ? p.inventory : [],
-    placed: Array.isArray(p.placed) ? p.placed : [],
-    meta: { baseVersion: p.version ?? p.meta?.baseVersion ?? 0 },
-  };
-}
+const fileName = (s) => String(s || 'house').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'house';
 
-function loadRepoProject({ merge }) {
-  const next = normalizeProject(repoProject);
-  if (merge) {
-    // Keep the user's own imported items too.
-    const ids = new Set(next.inventory.map((i) => i.id));
-    for (const i of state.inventory) if (!ids.has(i.id)) next.inventory.push(i);
+async function exportAs(kind) {
+  if (kind === 'design') {
+    const used = new Set(design.floors.flatMap((f) => f.placed.map((p) => p.itemId)));
+    const out = { ...design, inventory: library.items.filter((i) => used.has(i.id)) };
+    download(`${fileName(design.name)}.roomcraft.json`, URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' })));
+  } else if (kind === 'png') {
+    download(`${fileName(design.name)}.png`, viewer.screenshot());
+  } else if (kind === 'glb') {
+    toast('Preparing 3D model…');
+    const { exportGLB } = await import('./export.js');
+    const blob = await exportGLB(viewer);
+    download(`${fileName(design.name)}.glb`, URL.createObjectURL(blob));
+    toast(`Saved ${fileName(design.name)}.glb (${(blob.size / 1e6).toFixed(1)} MB). In Blender: File → Import → glTF 2.0.`);
   }
-  Object.assign(state, next);
-  viewer.select(null);
-  viewer.setRoom(state.room, { refit: true });
-  commit();
 }
 
-function showBanner(html, buttons) {
-  const b = $('#banner');
-  b.innerHTML = `<span>${html}</span>` + buttons.map((x, i) => `<button class="btn small ${i === 0 ? 'primary' : ''}" data-b="${i}">${esc(x[0])}</button>`).join('');
-  b.hidden = false;
-  buttons.forEach((x, i) => ($(`[data-b="${i}"]`, b).onclick = () => ((b.hidden = true), x[1]())));
+async function importDxf(file) {
+  if (store.kind !== 'device') return toast('DXF import needs Roomcraft running with npm start.');
+  try {
+    const r = await fetch('api/dxf', { method: 'POST', body: await file.text() });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    const f = floorNow();
+    const replace = !f.walls.length || confirm(`Replace the walls on ${f.name} with the ${j.lines.length} lines from the DXF? (Cancel adds them instead.)`);
+    if (replace) {
+      f.walls = [];
+      f.openings = [];
+      f.rooms = [];
+    }
+    for (const [a, b] of j.lines) f.walls.push({ id: uid('w'), a, b, thickness: DEFAULTS.interiorWall });
+    const rooms = detectRooms(f);
+    for (const pts of rooms) f.rooms.push({ id: uid('r'), name: `Room ${f.rooms.length + 1}`, points: pts, floorKind: 'wood', floorColor: '#c49a6c' });
+    commit();
+    viewer.frameHouse(true);
+    toast(`Imported ${j.lines.length} wall lines (${j.spanMetres} m across${j.unitsKnown ? '' : ', units guessed'}) and found ${rooms.length} rooms. Mark exterior walls and set thickness in Edit house.`);
+  } catch (err) {
+    toast(`Couldn't import the DXF: ${err.message}`);
+  }
+}
+
+// ---------- AI agents ----------
+
+async function openAgents() {
+  if (store.kind !== 'device') return toast('Connecting agents needs Roomcraft running with npm start.');
+  const dlg = $('#agentsDialog');
+  const data = await (await fetch('api/agents')).json();
+  const connected = data.harnesses.filter((h) => h.connection || h.configured);
+  $('#agentsTitle').textContent = connected.length ? 'AI agents' : 'Connect your AI agent';
+  $('#agentsDontAsk').checked = pref.get('agentsDontAsk', false);
+  $('#agentsConnected').innerHTML = connected.length
+    ? `<div class="lbl">Set up</div>${connected
+        .map((h) => `<div class="agent-row"><div><b>${esc(h.name)}</b><span>${h.connection ? `Connected · last used ${new Date(h.connection.lastSeen).toLocaleString()}` : 'Configured, waiting for its first connection. Restart the agent and ask it to list the roomcraft tools.'}</span></div><button class="btn small danger ghost" data-remove="${esc(h.id)}">Remove</button></div>`)
+        .join('')}<div class="lbl" style="margin-top:14px">Set up another agent</div>`
+    : '';
+  $('#agentGrid').innerHTML =
+    data.harnesses
+      .filter((h) => !h.other)
+      .map((h) => `<button class="agent-card ${h.connection || h.configured ? 'done' : ''}" data-agent="${esc(h.id)}"><b>${esc(h.name)}</b><span>${h.connection ? 'Connected' : h.configured ? 'Configured' : 'Set up'}</span></button>`)
+      .join('') + '<button class="agent-card" data-agent="other"><b>Other agent</b><span>Any MCP client</span></button>';
+  $('#agentSetup').hidden = true;
+  $$('[data-remove]', dlg).forEach((b) => (b.onclick = async () => {
+    const r = await (await fetch('api/agents/remove', { method: 'POST', body: JSON.stringify({ id: b.dataset.remove }) })).json();
+    toast(r.message);
+    openAgents();
+    refreshAgentsDot();
+  }));
+  $$('[data-agent]', dlg).forEach((b) => (b.onclick = () => {
+    $$('[data-agent]', dlg).forEach((x) => x.classList.toggle('on', x === b));
+    const h = data.harnesses.find((x) => x.id === b.dataset.agent);
+    const prompt = h ? h.prompt : data.genericPrompt;
+    const box = $('#agentSetup');
+    box.hidden = false;
+    box.innerHTML = `<div class="setup-steps">
+      <div class="step"><span>1</span><div>${h?.noShell ? `${esc(h.name)} can't run setup commands itself, so Roomcraft can add itself to its config for you.` : `Copy this prompt and paste it into ${esc(h?.name || 'your agent')}. It installs the Roomcraft server into its own settings.`}</div></div>
+      ${h?.noShell ? '' : `<div class="prompt-box"><pre>${esc(prompt)}</pre><button class="btn small primary" id="copyPrompt">Copy prompt</button></div>`}
+      ${h?.canAutoSetup ? `<div class="step"><span>${h.noShell ? '2' : 'or'}</span><div><button class="btn small ${h.noShell ? 'primary' : ''}" id="autoSetup">Add it to ${esc(h.name)} automatically</button> <em class="muted">${esc(h.configPath)}</em></div></div>` : ''}
+      <div class="step"><span>${h?.noShell ? '3' : '2'}</span><div>Approve what the agent asks for and restart it if it says so. It shows as connected here the first time it uses Roomcraft.</div></div>
+    </div>`;
+    $('#copyPrompt', box)?.addEventListener('click', async (e) => {
+      try {
+        await navigator.clipboard.writeText(prompt);
+        e.target.textContent = 'Copied ✓';
+      } catch {
+        const r = document.createRange();
+        r.selectNodeContents($('pre', box));
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+        e.target.textContent = 'Selected, press Ctrl+C';
+      }
+    });
+    $('#autoSetup', box)?.addEventListener('click', async () => {
+      const r = await (await fetch('api/agents/setup', { method: 'POST', body: JSON.stringify({ id: h.id }) })).json();
+      toast(r.message || r.error);
+      refreshAgentsDot();
+      openAgents();
+    });
+  }));
+  if (!dlg.open) dlg.showModal();
+}
+
+async function refreshAgentsDot() {
+  if (store.kind !== 'device') return ($('#agentsBtn').hidden = true), 0;
+  try {
+    const data = await (await fetch('api/agents')).json();
+    const n = data.harnesses.filter((h) => h.connection || h.configured).length;
+    $('#agentsDot').classList.toggle('ok', n > 0);
+    $('#agentsBtn').title = n ? `${n} AI agent${n > 1 ? 's' : ''} set up` : 'Connect an AI agent';
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
+// ---------- views & walking ----------
+
+function setView(v) {
+  if (v === 'walk' && ui.tool) setTool(null);
+  viewer.setView(v);
+  $$('#viewSeg button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+  $('#walkUI').hidden = v !== 'walk';
+  if (v === 'walk') {
+    viewer.select(null);
+    walker.start(viewer.activeFloor);
+    walkHelp(false);
+  } else walker.stop();
+  renderAll();
+  if ($('#leaveWalk')) $('#leaveWalk').onclick = () => setView('3d');
+}
+
+function walkHelp(locked) {
+  const f = design && viewer ? `<b>${esc(floorNow().name)}</b> · ` : '';
+  $('#walkHelp').innerHTML = locked
+    ? `${f}W A S D to walk · Shift to hurry · Esc to release the mouse`
+    : matchMedia('(pointer: coarse)').matches
+      ? `${f}drag to look around · use the arrows to walk`
+      : `${f}<u>Click to look around</u> · W A S D to walk · walk onto the stairs to change floors`;
+}
+
+// ---------- photo ----------
+
+let photoAbort = null;
+async function takePhoto() {
+  const ov = $('#photoOverlay');
+  ov.hidden = false;
+  $('#photoImg').hidden = true;
+  $('#photoSave').hidden = true;
+  $('#photoCancel').textContent = 'Cancel';
+  $('#photoTitle').textContent = 'Rendering photo…';
+  $('#photoInfo').textContent = 'Preparing the scene…';
+  $('#photoBar').style.width = '0%';
+  photoAbort = new AbortController();
+  try {
+    const { renderPhoto } = await import('./photo.js');
+    const started = performance.now();
+    const url = await renderPhoto(viewer, {
+      samples: ui.quality === 'high' ? 400 : 150,
+      signal: photoAbort.signal,
+      onProgress: (n, total) => {
+        $('#photoBar').style.width = `${(n / total) * 100}%`;
+        const secs = ((performance.now() - started) / 1000) * (total / Math.max(1, n) - 1);
+        $('#photoInfo').textContent = `${n} / ${total} light samples · about ${Math.max(1, Math.round(secs))} s left`;
+      },
+    });
+    if (!url) return (ov.hidden = true);
+    $('#photoTitle').textContent = 'Photo ready';
+    $('#photoInfo').textContent = '';
+    $('#photoImg').src = url;
+    $('#photoImg').hidden = false;
+    $('#photoSave').hidden = false;
+    $('#photoCancel').textContent = 'Close';
+    $('#photoSave').onclick = () => download(`${fileName(design.name)}-photo.png`, url);
+  } catch (err) {
+    console.error(err);
+    $('#photoTitle').textContent = "Couldn't render the photo";
+    $('#photoInfo').textContent = err.message;
+    $('#photoCancel').textContent = 'Close';
+  }
+}
+
+// ---------- misc UI ----------
+
+let toastTimer;
+function toast(msg, { undo, action } = {}) {
+  const t = $('#toast');
+  t.innerHTML = esc(msg) + (undo ? '<button data-t="undo">Undo</button>' : '') + (action ? `<button data-t="act">${esc(action[0])}</button>` : '');
+  t.classList.add('show');
+  if (undo) $('[data-t=undo]', t).onclick = () => (restore(history.index - 1), t.classList.remove('show'));
+  if (action) $('[data-t=act]', t).onclick = () => (action[1](), t.classList.remove('show'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action || undo ? 6000 : 3500);
 }
 
 // ---------- boot ----------
 
 async function boot() {
-  const categorySelect = $('#categorySelect');
-  categorySelect.innerHTML = Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
-
-  try {
-    const res = await fetch('data/project.json', { cache: 'no-cache' });
-    repoProject = await res.json();
-  } catch {
-    repoProject = { version: 0, room: {}, inventory: [], placed: [] };
-  }
-  let local = null;
-  try {
-    local = JSON.parse(store.get(LS_STATE) || 'null');
-  } catch {}
-  state = normalizeProject(local || repoProject);
-  if (local?.meta) state.meta = local.meta;
-
-  try {
-    const h = await fetch('health', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null));
-    if (h?.service === 'roomcraft-local') localReader = location.origin;
-  } catch {}
   if (!webglSupport()) {
     $('#loading').innerHTML = '<div class="webgl-error"><b>3D view unavailable</b>This browser has WebGL turned off or unsupported.<br>Enable hardware acceleration, or try Chrome, Edge, Firefox or Safari.</div>';
     return;
   }
+  store = await openStorage();
+  library = await store.loadLibrary();
+  library.items ||= [];
+  let id = await store.getActive();
+  const list = await store.list();
+  if (!list.some((d) => d.id === id)) id = list[0]?.id;
+  if (!id) {
+    const d = newHouse({ name: 'My house' });
+    await store.save(d);
+    id = d.id;
+  }
+  design = await store.load(id);
+  lastSaved = design.updatedAt;
+  $('#categorySelect').innerHTML = Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+
   $('#loading').remove();
-  viewer = new Viewer($('#stage'), {
+  viewer = new Viewer($('#viewport'), {
     onSelect: () => renderInspector(),
-    onLive: (p) => {
-      const q = placedById(p.id);
-      if (q) Object.assign(q, { x: p.x, z: p.z, y: p.y, rot: p.rot });
-    },
-    onCommit: (p) => {
-      const q = placedById(p.id);
-      if (q) Object.assign(q, { x: p.x, z: p.z, y: p.y, rot: p.rot });
-      commit();
-    },
-    onRoomChange: (room) => {
-      state.room.points = room.points;
-      keepItemsInside();
-      commit();
-    },
-    onRoomSelect: () => renderInspector(),
-    onInsertCorner: (i, pt) => insertCorner(i, pt),
+    onLive: () => renderInspector(),
+    onCommit: () => commit({ rebuild: false }),
+    onStructureLive: () => viewer.setDesign(design),
+    onStructureCommit: () => commit(),
+    editable: () => ui.editing,
     onModelError: (item) => toast(`Couldn't load the 3D model for “${item.name}”, showing a generated one.`),
+    onPointerLock: (locked) => walkHelp(locked),
   });
+  viewer.library = library.items;
+  viewer.wallMode = pref.get('wallMode', 'cut');
   viewer.setAssetProxy((u) => {
     const base = workerUrl();
-    if (!base || !/^https?:/i.test(u) || u.startsWith(location.origin) || u.startsWith(base)) return u;
+    if (!base || !/^https?:/i.test(u) || u.startsWith(location.origin)) return u;
     return `${base}/asset?url=${encodeURIComponent(u)}`;
   });
-  viewer.setRoom(state.room);
-  commit();
-  updateHint();
-
-  if (local && repoProject.version != null && local.meta?.baseVersion !== repoProject.version) {
-    showBanner('The project file in the repo was updated.', [
-      ['Load it', () => loadRepoProject({ merge: true })],
-      ['Keep mine', () => ((state.meta.baseVersion = repoProject.version), save())],
-    ]);
-  }
-
+  setQuality(viewer, ui.quality);
+  viewer.setDesign(design, { refit: true });
+  walker = new Walker(viewer, {
+    onFloor: (fi) => {
+      viewer.activeFloor = fi;
+      renderFloorStack();
+      walkHelp(!!document.pointerLockElement);
+      renderInspector();
+      if ($('#leaveWalk')) $('#leaveWalk').onclick = () => setView('3d');
+    },
+  });
+  tools = new Tools(viewer, {
+    edit: (fn) => {
+      fn(floorNow());
+      commit();
+    },
+    notify: (name, msg) => {
+      if (msg) toast(msg);
+      if (name !== ui.tool) {
+        ui.tool = name;
+        renderAll();
+      }
+    },
+    options: () => ({ exterior: ui.wallExterior, thickness: ui.wallThickness, stairShape: ui.stairShape, stairTurn: ui.stairTurn }),
+  });
+  resetHistory();
   wireUI();
-  // Handy for debugging from the browser console.
-  window.roomcraft = { viewer, get state() { return state; }, commit, addToRoom };
+  renderAll();
+
+  // Live updates from AI agents (or another window) editing the same files.
+  store.subscribe(async (ev) => {
+    if (ev.type === 'design' && ev.id === design.id && ev.updatedAt !== lastSaved) {
+      const d = await store.load(design.id);
+      if (d.updatedAt === lastSaved) return;
+      design = d;
+      lastSaved = d.updatedAt;
+      commit();
+      toast(ev.updatedBy === 'agent' ? 'Your AI agent updated this design.' : 'Design updated.');
+    } else if (ev.type === 'library' && Date.now() - lastLibSave > 1500) {
+      library = await store.loadLibrary();
+      viewer.library = library.items;
+      viewer.syncFurniture();
+      renderAll();
+    }
+  });
+
+  const agents = await refreshAgentsDot();
+  if (store.kind === 'device' && !agents && !pref.get('agentsDontAsk', false)) openAgents();
+  window.roomcraft = { get viewer() { return viewer; }, get design() { return design; }, get library() { return library; }, commit, addToRoom, setView, setFloor, setEditing, setTool, get walker() { return walker; } };
 }
 
 function wireUI() {
   $$('#viewSeg button').forEach((b) => (b.onclick = () => setView(b.dataset.view)));
-  $('#editRoomBtn').onclick = () => setEditRoom(!viewer.editRoom);
+  $('#editBtn').onclick = () => setEditing(!ui.editing);
   $('#undoBtn').onclick = () => restore(history.index - 1);
   $('#redoBtn').onclick = () => restore(history.index + 1);
-  $('#shotBtn').onclick = () => download('room.png', viewer.screenshot());
-  $('#panelToggle').onclick = () => $('#leftPanel').classList.toggle('open');
-
-  const menu = $('#menu');
-  $('#menuBtn').onclick = (e) => {
-    e.stopPropagation();
-    menu.hidden = !menu.hidden;
+  $('#photoBtn').onclick = takePhoto;
+  $('#photoCancel').onclick = () => {
+    photoAbort?.abort();
+    $('#photoOverlay').hidden = true;
   };
-  document.addEventListener('click', (e) => {
-    if (!menu.contains(e.target)) menu.hidden = true;
-  });
-  menu.onclick = (e) => {
-    const act = e.target.dataset.act;
-    menu.hidden = true;
-    if (act === 'export') {
-      const blob = new Blob([JSON.stringify({ version: state.meta.baseVersion, room: state.room, inventory: state.inventory, placed: state.placed }, null, 2)], { type: 'application/json' });
-      download('project.json', URL.createObjectURL(blob));
-    } else if (act === 'import') $('#fileInput').click();
-    else if (act === 'reload') {
-      if (confirm('Replace the room with the project file from the repo? Your imported items are kept in the inventory.')) loadRepoProject({ merge: true });
+  $('#panelToggle').onclick = () => $('#leftPanel').classList.toggle('open');
+  $('#designBtn').onclick = () => (renderDesignList(), $('#designsDialog').showModal());
+  $('#newDesignBtn').onclick = () => $('#newHouseDialog').showModal();
+  $('#importDesignBtn').onclick = () => $('#designFile').click();
+  $('#agentsBtn').onclick = () => openAgents();
+  $('#agentsDontAsk').onchange = (e) => pref.set('agentsDontAsk', e.target.checked);
+  $$('dialog [data-close]').forEach((b) => (b.onclick = () => b.closest('dialog').close()));
+  $('#newHouseForm').onsubmit = (e) => {
+    e.preventDefault();
+    const f = e.target;
+    $('#newHouseDialog').close();
+    $('#designsDialog').close();
+    createHouse({ name: f.elements.name.value.trim() || 'My house', width: +f.width.value, depth: +f.depth.value, floors: Math.round(+f.floors.value), floorHeight: +f.height.value });
+  };
+  $('#designFile').onchange = (e) => (e.target.files[0] && importDesignFile(e.target.files[0]), (e.target.value = ''), $('#designsDialog').close());
+  $('#dxfFile').onchange = (e) => (e.target.files[0] && importDxf(e.target.files[0]), (e.target.value = ''));
+
+  const menus = [['#menuBtn', '#menu'], ['#exportBtn', '#exportMenu']];
+  for (const [btn, m] of menus)
+    $(btn).onclick = (e) => {
+      e.stopPropagation();
+      for (const [, o] of menus) if (o !== m) $(o).hidden = true;
+      $(m).hidden = !$(m).hidden;
+    };
+  document.addEventListener('click', (e) => menus.forEach(([, m]) => !$(m).contains(e.target) && ($(m).hidden = true)));
+  $('#exportMenu').onclick = (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    $('#exportMenu').hidden = true;
+    if (act) exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
+  };
+  $('#menu').onclick = (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    $('#menu').hidden = true;
+    if (['glb', 'design', 'png'].includes(act)) exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
+    else if (act === 'photo') takePhoto();
+    else if (act === 'import-design') $('#designFile').click();
+    else if (act === 'import-dxf') $('#dxfFile').click();
+    else if (act === 'quality') {
+      ui.quality = ui.quality === 'high' ? 'low' : 'high';
+      pref.set('quality', ui.quality);
+      setQuality(viewer, ui.quality);
+      renderAll();
+      toast(ui.quality === 'high' ? 'High quality: soft shadows and ambient occlusion.' : 'Fast graphics for older computers.');
     } else if (act === 'settings') openSettings();
     else if (act === 'help') $('#helpDialog').showModal();
-    else if (act === 'clear') {
-      state.placed = [];
-      viewer.select(null);
-      commit();
-      toast('Room cleared.', { undo: true });
-    }
-  };
-  $('#fileInput').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      Object.assign(state, normalizeProject(data));
-      viewer.select(null);
-      viewer.setRoom(state.room, { refit: true });
-      commit();
-      toast('Project imported.');
-    } catch {
-      toast('That file is not a valid project.');
-    }
-    e.target.value = '';
   };
 
-  // Inventory
+  // Models
   $('#invSearch').oninput = renderInventory;
   $('#newItemBtn').onclick = () => openItemDialog({ id: uid('i'), name: '', category: 'sofa', colors: [] }, { isNew: true });
   $('#inventory').addEventListener('click', (e) => {
@@ -968,10 +1320,9 @@ function wireUI() {
     const id = card.dataset.id;
     const sw = e.target.closest('.sw');
     if (sw) {
-      pickedColor[id] = sw.dataset.color;
-      // Also recolour the selected instance of this item, if any.
-      const sel = viewer.selectedId && placedById(viewer.selectedId);
-      if (sel?.itemId === id) updatePlaced(sel.id, { color: sw.dataset.color });
+      ui.pickedColor[id] = sw.dataset.color;
+      const sel = viewer.sel?.type === 'item' && findPlaced(viewer.sel.id).p;
+      if (sel?.itemId === id) (sel.color = sw.dataset.color), commit({ rebuild: false });
       else renderInventory();
       return;
     }
@@ -988,7 +1339,7 @@ function wireUI() {
   });
   $('#inventory').addEventListener('dragend', (e) => e.target.closest?.('.card')?.classList.remove('dragging'));
 
-  // Item dialog
+  // Model dialog
   $('#addColorBtn').onclick = () => $('#colorRows').appendChild(colorRow());
   $('#cancelItemBtn').onclick = () => $('#itemDialog').close();
   $('#itemForm').onsubmit = (e) => {
@@ -998,23 +1349,23 @@ function wireUI() {
   };
   $('#deleteItemBtn').onclick = () => {
     const { item } = editing;
-    const n = state.placed.filter((p) => p.itemId === item.id).length;
-    if (n && !confirm(`Delete “${item.name}”? It is placed ${n} time(s) in the room.`)) return;
-    state.inventory = state.inventory.filter((i) => i !== item);
-    state.placed = state.placed.filter((p) => p.itemId !== item.id);
+    const n = placedCount(item.id);
+    if (n && !confirm(`Delete “${item.name}”? It is placed ${n} time(s) in this design.`)) return;
+    library.items = library.items.filter((i) => i !== item);
+    viewer.library = library.items;
+    for (const f of design.floors) f.placed = f.placed.filter((p) => p.itemId !== item.id);
     $('#itemDialog').close();
     viewer.select(null);
-    commit();
-    toast('Item deleted.', { undo: true });
+    commit({ lib: true, rebuild: false });
+    toast('Model deleted.', { undo: true });
   };
   $('#itemForm').category.onchange = (e) => {
-    // Fill typical dimensions for a new item when switching type.
     if (!editing?.isNew) return;
     const def = DEFAULT_DIMS[e.target.value];
     const f = $('#itemForm');
     [f.w.value, f.d.value, f.h.value] = def.map((v) => cm(v));
   };
-  $('#itemForm').name.oninput = (e) => {
+  $('#itemForm').elements.name.oninput = (e) => {
     if (!editing?.isNew) return;
     const cat = guessCategory(e.target.value);
     if (cat !== 'box' && cat !== $('#itemForm').category.value) {
@@ -1023,40 +1374,26 @@ function wireUI() {
     }
   };
 
-  // Importing
+  // Importing links
   $('#importBtn').onclick = () => {
     const urls = extractUrls($('#linkInput').value);
     $('#linkInput').value = '';
     importUrls(urls);
   };
   $('#linkInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       $('#importBtn').click();
     }
   });
-  $('#linkInput').addEventListener('paste', () => setTimeout(() => {
-    if (extractUrls($('#linkInput').value).length) $('#importBtn').click();
-  }, 0));
+  $('#linkInput').addEventListener('paste', () => setTimeout(() => extractUrls($('#linkInput').value).length && $('#importBtn').click(), 0));
 
-  // Drag & drop: links anywhere; inventory cards onto the stage.
+  // Drag & drop: links anywhere; model cards onto the view.
   let dragDepth = 0;
   const isInternal = (e) => e.dataTransfer?.types?.includes('application/x-roomcraft-item');
   const isLink = (e) => !isInternal(e) && ['text/uri-list', 'text/plain', 'text/x-moz-url'].some((t) => e.dataTransfer?.types?.includes(t));
-  window.addEventListener('dragenter', (e) => {
-    if (!isLink(e)) return;
-    dragDepth++;
-    $('#dropOverlay').hidden = false;
-    $('#dropzone').classList.add('over');
-  });
-  window.addEventListener('dragleave', (e) => {
-    if (!isLink(e)) return;
-    if (--dragDepth <= 0) {
-      dragDepth = 0;
-      $('#dropOverlay').hidden = true;
-      $('#dropzone').classList.remove('over');
-    }
-  });
+  window.addEventListener('dragenter', (e) => isLink(e) && (dragDepth++, ($('#dropOverlay').hidden = false)));
+  window.addEventListener('dragleave', (e) => isLink(e) && --dragDepth <= 0 && ((dragDepth = 0), ($('#dropOverlay').hidden = true)));
   window.addEventListener('dragover', (e) => {
     if (isLink(e) || (isInternal(e) && e.target.closest?.('#stage'))) {
       e.preventDefault();
@@ -1066,21 +1403,29 @@ function wireUI() {
   window.addEventListener('drop', (e) => {
     dragDepth = 0;
     $('#dropOverlay').hidden = true;
-    $('#dropzone').classList.remove('over');
     if (isInternal(e)) {
       e.preventDefault();
       if (!e.target.closest?.('#stage')) return;
-      const id = e.dataTransfer.getData('application/x-roomcraft-item');
-      const p = viewer.floorAt(e.clientX, e.clientY);
-      addToRoom(id, p && pointInPolygon(p.x, p.z, state.room.points) ? [p.x, p.z] : null);
+      const p = viewer.planAt(e.clientX, e.clientY);
+      const inside = p && footprint(floorNow()).some((poly) => pointInPolygon(p[0], p[1], poly[0].slice(0, -1)));
+      addToRoom(e.dataTransfer.getData('application/x-roomcraft-item'), inside ? p : null);
       return;
     }
-    const text = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/x-moz-url');
-    const urls = extractUrls(text);
+    const urls = extractUrls(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/x-moz-url'));
     if (urls.length) {
       e.preventDefault();
       importUrls(urls);
     }
+  });
+
+  // Walk touch pad
+  $$('.dpad [data-move]').forEach((b) => {
+    const [f, s] = b.dataset.move.split(',').map(Number);
+    const on = (e) => (e.preventDefault(), walker.setMove(f, s));
+    const off = () => walker.setMove(0, 0);
+    b.addEventListener('pointerdown', on);
+    b.addEventListener('pointerup', off);
+    b.addEventListener('pointerleave', off);
   });
 
   // Keyboard
@@ -1088,55 +1433,56 @@ function wireUI() {
     if (/input|textarea|select/i.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.key.toLowerCase();
-    if (mod && k === 'z') {
-      e.preventDefault();
-      restore(history.index + (e.shiftKey ? 1 : -1));
-    } else if (mod && k === 'y') {
-      e.preventDefault();
-      restore(history.index + 1);
-    } else if (mod && k === 'd' && viewer.selectedId) {
-      e.preventDefault();
-      duplicate(viewer.selectedId);
-    } else if ((k === 'delete' || k === 'backspace') && viewer.selectedId) {
-      e.preventDefault();
-      removePlaced(viewer.selectedId);
-    } else if (k === 'r' && !mod && viewer.selectedId) rotateSelected(e.shiftKey ? -90 : 90);
+    const sel = viewer.sel;
+    if (mod && k === 'z') (e.preventDefault(), restore(history.index + (e.shiftKey ? 1 : -1)));
+    else if (mod && k === 'y') (e.preventDefault(), restore(history.index + 1));
     else if (k === 'escape') {
-      if (viewer.editRoom) setEditRoom(false);
+      if (viewer.view === 'walk' && !document.pointerLockElement) setView('3d');
+      else if (ui.tool) setTool(null);
       else viewer.select(null);
-    } else if (['1', '2', '3'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'eye' }[k]);
-    else if (k.startsWith('arrow') && viewer.selectedId && viewer.view !== 'eye') {
+    } else if (viewer.view === 'walk') return;
+    else if (mod && k === 'd' && sel?.type === 'item') (e.preventDefault(), duplicate(sel.id));
+    else if ((k === 'delete' || k === 'backspace') && sel) (e.preventDefault(), deleteSelection());
+    else if (k === 'r' && !mod && sel?.type === 'item') rotateItem(findPlaced(sel.id).p, e.shiftKey ? -90 : 90);
+    else if (k === 'r' && !mod && sel?.type === 'stairs' && ui.editing) {
+      const s = floorNow().stairs.find((x) => x.id === sel.id);
+      s.rot = ((((s.rot || 0) + (e.shiftKey ? -90 : 90)) % 360) + 360) % 360;
+      commit();
+    } else if (k === 'e' && !mod) setEditing(!ui.editing);
+    else if (['1', '2', '3'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'walk' }[k]);
+    else if (k === 'pageup') (e.preventDefault(), setFloor(viewer.activeFloor + 1));
+    else if (k === 'pagedown') (e.preventDefault(), setFloor(viewer.activeFloor - 1));
+    else if (k.startsWith('arrow') && sel?.type === 'item') {
       e.preventDefault();
-      const p = placedById(viewer.selectedId);
+      const p = findPlaced(sel.id).p;
       const step = e.shiftKey ? 0.1 : 0.01;
       const [dx, dz] = { arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step] }[k];
-      if (pointInPolygon(p.x + dx, p.z + dz, state.room.points)) {
-        p.x = +(p.x + dx).toFixed(3);
-        p.z = +(p.z + dz).toFixed(3);
-        viewer.sync(state.placed, state.inventory);
-        clearTimeout(wireUI.nudge);
-        wireUI.nudge = setTimeout(() => commit(), 400);
-      }
+      p.x = +(p.x + dx).toFixed(3);
+      p.z = +(p.z + dz).toFixed(3);
+      viewer.syncFurniture();
+      clearTimeout(wireUI.nudge);
+      wireUI.nudge = setTimeout(() => commit({ rebuild: false }), 400);
     }
   });
+  walkHelp(false);
 }
 
 function openSettings() {
-  $('#workerUrl').value = workerUrl();
+  $('#workerUrl').value = pref.get('worker', '');
   $('#workerStatus').textContent = '';
+  $('#readerNote').hidden = store.kind !== 'device';
   $('#settingsDialog').showModal();
-  $('#workerUrl').onchange = () => store.set(LS_WORKER, $('#workerUrl').value.trim());
+  $('#workerUrl').onchange = () => pref.set('worker', $('#workerUrl').value.trim());
   $('#testWorker').onclick = async () => {
-    store.set(LS_WORKER, $('#workerUrl').value.trim());
+    pref.set('worker', $('#workerUrl').value.trim());
     const base = workerUrl();
     if (!base) return ($('#workerStatus').textContent = 'Enter a URL first.');
     $('#workerStatus').textContent = 'Testing…';
     try {
-      const r = await fetch(`${base}/health`);
-      const j = await r.json();
+      const j = await (await fetch(`${base}/health`)).json();
       $('#workerStatus').textContent = j.ok ? '✓ Connected' : `✕ ${j.error || 'Unexpected reply'}`;
     } catch (err) {
-      $('#workerStatus').textContent = `✕ Could not reach it (${err.message}). Check the URL and ALLOWED_ORIGINS.`;
+      $('#workerStatus').textContent = `✕ Could not reach it (${err.message}).`;
     }
   };
 }
@@ -1144,5 +1490,5 @@ function openSettings() {
 boot().catch((err) => {
   console.error(err);
   const l = $('#loading');
-  if (l) l.textContent = 'Could not start the 3D view: ' + err.message;
+  if (l) l.textContent = "Couldn't start: " + err.message;
 });

@@ -4,8 +4,10 @@
 // Start: `node tools/mcp-server.mjs` (agents launch it for you; see docs/MCP.md).
 import readline from 'node:readline';
 import {
-  readLink, listItems, addItem, updateItem, verifyItem, renderItemImages, renderRoomImages, saveModelFile, CATEGORIES,
+  readLink, listModels, addItem, updateItem, verifyItem, renderItemImages, saveModelFile, CATEGORIES,
+  listDesigns, getDesign, writeDesign, renderDesignImages, exportGLB, stairInfo, placeItem,
 } from './lib/agent.mjs';
+import { recordConnection } from './lib/agents.mjs';
 
 const SERVER = { name: 'roomcraft', version: '1.0.0' };
 
@@ -19,20 +21,21 @@ const accentSchema = { type: 'object', description: 'Optional legs/frame colour'
 const VISION_RULE =
   'Every model you add or change starts as unverified. You MUST look at the returned render images, compare them with the product photo (from read_link), and then call verify_item. Fix mismatches with update_item and look again.';
 
+const DESIGN_FORMAT = `Design format (metres, see AGENTS.md): { name, wallColor, floors: [ { name, height (floor→ceiling), slab (thickness under this floor),
+walls: [{id, a:[x,z], b:[x,z], thickness, exterior?}], openings: [{id, type:"door"|"window"|"opening", wall:<wall id>, offset (m from wall.a to the opening's near edge), width, height, sill (windows)}],
+rooms: [{id, name, points:[[x,z]...], floorKind:"wood"|"tiles"|"carpet"|"concrete", floorColor}], stairs: [{id, shape:"straight"|"L"|"U", turn:"left"|"right", x, z, rot, width}] (stairs go up to the next floor; origin = bottom-centre of the first step, rot 0 climbs toward −z),
+placed: [{id, itemId, x, z, rot, color, y?}] } ] }. x runs right, z runs down the plan (toward the viewer). Walls are centre lines; connect them end to end at corners.`;
+
 const TOOLS = [
   {
     name: 'read_link',
     description: 'Read a product page (IKEA, Amazon, Wayfair, Shopify stores, most shops). Returns name, dimensions (cm), colour options, category, 3D model URL if any, and the product photo as an image so you can see the real product.',
     inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Product page URL' } }, required: ['url'] },
   },
-  {
-    name: 'list_items',
-    description: 'List the model inventory (ids, sizes, colours, verified status) and what is placed in the room.',
-    inputSchema: { type: 'object', properties: {} },
-  },
+  { name: 'list_models', description: 'List the furniture model library (ids, sizes, colours, verified status).', inputSchema: { type: 'object', properties: {} } },
   {
     name: 'add_item',
-    description: `Add a furniture model to the inventory (data/project.json). Give real product dimensions in cm. Pass from_url to prefill from a product link; explicit fields override it. Returns renders of the new model. ${VISION_RULE}`,
+    description: `Add a furniture model to the library. Give real product dimensions in cm. Pass from_url to prefill from a product link; explicit fields override it. Returns renders of the new model. ${VISION_RULE}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -66,39 +69,64 @@ const TOOLS = [
   },
   {
     name: 'render_item',
-    description: 'Render an inventory model as images (views: three-quarter, front, side, top; grid squares are 1 m). Use this to look at a model before verifying it.',
+    description: 'Render a library model as images (views: three-quarter, front, side, top; grid squares are 1 m). Look at the result before verifying.',
     inputSchema: {
       type: 'object',
-      properties: {
-        id: { type: 'string' },
-        color: { type: 'string', description: 'Colour option name to show' },
-        views: { type: 'array', items: { type: 'string', enum: ['three-quarter', 'front', 'side', 'top'] } },
-      },
+      properties: { id: { type: 'string' }, color: { type: 'string', description: 'Colour option name to show' }, views: { type: 'array', items: { type: 'string', enum: ['three-quarter', 'front', 'side', 'top'] } } },
       required: ['id'],
     },
   },
   {
     name: 'verify_item',
-    description: 'Record your visual check of a model after looking at its latest renders. Refused unless the current version has been rendered. Set matches=false if it does not look like the product (then fix it with update_item).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string' },
-        matches: { type: 'boolean' },
-        notes: { type: 'string', description: 'What you compared: shape, proportions, colours, size vs. the product photo' },
-      },
-      required: ['id', 'matches', 'notes'],
-    },
+    description: 'Record your visual check of a model after looking at its latest renders. Refused unless the current version has been rendered. matches=false if it does not look like the product (then fix it with update_item).',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' }, matches: { type: 'boolean' }, notes: { type: 'string', description: 'What you compared: shape, proportions, colours, size vs. the product photo' } }, required: ['id', 'matches', 'notes'] },
   },
   {
     name: 'save_model_file',
-    description: "Download a .glb 3D model into the repo's models/ folder and use it for an item (keeps a permanent copy). Returns renders to check.",
+    description: "Download a .glb 3D model into the repo's models/ folder and use it for a model (keeps a permanent copy). Returns renders to check.",
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, url: { type: 'string' } }, required: ['id', 'url'] },
   },
+  { name: 'list_designs', description: 'List the house designs saved on this device, and which one is open in the app (active).', inputSchema: { type: 'object', properties: {} } },
   {
-    name: 'render_room',
-    description: 'Render the whole room from data/project.json (views: 3d, plan, eye). Use it to check layout edits visually.',
-    inputSchema: { type: 'object', properties: { views: { type: 'array', items: { type: 'string', enum: ['3d', 'plan', 'eye'] } } } },
+    name: 'get_design',
+    description: 'Get a design (default: the active one): a floor-by-floor summary, any problems, and the full JSON to edit. ' + DESIGN_FORMAT,
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } } },
+  },
+  {
+    name: 'write_design',
+    description: `Save a whole house design (create or replace; include "id" to replace). Use this to trace a floor plan: one floor per storey, exterior and interior walls as centre lines, doors/windows on walls, stairs, rooms (auto-detected if omitted). The app updates live. Returns problems and renders of every floor. You MUST look at the renders and compare them with the floor plan you were given; fix and write again until they match. ${DESIGN_FORMAT}`,
+    inputSchema: {
+      type: 'object',
+      properties: { design: { type: 'object', description: 'The design JSON' }, detect_rooms: { type: 'boolean', description: 'Create rooms from enclosed walls on floors with none (default true)' } },
+      required: ['design'],
+    },
+  },
+  {
+    name: 'render_design',
+    description: 'Render a design (default: active). views per floor: "plan" (top-down, cut at 1.25 m like an architectural plan) and/or "3d" (dollhouse). exterior=true adds a view of the whole house from outside.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string' }, floors: { type: 'array', items: { type: 'integer' }, description: 'Floor indexes (default all)' }, views: { type: 'array', items: { type: 'string', enum: ['plan', '3d'] } }, exterior: { type: 'boolean' } },
+    },
+  },
+  {
+    name: 'stair_info',
+    description: 'Real-world stair numbers for a floor of a design: step count, riser and tread (mm), and the footprint needed, so you can leave the right stairwell space.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' }, floor: { type: 'integer' }, shape: { type: 'string', enum: ['straight', 'L', 'U'] }, width_cm: { type: 'number' } } },
+  },
+  {
+    name: 'place_item',
+    description: 'Place a library model in a design at x/z (cm, centre of the item) on a floor, facing rot degrees (0 = front faces +z). Returns a render of that floor to check.',
+    inputSchema: {
+      type: 'object',
+      properties: { design: { type: 'string' }, floor: { type: 'integer' }, item: { type: 'string' }, x_cm: { type: 'number' }, z_cm: { type: 'number' }, rot: { type: 'number' }, color: { type: 'string' }, lift_cm: { type: 'number' } },
+      required: ['item', 'x_cm', 'z_cm'],
+    },
+  },
+  {
+    name: 'export_glb',
+    description: 'Export a design (default: active) as one .glb for Blender (File → Import → glTF 2.0), organised by floor, room, walls, openings, stairs and furniture. Saves into exports/ and returns the path.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' }, file: { type: 'string', description: 'Optional output path' } } },
   },
 ];
 
@@ -118,6 +146,15 @@ async function withRenders(summary, id) {
   }
 }
 
+async function designRenders(id, floors, note) {
+  try {
+    const shots = await renderDesignImages(id, { floors, views: ['plan', '3d'] });
+    return [...shots.flatMap((s) => [text(`Render: ${s.view}`), image(s.png)]), text(note)];
+  } catch (err) {
+    return [text(`Could not render (${err.message}). Fix that and call render_design to check the result.`)];
+  }
+}
+
 async function callTool(name, args = {}) {
   switch (name) {
     case 'read_link': {
@@ -129,15 +166,15 @@ async function callTool(name, args = {}) {
       out.push(text('To add it: add_item with from_url (override any wrong or missing fields), then check the renders.'));
       return out;
     }
-    case 'list_items':
-      return [text(listItems())];
+    case 'list_models':
+      return [text(listModels())];
     case 'add_item': {
-      const { item, version } = await addItem(args);
-      return withRenders(`Added "${item.name}" as ${item.id} (${item.category}, ${Math.round(item.dims.w * 100)}×${Math.round(item.dims.d * 100)}×${Math.round(item.dims.h * 100)} cm, colours: ${item.colors.map((c) => c.name).join(', ')}). Project version ${version}. Status: UNVERIFIED.`, item.id);
+      const { item } = await addItem(args);
+      return withRenders(`Added "${item.name}" as ${item.id} (${item.category}, ${Math.round(item.dims.w * 100)}×${Math.round(item.dims.d * 100)}×${Math.round(item.dims.h * 100)} cm, colours: ${item.colors.map((c) => c.name).join(', ')}). Status: UNVERIFIED.`, item.id);
     }
     case 'update_item': {
-      const { item, version } = updateItem(args);
-      return withRenders(`Updated ${item.id}. Project version ${version}. Status: UNVERIFIED until you check the renders.`, item.id);
+      const { item } = updateItem(args);
+      return withRenders(`Updated ${item.id}. Status: UNVERIFIED until you check the renders.`, item.id);
     }
     case 'render_item': {
       const { shots } = await renderItemImages(args.id, { color: args.color, views: args.views?.length ? args.views : undefined });
@@ -151,9 +188,30 @@ async function callTool(name, args = {}) {
       const r = await saveModelFile(args);
       return withRenders(`Saved ${r.file} (${Math.round(r.bytes / 1024)} KB) and set it as the model for ${r.item.id}. Status: UNVERIFIED.`, r.item.id);
     }
-    case 'render_room': {
-      const shots = await renderRoomImages({ views: args.views?.length ? args.views : undefined });
-      return shots.flatMap((s) => [text(`${s.view} view`), image(s.png)]);
+    case 'list_designs':
+      return [text(listDesigns())];
+    case 'get_design':
+      return [text(getDesign(args.id))];
+    case 'write_design': {
+      const r = writeDesign(args.design, { detect_rooms: args.detect_rooms !== false });
+      return [
+        text({ saved: r.id, floors: r.floors, problems: r.problems.length ? r.problems : 'none' }),
+        ...(await designRenders(r.id, null, 'Compare these renders with the floor plan you were given (walls, rooms, doors, windows, stairs, proportions). If anything differs, fix the JSON and call write_design again.')),
+      ];
+    }
+    case 'render_design': {
+      const shots = await renderDesignImages(args.id, { floors: args.floors, views: args.views?.length ? args.views : ['plan', '3d'], exterior: !!args.exterior });
+      return shots.flatMap((s) => [text(s.view), image(s.png)]);
+    }
+    case 'stair_info':
+      return [text(stairInfo(args.id, args.floor || 0, args.shape || 'straight', args.width_cm || 100))];
+    case 'place_item': {
+      const { placed } = placeItem(args);
+      return [text({ placed }), ...(await designRenders(args.design, [args.floor || 0], 'Check the item sits where you intended, inside the room and clear of walls and other furniture.'))];
+    }
+    case 'export_glb': {
+      const r = await exportGLB(args.id, args.file);
+      return [text(`Exported ${r.file} (${(r.bytes / 1e6).toFixed(1)} MB). Open it in Blender with File → Import → glTF 2.0 (.glb/.gltf).`)];
     }
     default:
       throw new Error(`Unknown tool ${name}`);
@@ -171,11 +229,14 @@ async function handle(msg) {
   const fail = (code, message) => id !== undefined && write({ jsonrpc: '2.0', id, error: { code, message } });
   switch (method) {
     case 'initialize':
+      try {
+        recordConnection(params?.clientInfo);
+      } catch {}
       return reply({
         protocolVersion: params?.protocolVersion || '2025-06-18',
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER,
-        instructions: `Roomcraft: 3D room planner. data/project.json holds the house layout and the furniture model inventory (see AGENTS.md). ${VISION_RULE}`,
+        instructions: `Roomcraft: a 3D house planner running on this computer. Designs (multi-floor houses) and the furniture model library live in the repo's designs/ folder; the open app updates live when you change them. Read AGENTS.md in the repo for the format and workflows. ${VISION_RULE} After layout changes, look at the floor renders and compare them with what was asked (or the floor plan given).`,
       });
     case 'notifications/initialized':
     case 'notifications/cancelled':

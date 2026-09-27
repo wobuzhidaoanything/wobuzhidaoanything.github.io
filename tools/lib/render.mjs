@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { startServer, localThreeFile, ROOT } from './server.mjs';
+import { startServer, ROOT } from './server.mjs';
 
 let session = null;
 
@@ -34,11 +34,6 @@ async function getSession() {
   if (session) return session;
   const [browser, srv] = await Promise.all([launch(), startServer({ port: 0, quiet: true })]);
   const context = await browser.newContext({ viewport: { width: 1000, height: 750 }, deviceScaleFactor: 1 });
-  // Serve three.js from node_modules when available (works offline, faster).
-  await context.route('https://cdn.jsdelivr.net/npm/three@*/**', async (route) => {
-    const f = localThreeFile(new URL(route.request().url()).pathname);
-    return f ? route.fulfill({ body: fs.readFileSync(f), contentType: 'text/javascript' }) : route.continue();
-  });
   await context.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   session = { browser, context, srv };
   const close = () => closeRenderer();
@@ -78,14 +73,29 @@ async function capture(query, views) {
   }
 }
 
-/** Render one inventory item. Views: three-quarter, front, side, top. */
+/** Render one furniture model from the library. Views: three-quarter, front, side, top. */
 export function renderItem(itemId, { color, views = ['three-quarter', 'front'] } = {}) {
   const q = new URLSearchParams({ item: itemId });
   if (color) q.set('color', color);
   return capture(q.toString(), views);
 }
 
-/** Render the whole room. Views: 3d, plan, eye. */
-export function renderRoom({ views = ['3d', 'plan'] } = {}) {
-  return capture('room=1', views);
+/** Render a design. Views: "3d:<floor>", "plan:<floor>", "exterior". */
+export function renderDesign(id, views) {
+  return capture(new URLSearchParams({ design: id }).toString(), views);
+}
+
+/** Export a design as a .glb (Buffer), exactly like the app's Export button. */
+export async function exportDesignGLB(id) {
+  const { context, srv } = await getSession();
+  const page = await context.newPage();
+  try {
+    await page.goto(`${srv.url}/preview.html?design=${encodeURIComponent(id)}`);
+    await page.waitForFunction(() => window.preview && (window.preview.ready || window.preview.error), null, { timeout: 60000 });
+    const err = await page.evaluate(() => window.preview.error);
+    if (err) throw new Error(err);
+    return Buffer.from(await page.evaluate(() => window.preview.exportGLB()), 'base64');
+  } finally {
+    await page.close();
+  }
 }

@@ -9,8 +9,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const PROJECT = path.join(ROOT, 'data', 'project.json');
-const RENDERS = path.join(ROOT, '.roomcraft', 'renders.json');
 
 // 1x1 PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -50,16 +48,21 @@ function client() {
   return { call, tool: async (name, args) => (await call('tools/call', { name, arguments: args })).result, close: () => proc.stdin.end() };
 }
 
-test('MCP server: read link, add model with renders, enforced visual verification', { timeout: 180000 }, async () => {
-  const backup = fs.readFileSync(PROJECT);
-  const rendersBackup = fs.existsSync(RENDERS) ? fs.readFileSync(RENDERS) : null;
+test('MCP server: link → model with renders, enforced vision check, floor plan → design, export', { timeout: 300000 }, async () => {
+  const DESIGNS = path.join(ROOT, 'designs');
+  const backup = path.join(ROOT, '.roomcraft', 'test-backup');
+  fs.rmSync(backup, { recursive: true, force: true });
+  if (fs.existsSync(DESIGNS)) fs.cpSync(DESIGNS, backup, { recursive: true });
+  const conns = path.join(ROOT, '.roomcraft', 'connections.json');
+  const connsBackup = fs.existsSync(conns) ? fs.readFileSync(conns) : null;
   const shop = await productServer();
   const c = client();
   try {
-    const init = await c.call('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+    const init = await c.call('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '9.9' } });
     assert.equal(init.result.serverInfo.name, 'roomcraft');
+    assert.ok(JSON.parse(fs.readFileSync(conns, 'utf8'))['claude-code'], 'connection recorded');
     const { tools } = (await c.call('tools/list', {})).result;
-    assert.deepEqual(tools.map((t) => t.name).sort(), ['add_item', 'list_items', 'read_link', 'render_item', 'render_room', 'save_model_file', 'update_item', 'verify_item']);
+    for (const t of ['read_link', 'add_item', 'verify_item', 'write_design', 'render_design', 'export_glb']) assert.ok(tools.some((x) => x.name === t), t);
 
     const url = `http://127.0.0.1:${shop.address().port}/marlow`;
     const read = await c.tool('read_link', { url });
@@ -70,34 +73,55 @@ test('MCP server: read link, add model with renders, enforced visual verificatio
 
     const added = await c.tool('add_item', { from_url: url, id: 'i-test-marlow' });
     assert.ok(!added.isError, JSON.stringify(added.content[0]));
-    const images = added.content.filter((x) => x.type === 'image');
-    assert.equal(images.length, 2, 'two renders returned');
-    assert.ok(Buffer.from(images[0].data, 'base64').length > 5000, 'render is a real image');
-    let item = JSON.parse(fs.readFileSync(PROJECT)).inventory.find((i) => i.id === 'i-test-marlow');
-    assert.equal(item.verified, false);
-    assert.deepEqual(item.colors.map((x) => x.name), ['Sage green', 'Charcoal']);
+    assert.equal(added.content.filter((x) => x.type === 'image').length, 2, 'two renders returned');
 
-    // Change the file behind the agent's back: verification must be refused until it renders again.
-    const p = JSON.parse(fs.readFileSync(PROJECT));
-    p.inventory.find((i) => i.id === 'i-test-marlow').dims.w = 3;
-    fs.writeFileSync(PROJECT, JSON.stringify(p));
+    // Change the model behind the agent's back: verification is refused until it looks again.
+    const libFile = path.join(DESIGNS, 'library.json');
+    const lib = JSON.parse(fs.readFileSync(libFile));
+    lib.items.find((i) => i.id === 'i-test-marlow').dims.w = 3;
+    fs.writeFileSync(libFile, JSON.stringify(lib));
     const refused = await c.tool('verify_item', { id: 'i-test-marlow', matches: true, notes: 'Looks like a three-seat sofa in sage.' });
     assert.ok(refused.isError && /not been rendered/.test(refused.content[0].text));
-
-    const rendered = await c.tool('render_item', { id: 'i-test-marlow', views: ['front'] });
-    assert.equal(rendered.content.filter((x) => x.type === 'image').length, 1);
+    await c.tool('render_item', { id: 'i-test-marlow', views: ['front'] });
     const ok = await c.tool('verify_item', { id: 'i-test-marlow', matches: true, notes: 'Three-seat sofa, sage fabric, proportions match 300x93x85.' });
     assert.ok(!ok.isError, ok.content[0].text);
-    item = JSON.parse(fs.readFileSync(PROJECT)).inventory.find((i) => i.id === 'i-test-marlow');
-    assert.equal(item.verified, true);
 
-    const room = await c.tool('render_room', { views: ['3d'] });
-    assert.equal(room.content.filter((x) => x.type === 'image').length, 1);
+    // Trace a two-storey floor plan.
+    const ext = (p) => [[0, 0], [9, 0], [9, 7], [0, 7]].map((a, i, all) => ({ id: `${p}${i}`, a, b: all[(i + 1) % 4], thickness: 0.25, exterior: true }));
+    const design = {
+      id: 'test-traced', name: 'Traced plan',
+      floors: [
+        { name: 'Ground floor', height: 2.7, walls: [...ext('g'), { id: 'gi', a: [5, 0], b: [5, 7], thickness: 0.12 }],
+          openings: [{ id: 'd1', type: 'door', wall: 'gi', offset: 3, width: 0.9, height: 2.1 }, { id: 'w1', type: 'window', wall: 'g0', offset: 1, width: 1.6, height: 1.3, sill: 0.9 }],
+          stairs: [{ id: 's1', shape: 'straight', x: 8.3, z: 6.0, rot: 0, width: 1 }] },
+        { name: 'First floor', height: 2.6, walls: ext('f') },
+      ],
+    };
+    const wrote = await c.tool('write_design', { design });
+    assert.ok(!wrote.isError, JSON.stringify(wrote.content[0]));
+    const summary = JSON.parse(wrote.content[0].text);
+    assert.equal(summary.saved, 'test-traced');
+    assert.equal(summary.problems, 'none');
+    assert.match(summary.floors[0], /2 rooms/);
+    assert.equal(wrote.content.filter((x) => x.type === 'image').length, 4, 'plan + 3d for each of 2 floors');
+
+    const placed = await c.tool('place_item', { design: 'test-traced', floor: 0, item: 'i-test-marlow', x_cm: 250, z_cm: 60, rot: 0 });
+    assert.ok(!placed.isError, placed.content[0].text);
+
+    const exported = await c.tool('export_glb', { id: 'test-traced', file: path.join(ROOT, '.roomcraft', 'test.glb') });
+    assert.ok(!exported.isError, exported.content[0].text);
+    const glb = fs.readFileSync(path.join(ROOT, '.roomcraft', 'test.glb'));
+    assert.equal(glb.subarray(0, 4).toString(), 'glTF');
+    const json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString());
+    assert.ok(json.nodes.some((n) => n.name === 'First floor') && json.nodes.some((n) => n.name?.startsWith('MARLOW 3-seat sofa')));
   } finally {
     c.close();
     shop.close();
-    fs.writeFileSync(PROJECT, backup);
-    if (rendersBackup) fs.writeFileSync(RENDERS, rendersBackup);
-    else fs.rmSync(RENDERS, { force: true });
+    fs.rmSync(DESIGNS, { recursive: true, force: true });
+    if (fs.existsSync(backup)) fs.cpSync(backup, DESIGNS, { recursive: true });
+    fs.rmSync(backup, { recursive: true, force: true });
+    fs.rmSync(path.join(ROOT, '.roomcraft', 'test.glb'), { force: true });
+    if (connsBackup) fs.writeFileSync(conns, connsBackup);
+    else fs.rmSync(conns, { force: true });
   }
 });

@@ -11,8 +11,17 @@
     "test": "node --test worker/test/*.test.mjs tools/test/*.test.mjs"
   },
   "dependencies": {
+    "camera-controls": "^3.1.2",
+    "dxf-parser": "^1.1.2",
+    "n8ao": "^2.0.1",
     "playwright": "1.56.1",
-    "three": "0.170.0"
+    "polygon-clipping": "^0.15.7",
+    "postprocessing": "^6.39.5",
+    "three": "^0.186.1",
+    "three-bvh-csg": "^0.0.18",
+    "three-gpu-pathtracer": "^0.0.24",
+    "three-mesh-bvh": "^0.9.15",
+    "xatlas-web": "^0.1.0"
   },
   "engines": {
     "node": ">=18.17"

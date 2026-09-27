@@ -1,0 +1,465 @@
+{
+  "note": "Furniture models shipped with Roomcraft. Your own models are saved on your device (designs/library.json).",
+  "items": [
+    {
+      "id": "i-sofa",
+      "name": "3-seat sofa",
+      "category": "sofa",
+      "dims": {
+        "w": 2.2,
+        "d": 0.92,
+        "h": 0.84
+      },
+      "colors": [
+        {
+          "name": "Oatmeal",
+          "hex": "#d6c9b1"
+        },
+        {
+          "name": "Sage green",
+          "hex": "#9aa98f"
+        },
+        {
+          "name": "Charcoal",
+          "hex": "#3a3a3c"
+        },
+        {
+          "name": "Navy velvet",
+          "hex": "#23304a"
+        }
+      ]
+    },
+    {
+      "id": "i-armchair",
+      "name": "Lounge armchair",
+      "category": "armchair",
+      "dims": {
+        "w": 0.8,
+        "d": 0.84,
+        "h": 0.86
+      },
+      "colors": [
+        {
+          "name": "Cognac leather",
+          "hex": "#9a4f26"
+        },
+        {
+          "name": "Bouclé cream",
+          "hex": "#e9e3d6"
+        },
+        {
+          "name": "Dusty pink velvet",
+          "hex": "#cf9c9e"
+        }
+      ]
+    },
+    {
+      "id": "i-coffee",
+      "name": "Coffee table",
+      "category": "coffeetable",
+      "dims": {
+        "w": 1.1,
+        "d": 0.6,
+        "h": 0.42
+      },
+      "colors": [
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "Walnut",
+          "hex": "#5d4030"
+        },
+        {
+          "name": "Black",
+          "hex": "#1d1d1f"
+        }
+      ]
+    },
+    {
+      "id": "i-rug",
+      "name": "Wool rug 200×300",
+      "category": "rug",
+      "dims": {
+        "w": 2,
+        "d": 3,
+        "h": 0.012
+      },
+      "colors": [
+        {
+          "name": "Cream",
+          "hex": "#eee3cc"
+        },
+        {
+          "name": "Grey",
+          "hex": "#8d8d8d"
+        },
+        {
+          "name": "Terracotta",
+          "hex": "#b8603f"
+        }
+      ]
+    },
+    {
+      "id": "i-tvstand",
+      "name": "TV bench",
+      "category": "tvstand",
+      "dims": {
+        "w": 1.6,
+        "d": 0.4,
+        "h": 0.5
+      },
+      "colors": [
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "White",
+          "hex": "#f4f3ef"
+        },
+        {
+          "name": "Walnut",
+          "hex": "#5d4030"
+        }
+      ]
+    },
+    {
+      "id": "i-tv",
+      "name": "55\" TV",
+      "category": "tv",
+      "dims": {
+        "w": 1.23,
+        "d": 0.25,
+        "h": 0.78
+      },
+      "colors": [
+        {
+          "name": "Black",
+          "hex": "#1d1d1f"
+        }
+      ]
+    },
+    {
+      "id": "i-lamp",
+      "name": "Floor lamp",
+      "category": "floorlamp",
+      "dims": {
+        "w": 0.42,
+        "d": 0.42,
+        "h": 1.6
+      },
+      "colors": [
+        {
+          "name": "Linen white",
+          "hex": "#ece8de"
+        },
+        {
+          "name": "Mustard",
+          "hex": "#c8952d"
+        }
+      ]
+    },
+    {
+      "id": "i-plant",
+      "name": "Fiddle leaf fig",
+      "category": "plant",
+      "dims": {
+        "w": 0.55,
+        "d": 0.55,
+        "h": 1.4
+      },
+      "colors": [
+        {
+          "name": "Terracotta pot",
+          "hex": "#b8603f"
+        },
+        {
+          "name": "White pot",
+          "hex": "#f4f3ef"
+        }
+      ]
+    },
+    {
+      "id": "i-shelf",
+      "name": "Bookcase",
+      "category": "bookshelf",
+      "dims": {
+        "w": 0.8,
+        "d": 0.28,
+        "h": 2.02
+      },
+      "colors": [
+        {
+          "name": "White",
+          "hex": "#f4f3ef"
+        },
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "Black-brown",
+          "hex": "#3a2a20"
+        }
+      ]
+    },
+    {
+      "id": "i-side",
+      "name": "Round side table",
+      "category": "sidetable",
+      "dims": {
+        "w": 0.45,
+        "d": 0.45,
+        "h": 0.52
+      },
+      "colors": [
+        {
+          "name": "Walnut",
+          "hex": "#5d4030"
+        },
+        {
+          "name": "White marble",
+          "hex": "#e6e3de"
+        }
+      ]
+    },
+    {
+      "id": "i-bed",
+      "name": "Queen bed",
+      "category": "bed",
+      "dims": {
+        "w": 1.6,
+        "d": 2.1,
+        "h": 1.05
+      },
+      "colors": [
+        {
+          "name": "Light grey",
+          "hex": "#b9b9b9"
+        },
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "Olive velvet",
+          "hex": "#6f6f3f"
+        }
+      ]
+    },
+    {
+      "id": "i-night",
+      "name": "Nightstand",
+      "category": "nightstand",
+      "dims": {
+        "w": 0.45,
+        "d": 0.4,
+        "h": 0.55
+      },
+      "colors": [
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "White",
+          "hex": "#f4f3ef"
+        }
+      ]
+    },
+    {
+      "id": "i-wardrobe",
+      "name": "Wardrobe",
+      "category": "wardrobe",
+      "dims": {
+        "w": 1.5,
+        "d": 0.58,
+        "h": 2.01
+      },
+      "colors": [
+        {
+          "name": "White",
+          "hex": "#f4f3ef"
+        },
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "Dark grey",
+          "hex": "#45474a"
+        }
+      ]
+    },
+    {
+      "id": "i-dresser",
+      "name": "6-drawer dresser",
+      "category": "dresser",
+      "dims": {
+        "w": 1.2,
+        "d": 0.48,
+        "h": 0.78
+      },
+      "colors": [
+        {
+          "name": "White",
+          "hex": "#f4f3ef"
+        },
+        {
+          "name": "Walnut",
+          "hex": "#5d4030"
+        }
+      ]
+    },
+    {
+      "id": "i-desk",
+      "name": "Desk",
+      "category": "desk",
+      "dims": {
+        "w": 1.2,
+        "d": 0.6,
+        "h": 0.75
+      },
+      "colors": [
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "White",
+          "hex": "#f4f3ef"
+        }
+      ]
+    },
+    {
+      "id": "i-office",
+      "name": "Office chair",
+      "category": "chair",
+      "dims": {
+        "w": 0.62,
+        "d": 0.6,
+        "h": 1.1
+      },
+      "colors": [
+        {
+          "name": "Black",
+          "hex": "#1d1d1f"
+        },
+        {
+          "name": "Grey",
+          "hex": "#8d8d8d"
+        }
+      ]
+    },
+    {
+      "id": "i-dining",
+      "name": "Dining table",
+      "category": "table",
+      "dims": {
+        "w": 1.8,
+        "d": 0.9,
+        "h": 0.75
+      },
+      "colors": [
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "Walnut",
+          "hex": "#5d4030"
+        },
+        {
+          "name": "White",
+          "hex": "#f4f3ef"
+        }
+      ]
+    },
+    {
+      "id": "i-chair",
+      "name": "Dining chair",
+      "category": "chair",
+      "dims": {
+        "w": 0.46,
+        "d": 0.52,
+        "h": 0.82
+      },
+      "colors": [
+        {
+          "name": "Oak",
+          "hex": "#b89468"
+        },
+        {
+          "name": "Black",
+          "hex": "#1d1d1f"
+        },
+        {
+          "name": "Sage fabric",
+          "hex": "#9aa98f"
+        }
+      ]
+    },
+    {
+      "id": "i-pouf",
+      "name": "Round pouf",
+      "category": "ottoman",
+      "dims": {
+        "w": 0.5,
+        "d": 0.5,
+        "h": 0.4
+      },
+      "colors": [
+        {
+          "name": "Mustard",
+          "hex": "#c8952d"
+        },
+        {
+          "name": "Bouclé cream",
+          "hex": "#e9e3d6"
+        }
+      ]
+    },
+    {
+      "id": "i-mirror",
+      "name": "Floor mirror",
+      "category": "mirror",
+      "dims": {
+        "w": 0.6,
+        "d": 0.05,
+        "h": 1.7
+      },
+      "colors": [
+        {
+          "name": "Brass",
+          "hex": "#b5954a"
+        },
+        {
+          "name": "Black",
+          "hex": "#1d1d1f"
+        }
+      ]
+    },
+    {
+      "id": "i-curtain",
+      "name": "Linen curtain",
+      "category": "curtain",
+      "dims": {
+        "w": 1.4,
+        "d": 0.1,
+        "h": 2.5
+      },
+      "colors": [
+        {
+          "name": "Linen",
+          "hex": "#ddd3c0"
+        },
+        {
+          "name": "Sage",
+          "hex": "#9aa98f"
+        }
+      ]
+    }
+  ]
+}

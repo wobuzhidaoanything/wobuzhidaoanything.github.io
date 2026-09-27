@@ -1,15 +1,36 @@
-// Three.js viewer: renders the room and items, handles selection, dragging,
-// rotating, stacking, wall snapping, room-shape editing and camera modes.
+// Three.js (WebGL) viewer for a multi-floor house: rendering, floors, camera
+// modes, selection, furniture dragging/rotating/stacking and structure dragging.
+// Wall drawing and other editing tools live in tools.js; walking in walk.js.
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import CameraControls from 'camera-controls';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-mesh-bvh';
 import { buildParametric, tintModel, DEFAULT_DIMS } from './models.js';
-import { buildRoom, bounds, centroid, pointInPolygon, walls, closestOnSegment } from './room.js';
+import { buildHouse, wallUnion } from './house.js';
+import { elevations, wallFrame, wallRect, pointInPolygon, closestOnSegment, area } from './design.js';
 
-const STACK_BASES = new Set(['table', 'desk', 'coffeetable', 'sidetable', 'nightstand', 'dresser', 'sideboard', 'tvstand', 'bookshelf', 'rug', 'wardrobe']);
+// Fast raycasting everywhere (picking, walking) via bounding volume hierarchies.
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
+
+CameraControls.install({
+  THREE: {
+    Vector2: THREE.Vector2, Vector3: THREE.Vector3, Vector4: THREE.Vector4, Quaternion: THREE.Quaternion,
+    Matrix4: THREE.Matrix4, Spherical: THREE.Spherical, Box3: THREE.Box3, Sphere: THREE.Sphere,
+    Raycaster: THREE.Raycaster,
+  },
+});
+
 const DEG = Math.PI / 180;
+const CUT_HEIGHT = 1.25; // like an architectural plan cut
+const STACK_BASES = new Set(['table', 'desk', 'coffeetable', 'sidetable', 'nightstand', 'dresser', 'sideboard', 'tvstand', 'bookshelf', 'rug', 'wardrobe']);
+const BIG = new Set(['sofa', 'bed', 'wardrobe', 'table', 'desk', 'chair', 'armchair', 'dresser', 'sideboard', 'bookshelf']);
 
 /** 'webgl2', 'webgl' or null: what this browser can render with. */
 export function webglSupport() {
@@ -21,32 +42,38 @@ export function webglSupport() {
   return null;
 }
 
-function makeLabel(className) {
+function label(className, text = '') {
   const el = document.createElement('div');
   el.className = className;
+  el.textContent = text;
   return new CSS2DObject(el);
 }
 
+const planOf = (v) => [v.x, v.z];
+
 export class Viewer {
-  constructor(container, cb) {
+  constructor(container, cb = {}) {
     this.container = container;
     this.cb = cb;
-    this.items = new Map(); // placedId → { group, sig, placed, item, half }
-    this.selectedId = null;
+    this.design = null;
+    this.house = null;
+    this.activeFloor = 0;
     this.view = '3d';
-    this.editRoom = false;
-    this.selectedWall = null;
+    this.wallMode = 'cut';
+    this.items = new Map(); // placedId → rec
+    this.sel = null; // { type, id }
     this.modelCache = new Map();
     this.assetProxy = null;
-    this.keys = new Set();
+    this.tool = null; // set by tools.js
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }));
     r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     r.shadowMap.enabled = true;
-    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    r.shadowMap.type = THREE.PCFShadowMap;
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.05;
     r.outputColorSpace = THREE.SRGBColorSpace;
+    r.localClippingEnabled = true;
     container.appendChild(r.domElement);
 
     this.labels = new CSS2DRenderer();
@@ -55,86 +82,117 @@ export class Viewer {
 
     const scene = (this.scene = new THREE.Scene());
     scene.background = new THREE.Color('#e9e6e1');
-    const pmrem = new THREE.PMREMGenerator(r);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.pmrem = new THREE.PMREMGenerator(r);
+    scene.environment = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environmentIntensity = 0.55;
-
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xb9a58a, 0.9));
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0xb9a58a, 0.9);
+    this.hemi.name = 'Sky light';
+    scene.add(this.hemi);
     const sun = (this.sun = new THREE.DirectionalLight(0xfff3e0, 2.2));
+    sun.name = 'Sun';
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.02;
-    sun.shadow.radius = 4;
     scene.add(sun, sun.target);
 
-    this.persp = new THREE.PerspectiveCamera(45, 1, 0.05, 200);
-    this.ortho = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 100);
-    this.camera = this.persp;
-    this.controls = new OrbitControls(this.persp, r.domElement);
-    this.controls.enableDamping = true;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
-    this.controls.screenSpacePanning = true;
+    // Ground around the house
+    this.ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), new THREE.MeshStandardMaterial({ color: '#dcd8cf', roughness: 1 }));
+    this.ground.name = 'Ground';
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.position.y = -0.2;
+    this.ground.receiveShadow = true;
+    this.ground.userData.helper = true;
+    scene.add(this.ground);
 
-    this.roomGroup = new THREE.Group();
-    this.itemsGroup = new THREE.Group();
-    this.handlesGroup = new THREE.Group();
-    scene.add(this.roomGroup, this.itemsGroup, this.handlesGroup);
+    this.persp = new THREE.PerspectiveCamera(45, 1, 0.05, 400);
+    this.ortho = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 400);
+    this.camera = this.persp;
+    this.orbit = new CameraControls(this.persp, r.domElement);
+    this.orbit.maxPolarAngle = Math.PI / 2 - 0.03;
+    this.orbit.minDistance = 0.6;
+    this.orbit.maxDistance = 120;
+    this.orbit.dollyToCursor = true;
+    this.orbit.smoothTime = 0.2;
+    this.plan = new CameraControls(this.ortho, r.domElement);
+    this.plan.enabled = false;
+    this.plan.mouseButtons.left = CameraControls.ACTION.TRUCK;
+    this.plan.mouseButtons.right = CameraControls.ACTION.TRUCK;
+    this.plan.mouseButtons.wheel = CameraControls.ACTION.ZOOM;
+    this.plan.touches.one = CameraControls.ACTION.TOUCH_TRUCK;
+    this.plan.touches.two = CameraControls.ACTION.TOUCH_ZOOM_TRUCK;
+    this.plan.minPolarAngle = this.plan.maxPolarAngle = 0.0001;
+    this.plan.minAzimuthAngle = this.plan.maxAzimuthAngle = 0;
+    this.plan.dollyToCursor = true;
+    this.plan.minZoom = 0.2;
+    this.plan.maxZoom = 12;
+    this.controls = this.orbit;
+
+    this.houseGroup = new THREE.Group();
+    this.overlay = new THREE.Group();
+    this.overlay.userData.helper = true;
+    scene.add(this.houseGroup, this.overlay);
 
     // Selection visuals
     this.selBox = new THREE.Box3Helper(new THREE.Box3(), 0x2f6fed);
     this.selBox.visible = false;
-    scene.add(this.selBox);
-    this.rotRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.96, 1, 64),
-      new THREE.MeshBasicMaterial({ color: 0x2f6fed, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthTest: false })
-    );
+    this.selBox.userData.helper = true;
+    this.overlay.add(this.selBox);
+    const blue = { color: 0x2f6fed, transparent: true, opacity: 0.9, depthTest: false };
+    this.rotRing = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), new THREE.MeshBasicMaterial({ ...blue, side: THREE.DoubleSide }));
     this.rotRing.rotation.x = -Math.PI / 2;
-    this.rotRing.renderOrder = 10;
-    this.rotKnob = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0x2f6fed, depthTest: false }));
-    this.rotKnob.renderOrder = 11;
+    this.rotKnob = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial(blue));
     this.rotGroup = new THREE.Group();
     this.rotGroup.add(this.rotRing, this.rotKnob);
+    this.rotGroup.renderOrder = 20;
+    this.rotRing.renderOrder = this.rotKnob.renderOrder = 20;
     this.rotGroup.visible = false;
-    scene.add(this.rotGroup);
-    this.selLabel = makeLabel('dim-label');
+    this.overlay.add(this.rotGroup);
+    this.wallHighlight = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0x2f6fed, transparent: true, opacity: 0.35, depthTest: false }));
+    this.wallHighlight.renderOrder = 15;
+    this.wallHighlight.visible = false;
+    this.overlay.add(this.wallHighlight);
+    this.handles = new THREE.Group();
+    this.overlay.add(this.handles);
+    this.selLabel = label('dim-label');
     this.selLabel.visible = false;
     scene.add(this.selLabel);
+    this.roomLabels = new THREE.Group();
+    scene.add(this.roomLabels);
 
     this.raycaster = new THREE.Raycaster();
+    this.raycaster.firstHitOnly = false;
     this.pointer = new THREE.Vector2();
-    this.floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    this.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
     const el = r.domElement;
-    el.addEventListener('pointerdown', (e) => this.onDown(e));
-    el.addEventListener('pointermove', (e) => this.onMove(e));
-    window.addEventListener('pointerup', (e) => this.onUp(e));
-    el.addEventListener('dblclick', (e) => this.onDblClick(e));
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
-    // In walk mode the wheel steps forward/back instead of zooming.
-    el.addEventListener(
-      'wheel',
-      (e) => {
-        if (this.view !== 'eye') return;
-        e.preventDefault();
-        this.walk(-Math.sign(e.deltaY) * 0.25);
-      },
-      { passive: false }
-    );
-    window.addEventListener('keydown', (e) => {
-      if (/input|textarea|select/i.test(e.target.tagName)) return;
-      this.keys.add(e.key.toLowerCase());
-    });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
-    window.addEventListener('blur', () => this.keys.clear());
-    new ResizeObserver(() => this.resize()).observe(container);
+    this.listeners = [
+      [el, 'pointerdown', (e) => this.onDown(e)],
+      [el, 'pointermove', (e) => this.onMove(e)],
+      [window, 'pointerup', (e) => this.onUp(e)],
+      [el, 'dblclick', (e) => this.tool?.onDblClick?.(e)],
+      [el, 'contextmenu', (e) => e.preventDefault()],
+    ];
+    for (const [t, n, f] of this.listeners) t.addEventListener(n, f);
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(container);
     this.resize();
 
-    this.clock = new THREE.Clock();
-    r.setAnimationLoop(() => this.frame());
+    this.timer = new THREE.Timer();
+    this.frameHooks = new Set();
+    r.setAnimationLoop((t) => this.frame(t));
   }
 
-  // ---------- setup ----------
+  dispose() {
+    this.renderer.setAnimationLoop(null);
+    for (const [t, n, f] of this.listeners) t.removeEventListener(n, f);
+    this.resizeObserver.disconnect();
+    this.orbit.dispose();
+    this.plan.dispose();
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+    this.labels.domElement.remove();
+  }
 
   resize() {
     const w = this.container.clientWidth || 1;
@@ -143,164 +201,203 @@ export class Viewer {
     this.labels.setSize(w, h);
     this.persp.aspect = w / h;
     this.persp.updateProjectionMatrix();
-    this.fitOrtho();
-  }
-
-  fitOrtho() {
-    if (!this.room) return;
-    const b = bounds(this.room.points);
-    const w = this.container.clientWidth || 1;
-    const h = this.container.clientHeight || 1;
-    const spanX = b.maxX - b.minX + 1.4;
-    const spanZ = b.maxZ - b.minZ + 1.4;
-    const scale = Math.max(spanX / w, spanZ / h);
-    const cx = (b.minX + b.maxX) / 2;
-    const cz = (b.minZ + b.maxZ) / 2;
-    Object.assign(this.ortho, { left: (-w * scale) / 2, right: (w * scale) / 2, top: (h * scale) / 2, bottom: (-h * scale) / 2 });
+    const span = this.span || 12;
+    const s = Math.max(span / w, span / h) * 1.15;
+    Object.assign(this.ortho, { left: (-w * s) / 2, right: (w * s) / 2, top: (h * s) / 2, bottom: (-h * s) / 2 });
     this.ortho.updateProjectionMatrix();
-    if (this.view === 'plan') {
-      this.ortho.position.set(cx, 20, cz);
-      this.ortho.up.set(0, 0, -1);
-      this.ortho.lookAt(cx, 0, cz);
-      this.controls.target.set(cx, 0, cz);
-    }
+    this.composer?.setSize(w, h);
   }
 
   setAssetProxy(fn) {
     this.assetProxy = fn;
   }
 
-  setRoom(room, { refit = false } = {}) {
-    const first = !this.room;
-    this.room = room;
-    this.roomGroup.clear();
-    const built = buildRoom(room);
-    this.roomGroup.add(built.group);
-    this.wallMeshes = built.wallMeshes;
-    this.floorMesh = built.floor;
-    const b = bounds(room.points);
-    const [cx, cz] = [(b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2];
-    const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
-    this.sun.position.set(cx + span * 0.6, room.height * 3 + 3, cz + span * 0.9);
-    this.sun.target.position.set(cx, 0, cz);
+  // ---------- design ----------
+
+  get floorY() {
+    return this.house?.elevations[this.activeFloor] ?? 0;
+  }
+
+  get activeFloorData() {
+    return this.design?.floors[this.activeFloor];
+  }
+
+  /** Rebuild the house when structure changed; always resync furniture. */
+  setDesign(design, { refit = false, force = false } = {}) {
+    const first = !this.design;
+    this.design = design;
+    this.activeFloor = Math.min(this.activeFloor, design.floors.length - 1);
+    const sig = JSON.stringify([design.wallColor, design.floors.map((f) => [f.height, f.slab, f.walls, f.openings, f.rooms, f.stairs])]);
+    if (force || sig !== this.houseSig) {
+      this.houseSig = sig;
+      this.rebuildHouse();
+    }
+    this.syncFurniture();
+    if (first || refit) this.frameHouse(false);
+  }
+
+  rebuildHouse() {
+    for (const rec of this.items.values()) rec.group.removeFromParent();
+    this.houseGroup.traverse((o) => {
+      if (o.isMesh && !o.userData.keep) {
+        o.geometry.disposeBoundsTree?.();
+        o.geometry.dispose();
+      }
+    });
+    this.houseGroup.clear();
+    this.house = buildHouse(this.design, { roof: this.view === 'walk' });
+    this.houseGroup.add(this.house.group);
+    // Per-floor material copies so each floor can be cut away independently.
+    for (const f of this.house.floors) {
+      const plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), f.y0 + CUT_HEIGHT);
+      f.clipPlane = plane;
+      const clones = new Map();
+      f.group.traverse((o) => {
+        if (!o.isMesh || f.furniture === o || isInside(o, f.furniture)) return;
+        const m = o.material;
+        if (!clones.has(m)) {
+          const c = m.clone();
+          c.clippingPlanes = [];
+          clones.set(m, c);
+        }
+        o.material = clones.get(m);
+      });
+      f.clipMaterials = [...clones.values()];
+      for (const w of f.walkables) w.geometry.computeBoundsTree?.();
+      f.wallMesh?.geometry.computeBoundsTree?.();
+      // Cap covering the cut wall tops so cut walls read as solid
+      const u = wallUnion(this.design.floors[f.index]);
+      if (u.length) {
+        const shapes = u.map((poly) => {
+          const s = new THREE.Shape(poly[0].slice(0, -1).map(([x, z]) => new THREE.Vector2(x, -z)));
+          for (const h of poly.slice(1)) s.holes.push(new THREE.Path(h.slice(0, -1).map(([x, z]) => new THREE.Vector2(x, -z))));
+          return s;
+        });
+        const cap = new THREE.Mesh(new THREE.ShapeGeometry(shapes), new THREE.MeshBasicMaterial({ color: '#4a4d52' }));
+        cap.rotation.x = -Math.PI / 2;
+        cap.position.y = f.y0 + CUT_HEIGHT;
+        cap.name = 'Wall cut';
+        cap.userData.helper = true;
+        f.cap = cap;
+        f.group.add(cap);
+      }
+    }
+    // Frame shadows and orthographic plan to the house size.
+    const box = new THREE.Box3().setFromObject(this.house.group);
+    if (box.isEmpty()) box.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(8, 3, 8));
+    this.bounds = box;
+    const size = box.getSize(new THREE.Vector3());
+    const c = box.getCenter(new THREE.Vector3());
+    this.span = Math.max(size.x, size.z, 4);
     const sc = this.sun.shadow.camera;
-    Object.assign(sc, { left: -span, right: span, top: span, bottom: -span, near: 0.5, far: room.height * 6 + span * 3 });
+    Object.assign(sc, { left: -this.span, right: this.span, top: this.span, bottom: -this.span, near: 0.5, far: size.y + this.span * 4 + 20 });
     sc.updateProjectionMatrix();
-    if (first || refit) this.frameRoom();
-    this.fitOrtho();
-    this.refreshRoomHandles();
-    this.refreshWallLabels();
-  }
-
-  frameRoom() {
-    const b = bounds(this.room.points);
-    const cx = (b.minX + b.maxX) / 2;
-    const cz = (b.minZ + b.maxZ) / 2;
-    const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ, 3);
-    this.controls.target.set(cx, 0.6, cz);
-    this.persp.position.set(cx + span * 0.55, span * 1.05 + 1, cz + span * 1.25);
-    this.controls.update();
-  }
-
-  setView(view) {
-    this.view = view;
-    const c = this.controls;
-    if (view === 'plan') {
-      this.camera = this.ortho;
-      c.object = this.ortho;
-      c.enableRotate = false;
-      c.enableZoom = true;
-      c.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-      c.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
-      this.ortho.zoom = 1;
-      this.fitOrtho();
-    } else {
-      this.camera = this.persp;
-      c.object = this.persp;
-      c.enableRotate = true;
-      c.enableZoom = view !== 'eye';
-      c.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-      c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
-      if (view === 'eye') {
-        const [cx, cz] = centroid(this.room.points);
-        // Stand just inside the corner furthest from the centroid, looking across the room.
-        let far = this.room.points[0];
-        for (const p of this.room.points) if (Math.hypot(p[0] - cx, p[1] - cz) > Math.hypot(far[0] - cx, far[1] - cz)) far = p;
-        const t = 0.35;
-        let ex = far[0] + (cx - far[0]) * t, ez = far[1] + (cz - far[1]) * t;
-        if (!pointInPolygon(ex, ez, this.room.points)) [ex, ez] = [cx, cz];
-        this.persp.position.set(ex, 1.6, ez);
-        const dx = cx - ex, dz = cz - ez;
-        const L = Math.hypot(dx, dz) || 1;
-        c.target.set(ex + (dx / L) * 0.4, 1.45, ez + (dz / L) * 0.4);
-        this.persp.fov = 65;
-        c.minDistance = 0.05;
-        c.maxPolarAngle = Math.PI - 0.1;
-      } else {
-        this.persp.fov = 45;
-        c.minDistance = 0.5;
-        c.maxPolarAngle = Math.PI / 2 - 0.02;
-        this.frameRoom();
-      }
-      this.persp.updateProjectionMatrix();
-    }
-    c.update();
-    this.refreshWallLabels();
-  }
-
-  setEditRoom(on) {
-    this.editRoom = on;
-    this.selectedWall = null;
-    this.selectedVertex = null;
-    if (on) this.select(null);
-    this.refreshRoomHandles();
-    this.refreshWallLabels();
-  }
-
-  // ---------- items ----------
-
-  sync(placedList, inventory) {
-    const byId = new Map(inventory.map((i) => [i.id, i]));
-    const seen = new Set();
-    for (const p of placedList) {
-      const item = byId.get(p.itemId);
-      if (!item) continue;
-      seen.add(p.id);
-      const color = item.colors?.find((c) => c.name === p.color) || (p.color?.startsWith?.('#') ? { name: p.color, hex: p.color } : item.colors?.[0]);
-      const sig = JSON.stringify([item.category, item.dims, color?.hex, item.accent, item.modelUrl, item.name, item.useModel]);
-      let rec = this.items.get(p.id);
-      if (!rec || rec.sig !== sig) {
-        if (rec) this.itemsGroup.remove(rec.group);
-        rec = this.buildItem(p, item, color, sig);
-        this.items.set(p.id, rec);
-      }
-      rec.placed = p;
-      rec.item = item;
-      rec.group.position.set(p.x, p.y || 0, p.z);
-      rec.group.rotation.y = (p.rot || 0) * DEG;
-    }
-    for (const [id, rec] of this.items) {
-      if (!seen.has(id)) {
-        this.itemsGroup.remove(rec.group);
-        this.items.delete(id);
-      }
-    }
-    if (this.selectedId && !this.items.has(this.selectedId)) this.select(null);
+    this.sun.position.set(c.x + this.span * 0.6, box.max.y + this.span * 1.2 + 4, c.z + this.span * 0.9);
+    this.sun.target.position.set(c.x, 0, c.z);
+    this.ground.position.set(c.x, (this.house.elevations[0] ?? 0) - (this.design.floors[0]?.slab ?? 0.15) - 0.002, c.z);
+    this.resize();
+    this.applyFloorVisibility();
+    this.refreshRoomLabels();
     this.updateSelection();
   }
+
+  frameHouse(animate = true) {
+    const box = this.bounds;
+    if (!box) return;
+    const c = box.getCenter(new THREE.Vector3());
+    const y = this.floorY;
+    const s = this.span;
+    this.orbit.setLookAt(c.x + s * 0.55, y + s * 0.95 + 2, c.z + s * 1.2, c.x, y + 0.8, c.z, animate);
+    this.plan.setLookAt(c.x, y + 50, c.z, c.x, y, c.z, animate);
+    this.plan.zoomTo(1, animate);
+  }
+
+  setActiveFloor(i, { animate = true } = {}) {
+    if (!this.design) return;
+    i = Math.max(0, Math.min(this.design.floors.length - 1, i));
+    const dy = (this.house.elevations[i] ?? 0) - this.floorY;
+    this.activeFloor = i;
+    if (this.sel?.type !== 'item' || this.items.get(this.sel.id)?.floorIndex !== i) this.select(null);
+    this.applyFloorVisibility();
+    this.refreshRoomLabels();
+    if (this.view === 'walk') return;
+    for (const c of [this.orbit, this.plan]) {
+      const pos = c.getPosition(new THREE.Vector3());
+      const tgt = c.getTarget(new THREE.Vector3());
+      c.setLookAt(pos.x, pos.y + dy, pos.z, tgt.x, tgt.y + dy, tgt.z, animate);
+    }
+  }
+
+  setWallMode(mode) {
+    this.wallMode = mode;
+    this.applyFloorVisibility();
+  }
+
+  /** Floors above the active one are hidden; the active floor is cut at plan height (or full). */
+  applyFloorVisibility() {
+    if (!this.house) return;
+    const walk = this.view === 'walk';
+    const allUp = this.activeFloor === -1;
+    for (const f of this.house.floors) {
+      const above = f.index > this.activeFloor;
+      f.group.visible = walk || allUp || !above;
+      const cut = !walk && f.index === this.activeFloor && (this.view === 'plan' || this.wallMode === 'cut');
+      for (const m of f.clipMaterials || []) m.clippingPlanes = cut ? [f.clipPlane] : [];
+      if (f.cap) f.cap.visible = cut;
+    }
+    this.house.group.traverse((o) => o.userData.roof && (o.visible = walk));
+  }
+
+  // ---------- furniture ----------
 
   dimsOf(item) {
     const def = DEFAULT_DIMS[item.category] || [0.6, 0.6, 0.6];
     return { w: item.dims?.w || def[0], d: item.dims?.d || def[1], h: item.dims?.h || def[2] };
   }
 
+  syncFurniture() {
+    const d = this.design;
+    if (!d || !this.house) return;
+    const byId = new Map((this.library || d.inventory || []).map((i) => [i.id, i]));
+    const seen = new Set();
+    d.floors.forEach((floor, fi) => {
+      const hf = this.house.floors[fi];
+      for (const p of floor.placed) {
+        const item = byId.get(p.itemId);
+        if (!item) continue;
+        seen.add(p.id);
+        const color = item.colors?.find((c) => c.name === p.color) || (p.color?.startsWith?.('#') ? { name: p.color, hex: p.color } : item.colors?.[0]);
+        const sig = JSON.stringify([item.category, item.dims, color?.hex, item.accent, item.modelUrl, item.name, item.useModel]);
+        let rec = this.items.get(p.id);
+        if (!rec || rec.sig !== sig) {
+          rec?.group.removeFromParent();
+          rec = this.buildItem(p, item, color, sig);
+          this.items.set(p.id, rec);
+        }
+        if (rec.group.parent !== hf.furniture) hf.furniture.add(rec.group);
+        Object.assign(rec, { placed: p, item, floorIndex: fi });
+        rec.group.position.set(p.x, hf.y0 + (p.y || 0), p.z);
+        rec.group.rotation.y = (p.rot || 0) * DEG;
+      }
+    });
+    for (const [id, rec] of this.items) {
+      if (!seen.has(id)) {
+        rec.group.removeFromParent();
+        this.items.delete(id);
+      }
+    }
+    if (this.sel?.type === 'item' && !this.items.has(this.sel.id)) this.select(null);
+    this.updateSelection();
+  }
+
   buildItem(p, item, color, sig) {
     const group = new THREE.Group();
+    group.name = item.name;
     group.userData.placedId = p.id;
     const dims = this.dimsOf(item);
     const model = buildParametric({ category: item.category, dims, color, accent: item.accent, name: item.name, seed: item.id });
+    model.traverse((o) => o.isMesh && o.geometry.computeBoundsTree?.());
     group.add(model);
-    this.itemsGroup.add(group);
     const rec = { group, sig, dims, loading: false };
     if (item.modelUrl && item.useModel !== false) {
       rec.loading = true;
@@ -308,19 +405,22 @@ export class Viewer {
         .then((scene) => {
           if (this.items.get(p.id) !== rec) return;
           const m = scene.clone(true);
-          this.fitModel(m, dims);
+          fitModel(m, dims);
           tintModel(m, item.colors?.length > 1 ? color?.hex : null);
           m.traverse((o) => {
-            if (o.isMesh) o.castShadow = o.receiveShadow = true;
+            if (o.isMesh) {
+              o.castShadow = o.receiveShadow = true;
+              o.geometry.computeBoundsTree?.();
+            }
           });
-          group.remove(model);
+          model.removeFromParent();
           group.add(m);
           rec.loading = false;
           this.updateSelection();
         })
         .catch((err) => {
           rec.loading = false;
-          console.warn('Model failed, keeping generated model', err);
+          console.warn('3D model failed, keeping the generated model', err);
           this.cb.onModelError?.(item, err);
         });
     }
@@ -332,9 +432,14 @@ export class Viewer {
       const manager = new THREE.LoadingManager();
       manager.setURLModifier((u) => (this.assetProxy ? this.assetProxy(u) : u));
       const loader = new GLTFLoader(manager);
+      // Store models are often compressed; these decoders ship with three.js.
+      const draco = new DRACOLoader().setDecoderPath('./vendor/three/examples/jsm/libs/draco/gltf/');
+      loader.setDRACOLoader(draco);
+      loader.setKTX2Loader(new KTX2Loader().setTranscoderPath('./vendor/three/examples/jsm/libs/basis/').detectSupport(this.renderer));
+      loader.setMeshoptDecoder(MeshoptDecoder);
       this.modelCache.set(
         url,
-        new Promise((res, rej) => loader.load(url, (g) => res(g.scene), undefined, rej)).catch((e) => {
+        loader.loadAsync(url).then((g) => g.scene).catch((e) => {
           this.modelCache.delete(url);
           throw e;
         })
@@ -343,51 +448,131 @@ export class Viewer {
     return this.modelCache.get(url);
   }
 
-  fitModel(m, dims) {
-    let box = new THREE.Box3().setFromObject(m);
-    let size = box.getSize(new THREE.Vector3());
-    const want = dims.w / dims.d;
-    // If the model faces sideways, turn it so its width lines up with the item's width.
-    if (Math.abs(size.z / size.x - want) < Math.abs(size.x / size.z - want) - 0.05) {
-      m.rotation.y = Math.PI / 2;
-      m.updateMatrixWorld(true);
-      box = new THREE.Box3().setFromObject(m);
-      size = box.getSize(new THREE.Vector3());
-    }
-    const wrap = new THREE.Group();
-    m.scale.multiply(new THREE.Vector3(dims.w / (size.x || 1), dims.h / (size.y || 1), dims.d / (size.z || 1)));
-    m.updateMatrixWorld(true);
-    box = new THREE.Box3().setFromObject(m);
-    const c = box.getCenter(new THREE.Vector3());
-    m.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
-    return wrap;
-  }
-
   // ---------- selection ----------
 
-  select(id) {
-    this.selectedId = id;
+  select(sel) {
+    this.sel = sel || null;
     this.updateSelection();
-    this.cb.onSelect?.(id);
+    this.cb.onSelect?.(this.sel);
   }
 
   updateSelection() {
-    const rec = this.selectedId && this.items.get(this.selectedId);
-    this.selBox.visible = this.rotGroup.visible = this.selLabel.visible = !!rec;
-    if (!rec) return;
-    rec.group.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(rec.group);
-    this.selBox.box.copy(box.expandByScalar(0.01));
-    const d = rec.dims;
-    const r = Math.hypot(d.w, d.d) / 2 + 0.12;
-    this.rotRing.scale.setScalar(r);
-    this.rotRing.position.set(0, 0, 0);
-    this.rotKnob.scale.setScalar(Math.max(0.045, r * 0.06));
-    const a = rec.group.rotation.y;
-    this.rotKnob.position.set(Math.sin(a) * r, 0, Math.cos(a) * r);
-    this.rotGroup.position.set(rec.group.position.x, (rec.placed.y || 0) + 0.015, rec.group.position.z);
-    this.selLabel.element.textContent = `${Math.round(d.w * 100)} × ${Math.round(d.d * 100)} × ${Math.round(d.h * 100)} cm`;
-    this.selLabel.position.set(rec.group.position.x, box.max.y + 0.12, rec.group.position.z);
+    const s = this.sel;
+    this.selBox.visible = this.rotGroup.visible = this.selLabel.visible = this.wallHighlight.visible = false;
+    this.handles.clear();
+    if (!s || !this.house) return;
+    const floor = this.design.floors[this.activeFloor];
+    const y0 = this.floorY;
+    if (s.type === 'item') {
+      const rec = this.items.get(s.id);
+      if (!rec) return;
+      rec.group.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(rec.group);
+      this.selBox.box.copy(box.expandByScalar(0.01));
+      this.selBox.visible = true;
+      const d = rec.dims;
+      const r = Math.hypot(d.w, d.d) / 2 + 0.12;
+      this.rotRing.scale.setScalar(r);
+      this.rotKnob.scale.setScalar(Math.max(0.045, r * 0.06));
+      const a = rec.group.rotation.y;
+      this.rotKnob.position.set(Math.sin(a) * r, 0, Math.cos(a) * r);
+      this.rotGroup.position.set(rec.group.position.x, rec.group.position.y + 0.015, rec.group.position.z);
+      this.rotGroup.visible = this.view !== 'walk';
+      this.selLabel.element.textContent = `${Math.round(d.w * 100)} × ${Math.round(d.d * 100)} × ${Math.round(d.h * 100)} cm`;
+      this.selLabel.position.set(rec.group.position.x, box.max.y + 0.12, rec.group.position.z);
+      this.selLabel.visible = true;
+    } else if (s.type === 'wall') {
+      const w = floor?.walls.find((x) => x.id === s.id);
+      if (!w) return;
+      const rect = wallRect(w, false);
+      const shape = new THREE.Shape(rect.map(([x, z]) => new THREE.Vector2(x, -z)));
+      const h = this.view === 'plan' || this.wallMode === 'cut' ? CUT_HEIGHT : floor.height;
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: h + 0.02, bevelEnabled: false });
+      geo.rotateX(-Math.PI / 2);
+      this.wallHighlight.geometry.dispose();
+      this.wallHighlight.geometry = geo;
+      this.wallHighlight.position.y = y0 - 0.01;
+      this.wallHighlight.visible = true;
+      for (const [k, p] of [['a', w.a], ['b', w.b]]) this.handles.add(this.handle(p, y0 + h + 0.03, { wall: w.id, end: k }));
+      const { len } = wallFrame(w);
+      this.selLabel.element.textContent = `${Math.round(len * 100)} cm`;
+      this.selLabel.position.set((w.a[0] + w.b[0]) / 2, y0 + h + 0.25, (w.a[1] + w.b[1]) / 2);
+      this.selLabel.visible = true;
+    } else if (s.type === 'opening' || s.type === 'stairs') {
+      let obj = null;
+      this.house.floors[this.activeFloor]?.group.traverse((o) => {
+        if ((s.type === 'opening' && o.userData.opening === s.id) || (s.type === 'stairs' && o.userData.stair === s.id)) obj = o;
+      });
+      if (!obj) return;
+      this.selBox.box.setFromObject(obj).expandByScalar(0.03);
+      if (this.view === 'plan' || this.wallMode === 'cut') this.selBox.box.max.y = Math.min(this.selBox.box.max.y, y0 + CUT_HEIGHT);
+      this.selBox.visible = true;
+      if (s.type === 'stairs') {
+        const L = obj.userData.layout;
+        this.selLabel.element.textContent = `${L.n} steps · ${Math.round(L.riser * 1000)} mm rise · ${Math.round(L.going * 1000)} mm tread`;
+        const c = this.selBox.box.getCenter(new THREE.Vector3());
+        this.selLabel.position.set(c.x, this.selBox.box.max.y + 0.2, c.z);
+        this.selLabel.visible = true;
+      }
+    } else if (s.type === 'room') {
+      const r = floor?.rooms.find((x) => x.id === s.id);
+      if (!r) return;
+      const pts = r.points;
+      const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
+      const geo = new THREE.ShapeGeometry(shape);
+      geo.rotateX(-Math.PI / 2);
+      this.wallHighlight.geometry.dispose();
+      this.wallHighlight.geometry = geo;
+      this.wallHighlight.position.y = y0 + 0.01;
+      this.wallHighlight.visible = true;
+    }
+  }
+
+  handle([x, z], y, data) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
+    const ring = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), new THREE.MeshBasicMaterial({ color: 0x2f6fed, depthTest: false }));
+    ring.renderOrder = 21;
+    m.renderOrder = 22;
+    const g = new THREE.Group();
+    g.add(ring, m);
+    g.position.set(x, y, z);
+    g.userData.handle = data;
+    m.userData.handle = ring.userData.handle = data;
+    return g;
+  }
+
+  refreshRoomLabels() {
+    this.roomLabels.clear();
+    if (!this.design || this.view === 'walk') return;
+    const floor = this.design.floors[this.activeFloor];
+    for (const r of floor?.rooms || []) {
+      if (!r.name) continue;
+      const a = Math.abs(area(r.points));
+      const [cx, cz] = r.points.reduce((s, p) => [s[0] + p[0] / r.points.length, s[1] + p[1] / r.points.length], [0, 0]);
+      const l = label('room-label');
+      l.element.innerHTML = `<b>${escapeHtml(r.name)}</b><span>${a.toFixed(1)} m²</span>`;
+      l.position.set(cx, this.floorY + 0.05, cz);
+      this.roomLabels.add(l);
+    }
+  }
+
+  // ---------- views ----------
+
+  setView(view) {
+    const prev = this.view;
+    this.view = view;
+    this.orbit.enabled = view === '3d';
+    this.plan.enabled = view === 'plan';
+    this.controls = view === 'plan' ? this.plan : this.orbit;
+    this.camera = view === 'plan' ? this.ortho : this.persp;
+    if (view === 'walk') this.cb.onWalk?.(true);
+    else if (prev === 'walk') this.cb.onWalk?.(false);
+    if (view === '3d' && prev === 'walk') this.frameHouse(true);
+    this.persp.fov = view === 'walk' ? 70 : 45;
+    this.persp.updateProjectionMatrix();
+    this.applyFloorVisibility();
+    this.refreshRoomLabels();
+    this.updateSelection();
   }
 
   // ---------- pointer ----------
@@ -398,328 +583,360 @@ export class Viewer {
     this.raycaster.setFromCamera(this.pointer, this.camera);
   }
 
-  floorAt(clientX, clientY) {
-    this.setPointer({ clientX, clientY });
-    return this.floorPoint(0);
-  }
-
-  floorPoint(y = 0) {
-    this.floorPlane.constant = -y;
+  /** Point on the horizontal plane at height y under the pointer. */
+  planePoint(y = this.floorY) {
+    this.plane.constant = -y;
     const p = new THREE.Vector3();
-    return this.raycaster.ray.intersectPlane(this.floorPlane, p) ? p : null;
+    return this.raycaster.ray.intersectPlane(this.plane, p) ? p : null;
   }
 
-  hitItem() {
-    const hits = this.raycaster.intersectObjects(this.itemsGroup.children, true);
+  /** Plan point [x, z] on the active floor under a client position. */
+  planAt(clientX, clientY) {
+    this.setPointer({ clientX, clientY });
+    const p = this.planePoint();
+    return p ? [p.x, p.z] : null;
+  }
+
+  pick() {
+    const hf = this.house?.floors[this.activeFloor];
+    if (!hf) return null;
+    const handle = this.raycaster.intersectObjects(this.handles.children, true)[0];
+    if (handle) return { type: 'handle', data: handle.object.userData.handle, point: handle.point };
+    const targets = [hf.group];
+    const hits = this.raycaster.intersectObjects(targets, true).filter((h) => {
+      if (h.object.userData.helper || !isVisible(h.object)) return false;
+      // Ignore geometry clipped away by the cut plane.
+      if (hf.clipMaterials?.[0]?.clippingPlanes?.length && !isInside(h.object, hf.furniture) && h.point.y > hf.y0 + CUT_HEIGHT + 0.001) return false;
+      return true;
+    });
     for (const h of hits) {
       let o = h.object;
-      while (o && o.userData.placedId == null) o = o.parent;
-      if (o) {
-        // Prefer non-rug items when a rug is underneath something else.
-        const rec = this.items.get(o.userData.placedId);
-        if (rec?.item.category === 'rug' && hits.some((x) => x !== h && x.distance - h.distance < 0.5 && this.ownerId(x.object) !== o.userData.placedId && this.items.get(this.ownerId(x.object))?.item.category !== 'rug')) continue;
-        return { id: o.userData.placedId, point: h.point };
+      while (o && o !== hf.group) {
+        if (o.userData.placedId) {
+          const rec = this.items.get(o.userData.placedId);
+          // Prefer what's standing on a rug over the rug itself.
+          if (rec?.item.category === 'rug' && hits.some((x) => x.distance - h.distance < 0.6 && this.ownerOf(x.object) && this.ownerOf(x.object) !== rec.placed.id && this.items.get(this.ownerOf(x.object))?.item.category !== 'rug')) break;
+          return { type: 'item', id: o.userData.placedId, point: h.point };
+        }
+        if (o.userData.opening) return { type: 'opening', id: o.userData.opening, point: h.point };
+        if (o.userData.stair) return { type: 'stairs', id: o.userData.stair, point: h.point };
+        if (o === hf.wallMesh) return { type: 'wall', id: this.nearestWall([h.point.x, h.point.z])?.id, point: h.point };
+        if (o.userData.room) return { type: 'room', id: o.userData.room, point: h.point };
+        o = o.parent;
       }
     }
     return null;
   }
 
-  ownerId(o) {
+  ownerOf(o) {
     while (o && o.userData.placedId == null) o = o.parent;
     return o?.userData.placedId;
   }
 
+  nearestWall(p, max = Infinity) {
+    let best = null;
+    for (const w of this.activeFloorData?.walls || []) {
+      const c = closestOnSegment(p, w.a, w.b);
+      if (c.dist < max && (!best || c.dist < best.dist)) best = { ...w, dist: c.dist, t: c.t, q: c.q };
+    }
+    return best;
+  }
+
   onDown(e) {
-    if (e.button !== 0) return;
+    if (this.view === 'walk' || e.button !== 0) return;
     this.setPointer(e);
     this.downAt = { x: e.clientX, y: e.clientY };
+    if (this.tool?.onDown?.(e)) return;
 
-    if (this.editRoom) {
-      const hv = this.raycaster.intersectObjects(this.handlesGroup.children, false)[0];
-      if (hv) {
-        this.drag = { type: 'vertex', index: hv.object.userData.index };
-        this.selectedVertex = hv.object.userData.index;
-        this.selectedWall = null;
-        this.controls.enabled = false;
-        this.cb.onRoomSelect?.({ vertex: this.selectedVertex });
-        this.refreshRoomHandles();
-        return;
-      }
-      const hw = this.raycaster.intersectObjects(this.wallMeshes.map((w) => w.mesh), false)[0];
-      let wall = hw ? hw.object.userData.wall.i : null;
-      if (wall == null) {
-        // Cut-away walls are short, so also accept clicks on the floor next to a wall.
-        const p = this.floorPoint(0);
-        if (p) {
-          let best = null;
-          for (const w of walls(this.room.points)) {
-            const c = closestOnSegment([p.x, p.z], w.a, w.b);
-            if (!best || c.dist < best.dist) best = { dist: c.dist, i: w.i };
-          }
-          if (best && best.dist < 0.35) wall = best.i;
-        }
-      }
-      this.pendingWall = wall;
+    // Rotation knob of the selected item
+    if (this.rotGroup.visible && this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false).length) {
+      this.drag = { type: 'rotate', id: this.sel.id };
+      this.controls.enabled = false;
       return;
     }
-
-    // Rotation knob / ring
-    if (this.rotGroup.visible) {
-      const hr = this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false)[0];
-      if (hr) {
-        const rec = this.items.get(this.selectedId);
-        this.drag = { type: 'rotate', id: this.selectedId, start: rec.group.rotation.y };
-        this.controls.enabled = false;
-        return;
-      }
+    const hit = this.pick();
+    if (!hit) {
+      this.pendingDeselect = true;
+      return;
     }
-    const hit = this.hitItem();
-    if (hit) {
+    if (hit.type === 'handle') {
+      this.drag = { type: 'wall-end', ...hit.data };
+      this.controls.enabled = false;
+      return;
+    }
+    if (hit.type !== 'room' && (this.sel?.type !== hit.type || this.sel?.id !== hit.id)) this.select({ type: hit.type, id: hit.id });
+    if (hit.type === 'room') {
+      this.pendingRoom = hit.id;
+      return;
+    }
+    const at = planOf(hit.point);
+    if (hit.type === 'item') {
       const rec = this.items.get(hit.id);
-      if (this.selectedId !== hit.id) this.select(hit.id);
-      const fp = this.floorPoint(rec.placed.y || 0) || hit.point;
-      this.drag = { type: 'move', id: hit.id, offset: new THREE.Vector3().subVectors(rec.group.position, fp).setY(0), moved: false };
+      const fp = this.planePoint(rec.group.position.y) || hit.point;
+      this.drag = { type: 'item', id: hit.id, offset: [rec.group.position.x - fp.x, rec.group.position.z - fp.z] };
+    } else if (hit.type === 'wall' && hit.id && this.cb.editable?.()) {
+      this.drag = { type: 'wall', id: hit.id, start: at };
+    } else if (hit.type === 'opening' && this.cb.editable?.()) {
+      this.drag = { type: 'opening', id: hit.id };
+    } else if (hit.type === 'stairs' && this.cb.editable?.()) {
+      const s = this.activeFloorData.stairs.find((x) => x.id === hit.id);
+      this.drag = { type: 'stairs', id: hit.id, offset: [s.x - at[0], s.z - at[1]] };
+    }
+    if (this.drag) {
       this.controls.enabled = false;
       this.renderer.domElement.style.cursor = 'grabbing';
-    } else {
-      this.pendingDeselect = true;
     }
   }
 
   onMove(e) {
+    if (this.view === 'walk') return;
     this.setPointer(e);
+    if (this.tool?.onMove?.(e)) return;
     const d = this.drag;
     if (!d) {
-      if (!this.editRoom) {
-        const overKnob = this.rotGroup.visible && this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false).length;
-        this.renderer.domElement.style.cursor = overKnob ? 'ew-resize' : this.hitItem() ? 'grab' : '';
-      } else {
-        const hv = this.raycaster.intersectObjects(this.handlesGroup.children, false).length;
-        this.renderer.domElement.style.cursor = hv ? 'move' : '';
-      }
+      const overKnob = this.rotGroup.visible && this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false).length;
+      if (overKnob) return (this.renderer.domElement.style.cursor = 'ew-resize');
+      const hit = this.pick();
+      const editable = this.cb.editable?.();
+      this.renderer.domElement.style.cursor = !hit ? '' : hit.type === 'item' || hit.type === 'handle' || (editable && hit.type !== 'room') ? 'grab' : 'pointer';
       return;
     }
-    if (d.type === 'vertex') {
-      const p = this.floorPoint(0);
-      if (!p) return;
-      const pts = this.room.points.map((q) => q.slice());
-      let x = Math.round(p.x / 0.05) * 0.05;
-      let z = Math.round(p.z / 0.05) * 0.05;
-      if (!e.shiftKey) {
-        // Snap to neighbours' axes to keep walls square.
-        const n = pts.length;
-        for (const j of [(d.index + n - 1) % n, (d.index + 1) % n]) {
-          if (Math.abs(pts[j][0] - x) < 0.15) x = pts[j][0];
-          if (Math.abs(pts[j][1] - z) < 0.15) z = pts[j][1];
-        }
-      }
-      pts[d.index] = [+x.toFixed(3), +z.toFixed(3)];
-      this.setRoom({ ...this.room, points: pts });
-      d.changed = true;
-      return;
-    }
-    const rec = this.items.get(d.id);
-    if (!rec) return;
+    const floor = this.activeFloorData;
     if (d.type === 'rotate') {
-      const p = this.floorPoint(rec.placed.y || 0);
+      const rec = this.items.get(d.id);
+      const p = this.planePoint(rec.group.position.y);
       if (!p) return;
-      let a = Math.atan2(p.x - rec.group.position.x, p.z - rec.group.position.z);
+      const a = Math.atan2(p.x - rec.group.position.x, p.z - rec.group.position.z);
       const step = e.shiftKey ? 1 : 15;
-      let deg = Math.round(a / DEG / step) * step;
-      deg = ((deg % 360) + 360) % 360;
+      const deg = (((Math.round(a / DEG / step) * step) % 360) + 360) % 360;
       rec.group.rotation.y = deg * DEG;
-      rec.placed = { ...rec.placed, rot: deg };
+      Object.assign(rec.placed, { rot: deg });
       d.changed = true;
       this.updateSelection();
-      this.cb.onLive?.(rec.placed);
+      this.cb.onLive?.();
       return;
     }
-    if (d.type === 'move') {
-      const p = this.floorPoint(rec.placed.y || 0);
+    if (d.type === 'item') {
+      const rec = this.items.get(d.id);
+      const p = this.planePoint(rec.group.position.y);
       if (!p) return;
-      let x = p.x + d.offset.x;
-      let z = p.z + d.offset.z;
-      if (!e.shiftKey) {
-        x = Math.round(x * 100) / 100;
-        z = Math.round(z * 100) / 100;
-      }
+      let x = p.x + d.offset[0];
+      let z = p.z + d.offset[1];
+      if (!e.shiftKey) (x = Math.round(x * 100) / 100), (z = Math.round(z * 100) / 100);
       const res = this.constrain(rec, x, z, !e.altKey);
       if (!res) return;
-      rec.group.position.set(res.x, res.y, res.z);
-      rec.placed = { ...rec.placed, x: res.x, z: res.z, y: res.y };
-      d.moved = true;
+      Object.assign(rec.placed, { x: res.x, z: res.z, y: res.y });
+      rec.group.position.set(res.x, this.house.floors[rec.floorIndex].y0 + res.y, res.z);
+      d.changed = true;
       this.updateSelection();
-      this.cb.onLive?.(rec.placed);
+      this.cb.onLive?.();
+      return;
+    }
+    const p = this.planePoint();
+    if (!p) return;
+    let at = snapPoint([p.x, p.z], floor, e.shiftKey ? null : d.id);
+    if (d.type === 'wall-end') {
+      const w = floor.walls.find((x) => x.id === d.wall);
+      const old = w[d.end];
+      if (!e.shiftKey) at = orthoSnap(at, d.end === 'a' ? w.b : w.a);
+      // Move every wall end joined at this corner so walls stay connected.
+      for (const o of floor.walls) for (const k of ['a', 'b']) if (Math.hypot(o[k][0] - old[0], o[k][1] - old[1]) < 0.01) o[k] = at.slice();
+      d.changed = true;
+      this.cb.onStructureLive?.();
+    } else if (d.type === 'wall') {
+      const w = floor.walls.find((x) => x.id === d.id);
+      const { normal } = wallFrame(w);
+      let dn = (at[0] - d.start[0]) * normal[0] + (at[1] - d.start[1]) * normal[1];
+      if (!e.shiftKey) dn = Math.round(dn / 0.05) * 0.05;
+      const move = [normal[0] * (dn - (d.moved || 0)), normal[1] * (dn - (d.moved || 0))];
+      if (!move[0] && !move[1]) return;
+      d.moved = dn;
+      const ends = [w.a.slice(), w.b.slice()];
+      for (const o of floor.walls)
+        for (const k of ['a', 'b'])
+          if (ends.some((q) => Math.hypot(o[k][0] - q[0], o[k][1] - q[1]) < 0.01)) o[k] = [+(o[k][0] + move[0]).toFixed(4), +(o[k][1] + move[1]).toFixed(4)];
+      d.changed = true;
+      this.cb.onStructureLive?.();
+    } else if (d.type === 'opening') {
+      const o = floor.openings.find((x) => x.id === d.id);
+      const w = floor.walls.find((x) => x.id === o.wall);
+      const { len } = wallFrame(w);
+      const c = closestOnSegment([p.x, p.z], w.a, w.b);
+      let off = c.t * len - o.width / 2;
+      if (!e.shiftKey) off = Math.round(off / 0.05) * 0.05;
+      o.offset = +Math.max(0.05, Math.min(len - o.width - 0.05, off)).toFixed(3);
+      d.changed = true;
+      this.cb.onStructureLive?.();
+    } else if (d.type === 'stairs') {
+      const s = floor.stairs.find((x) => x.id === d.id);
+      let x = p.x + d.offset[0], z = p.z + d.offset[1];
+      if (!e.shiftKey) (x = Math.round(x / 0.05) * 0.05), (z = Math.round(z / 0.05) * 0.05);
+      Object.assign(s, { x: +x.toFixed(3), z: +z.toFixed(3) });
+      d.changed = true;
+      this.cb.onStructureLive?.();
     }
   }
 
-  /** Keep an item inside the room, flush against walls it touches, and stacked on surfaces. */
+  onUp(e) {
+    if (this.tool?.onUp?.(e)) return;
+    const d = this.drag;
+    this.drag = null;
+    this.controls.enabled = this.view !== 'walk';
+    this.renderer.domElement.style.cursor = '';
+    const clicked = this.downAt && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) < 5;
+    this.downAt = null;
+    if (d?.changed) {
+      if (d.type === 'item' || d.type === 'rotate') this.cb.onCommit?.();
+      else this.cb.onStructureCommit?.();
+      return;
+    }
+    if (this.pendingRoom && clicked) this.select({ type: 'room', id: this.pendingRoom });
+    else if (this.pendingDeselect && clicked) this.select(null);
+    this.pendingRoom = null;
+    this.pendingDeselect = false;
+  }
+
+  /** Keep an item inside the house, flush against walls it touches, and stacked on surfaces. */
   constrain(rec, x, z, snap = true) {
-    const pts = this.room.points;
+    const floor = this.design.floors[rec.floorIndex];
+    const hf = this.house.floors[rec.floorIndex];
     const a = rec.group.rotation.y;
-    const ax = [Math.cos(a), -Math.sin(a)]; // item local +X in world x/z
-    const az = [Math.sin(a), Math.cos(a)]; // item local +Z
+    const ax = [Math.cos(a), -Math.sin(a)];
+    const az = [Math.sin(a), Math.cos(a)];
     const { w, d } = rec.dims;
+    const doors = floor.openings.filter((o) => o.type !== 'window');
     for (let iter = 0; iter < 3; iter++) {
-      for (const wall of walls(pts)) {
-        const n = wall.inward;
-        const half = Math.abs((w / 2) * (ax[0] * n[0] + ax[1] * n[1])) + Math.abs((d / 2) * (az[0] * n[0] + az[1] * n[1]));
-        const along = (x - wall.a[0]) * wall.dir[0] + (z - wall.a[1]) * wall.dir[1];
-        const halfAlong = Math.abs((w / 2) * (ax[0] * wall.dir[0] + ax[1] * wall.dir[1])) + Math.abs((d / 2) * (az[0] * wall.dir[0] + az[1] * wall.dir[1]));
-        if (along < -halfAlong + 0.02 || along > wall.len + halfAlong - 0.02) continue;
-        const dist = (x - wall.a[0]) * n[0] + (z - wall.a[1]) * n[1];
-        if (dist < -half - 0.2) continue; // far behind this wall (other part of a concave room)
-        const target = snap && dist < half + 0.06 ? half : dist < half ? half : dist;
-        if (target !== dist) {
-          x += n[0] * (target - dist);
-          z += n[1] * (target - dist);
+      for (const wall of floor.walls) {
+        const { len, dir, normal } = wallFrame(wall);
+        const along = (x - wall.a[0]) * dir[0] + (z - wall.a[1]) * dir[1];
+        const halfAlong = Math.abs((w / 2) * (ax[0] * dir[0] + ax[1] * dir[1])) + Math.abs((d / 2) * (az[0] * dir[0] + az[1] * dir[1]));
+        if (along < -halfAlong - wall.thickness / 2 + 0.02 || along > len + halfAlong + wall.thickness / 2 - 0.02) continue;
+        // Walking through a doorway is fine if the item fits within it.
+        if (doors.some((o) => o.wall === wall.id && along - halfAlong >= o.offset - 0.01 && along + halfAlong <= o.offset + o.width + 0.01)) continue;
+        const half = Math.abs((w / 2) * (ax[0] * normal[0] + ax[1] * normal[1])) + Math.abs((d / 2) * (az[0] * normal[0] + az[1] * normal[1])) + wall.thickness / 2;
+        const dist = (x - wall.a[0]) * normal[0] + (z - wall.a[1]) * normal[1];
+        const side = Math.sign(dist) || 1;
+        const ad = Math.abs(dist);
+        const target = snap && ad < half + 0.06 ? half : ad < half ? half : ad;
+        if (target !== ad) {
+          x += normal[0] * side * (target - ad);
+          z += normal[1] * side * (target - ad);
         }
       }
     }
-    if (!pointInPolygon(x, z, pts)) return null;
-    // Stacking: sit on top of a surface under the pointer.
+    if (hf.footprint.length && !hf.footprint.some((poly) => pointInPolygon(x, z, poly[0].slice(0, -1)))) return null;
     let y = 0;
     const cat = rec.item.category;
     if (cat !== 'rug') {
       for (const [id, other] of this.items) {
-        if (id === rec.group.userData.placedId || !STACK_BASES.has(other.item.category)) continue;
-        if (other.item.category !== 'rug' && rec.dims.w * rec.dims.d > other.dims.w * other.dims.d * 0.8) continue;
-        if (other.item.category !== 'rug' && ['sofa', 'bed', 'wardrobe', 'table', 'desk', 'chair', 'armchair', 'dresser', 'sideboard', 'bookshelf'].includes(cat)) continue;
+        if (id === rec.placed.id || other.floorIndex !== rec.floorIndex || !STACK_BASES.has(other.item.category)) continue;
+        if (other.item.category !== 'rug' && (rec.dims.w * rec.dims.d > other.dims.w * other.dims.d * 0.8 || BIG.has(cat))) continue;
         const b = other.group.rotation.y;
-        const dx = x - other.group.position.x;
-        const dz = z - other.group.position.z;
+        const dx = x - other.placed.x, dz = z - other.placed.z;
         const lx = dx * Math.cos(b) - dz * Math.sin(b);
         const lz = dx * Math.sin(b) + dz * Math.cos(b);
         if (Math.abs(lx) < other.dims.w / 2 && Math.abs(lz) < other.dims.d / 2) {
-          const top = (other.placed.y || 0) + (other.item.category === 'rug' ? Math.max(other.dims.h, 0.008) : other.dims.h);
-          y = Math.max(y, top);
+          y = Math.max(y, (other.placed.y || 0) + (other.item.category === 'rug' ? Math.max(other.dims.h, 0.008) : other.dims.h));
         }
       }
     }
     return { x: +x.toFixed(3), z: +z.toFixed(3), y: +y.toFixed(3) };
   }
 
-  onUp(e) {
-    const d = this.drag;
-    this.drag = null;
-    this.controls.enabled = true;
-    this.renderer.domElement.style.cursor = '';
-    const clicked = this.downAt && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) < 5;
-    if (d?.type === 'vertex') {
-      if (d.changed) this.cb.onRoomChange?.(this.room);
-      return;
-    }
-    if (d && (d.type === 'move' || d.type === 'rotate')) {
-      const rec = this.items.get(d.id);
-      if (rec && (d.moved || d.changed)) this.cb.onCommit?.(rec.placed);
-      return;
-    }
-    if (this.editRoom && clicked && this.pendingWall !== undefined) {
-      this.selectedWall = this.pendingWall;
-      this.selectedVertex = null;
-      this.cb.onRoomSelect?.({ wall: this.selectedWall });
-      this.refreshRoomHandles();
-      this.refreshWallLabels();
-    }
-    this.pendingWall = undefined;
-    if (this.pendingDeselect && clicked) this.select(null);
-    this.pendingDeselect = false;
-  }
-
-  onDblClick(e) {
-    if (!this.editRoom) return;
-    this.setPointer(e);
-    const p = this.floorPoint(0);
-    if (!p) return;
-    // Double-click near a wall inserts a corner there.
-    let best = null;
-    for (const w of walls(this.room.points)) {
-      const c = closestOnSegment([p.x, p.z], w.a, w.b);
-      if (!best || c.dist < best.dist) best = { ...c, i: w.i };
-    }
-    if (best && best.dist < 0.4 && best.t > 0.02 && best.t < 0.98) this.cb.onInsertCorner?.(best.i, [+best.q[0].toFixed(2), +best.q[1].toFixed(2)]);
-  }
-
-  // ---------- room handles & labels ----------
-
-  refreshRoomHandles() {
-    this.handlesGroup.clear();
-    if (!this.editRoom || !this.room) return;
-    this.room.points.forEach(([x, z], i) => {
-      const sel = i === this.selectedVertex;
-      const m = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.11, 0.11, 0.04, 24),
-        new THREE.MeshBasicMaterial({ color: sel ? 0xe8573c : 0x2f6fed, depthTest: false })
-      );
-      m.renderOrder = 20;
-      m.position.set(x, 0.02, z);
-      m.userData.index = i;
-      this.handlesGroup.add(m);
-    });
-    for (const wm of this.wallMeshes || []) {
-      const on = wm.wall.i === this.selectedWall;
-      wm.mesh.material.emissive?.set(on ? 0x2f6fed : 0x000000);
-      wm.mesh.material.emissiveIntensity = on ? 0.35 : 0;
-    }
-  }
-
-  refreshWallLabels() {
-    for (const l of this.wallLabels || []) this.scene.remove(l);
-    this.wallLabels = [];
-    if (!this.room || !(this.editRoom || this.view === 'plan')) return;
-    for (const w of walls(this.room.points)) {
-      const l = makeLabel('wall-label' + (w.i === this.selectedWall ? ' selected' : ''));
-      l.element.textContent = `${Math.round(w.len * 100)} cm`;
-      const mx = (w.a[0] + w.b[0]) / 2 - w.inward[0] * 0.38;
-      const mz = (w.a[1] + w.b[1]) / 2 - w.inward[1] * 0.38;
-      l.position.set(mx, 0.05, mz);
-      this.scene.add(l);
-      this.wallLabels.push(l);
-    }
-  }
-
-  walk(dist, strafe = 0) {
-    const fwd = new THREE.Vector3().subVectors(this.controls.target, this.persp.position).setY(0).normalize();
-    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
-    const mv = fwd.multiplyScalar(dist).add(right.multiplyScalar(strafe));
-    const next = this.persp.position.clone().add(mv);
-    // Stay inside the room (with a little clearance from the walls).
-    if (!pointInPolygon(next.x, next.z, this.room.points)) return;
-    this.persp.position.copy(next);
-    this.controls.target.add(mv);
-  }
-
   // ---------- frame loop ----------
 
   frame() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
-    if (this.view === 'eye' && this.keys.size) {
-      const k = this.keys;
-      const f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
-      const s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
-      if (f || s) this.walk(f * 1.6 * dt, s * 1.6 * dt);
-    }
-    this.controls.update();
-    // Cut away walls between the camera and the room (dollhouse view).
-    if (this.wallMeshes) {
-      const cam = this.camera.position;
-      for (const wm of this.wallMeshes) {
-        const w = wm.wall;
-        const inside = (cam.x - w.a[0]) * w.inward[0] + (cam.z - w.a[1]) * w.inward[1];
-        const cut = this.view === '3d' && inside < 0;
-        wm.group.scale.y = cut ? 0.035 : 1;
-      }
-    }
-    this.renderer.render(this.scene, this.camera);
+    if (this.paused) return;
+    this.timer.update();
+    const dt = Math.min(this.timer.getDelta(), 0.05);
+    for (const f of this.frameHooks) f(dt);
+    if (this.view !== 'walk') this.controls.update(dt);
+    if (this.composer && this.view !== 'plan') this.composer.render(dt);
+    else this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
   }
 
-  screenshot() {
-    const vis = [this.selBox.visible, this.rotGroup.visible];
-    this.selBox.visible = this.rotGroup.visible = false;
-    this.renderer.render(this.scene, this.camera);
-    const url = this.renderer.domElement.toDataURL('image/png');
-    [this.selBox.visible, this.rotGroup.visible] = vis;
-    return url;
+  /** Hide overlays for clean output (screenshots, exports). */
+  withoutHelpers(fn) {
+    const hidden = [];
+    this.scene.traverse((o) => {
+      if ((o.userData.helper || o === this.overlay || o.isCSS2DObject) && o.visible) {
+        hidden.push(o);
+        o.visible = false;
+      }
+    });
+    try {
+      return fn();
+    } finally {
+      for (const o of hidden) o.visible = true;
+    }
   }
+
+  screenshot() {
+    return this.withoutHelpers(() => {
+      if (this.composer && this.view !== 'plan') this.composer.render(0);
+      else this.renderer.render(this.scene, this.camera);
+      return this.renderer.domElement.toDataURL('image/png');
+    });
+  }
+}
+
+// ---------- helpers ----------
+
+function isInside(o, ancestor) {
+  for (let p = o; p; p = p.parent) if (p === ancestor) return true;
+  return false;
+}
+
+function isVisible(o) {
+  for (let p = o; p; p = p.parent) if (!p.visible) return false;
+  return true;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+/** Snap a plan point to wall ends (15 cm) or a 5 cm grid. `skip` = wall id being edited. */
+export function snapPoint(p, floor, skip) {
+  let best = null;
+  for (const w of floor?.walls || []) {
+    if (w.id === skip) continue;
+    for (const q of [w.a, w.b]) {
+      const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (d < 0.15 && (!best || d < best.d)) best = { q, d };
+    }
+  }
+  if (best) return best.q.slice();
+  return [Math.round(p[0] / 0.05) * 0.05, Math.round(p[1] / 0.05) * 0.05].map((v) => +v.toFixed(3));
+}
+
+/** Snap to horizontal/vertical (or 45°) relative to an anchor, like drafting tools. */
+export function orthoSnap(p, anchor) {
+  const dx = p[0] - anchor[0], dz = p[1] - anchor[1];
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-6) return p;
+  const ang = Math.atan2(dz, dx);
+  const snapped = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
+  if (Math.abs(ang - snapped) > 0.12) return p;
+  const L = Math.round(len / 0.05) * 0.05;
+  return [+(anchor[0] + Math.cos(snapped) * L).toFixed(3), +(anchor[1] + Math.sin(snapped) * L).toFixed(3)];
+}
+
+/** Fit a loaded model to real dimensions (turning it if it faces sideways). */
+export function fitModel(m, dims) {
+  let box = new THREE.Box3().setFromObject(m);
+  let size = box.getSize(new THREE.Vector3());
+  const want = dims.w / dims.d;
+  if (Math.abs(size.z / size.x - want) < Math.abs(size.x / size.z - want) - 0.05) {
+    m.rotation.y = Math.PI / 2;
+    m.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(m);
+    size = box.getSize(new THREE.Vector3());
+  }
+  m.scale.multiply(new THREE.Vector3(dims.w / (size.x || 1), dims.h / (size.y || 1), dims.d / (size.z || 1)));
+  m.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(m);
+  const c = box.getCenter(new THREE.Vector3());
+  m.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
 }
