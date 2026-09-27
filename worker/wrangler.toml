@@ -1,8 +1,0 @@
-name = "room-planner-worker"
-main = "src/index.js"
-compatibility_date = "2026-09-01"
-
-[vars]
-# Comma-separated list of sites allowed to call this worker.
-# localhost is always allowed for local testing.
-ALLOWED_ORIGINS = "https://wobuzhidaoanything.github.io"

@@ -1,4 +1,4 @@
-// Colour-name → hex lookup shared by the site and the scraping worker.
+// Colour-name → hex lookup shared by the app and the product-page reader.
 // Retailer colour names look like "Tresund light beige" or "Walnut veneer",
 // so we look for the longest known colour phrase inside the name and apply
 // light/dark modifiers.

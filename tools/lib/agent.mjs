@@ -10,7 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { MODELS, STATE, EXPORTS as EXPORT_DIR } from './paths.mjs';
 import * as store from './store.mjs';
-import { scrapeProduct, guessCategory } from '../../worker/src/scrape.js';
+import { scrapeProduct, guessCategory } from '../../shared/scrape.js';
 import { colorFromName } from '../../shared/colors.js';
 import { migrate, normalize, validate, elevations, stairLayout, wallFrame } from '../../js/design.js';
 import { detectRooms } from '../../js/plan.js';

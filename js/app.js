@@ -18,8 +18,7 @@ import { newHouse, newFloor, normalize, migrate, elevations, wallFrame, stairLay
 import { footprint } from './plan.js';
 import { cleanFloor, syncRooms, splitWall, makeRecess, moveCorner, moveOpening, openingGaps, insideSign } from './edit.js';
 import { colorFromName } from '../shared/colors.js';
-import { guessCategory } from '../worker/src/scrape.js';
-import { WORKER_URL } from './config.js';
+import { guessCategory } from '../shared/scrape.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -1171,9 +1170,9 @@ function saveItemDialog() {
 
 // ---------- importing links ----------
 
+/** The local server (npm start) reads product pages and proxies model files. */
 function workerUrl() {
-  const custom = pref.get('worker', '') || WORKER_URL;
-  return (custom || (store.kind === 'device' ? location.origin + location.pathname.replace(/\/[^/]*$/, '') : '')).replace(/\/+$/, '');
+  return store.kind === 'device' ? location.origin : '';
 }
 
 function renderQueue() {
@@ -2249,23 +2248,7 @@ function togglePanel(side) {
 }
 
 function openSettings() {
-  $('#workerUrl').value = pref.get('worker', '');
-  $('#workerStatus').textContent = '';
-  $('#readerNote').hidden = store.kind !== 'device';
   $('#settingsDialog').showModal();
-  $('#workerUrl').onchange = () => pref.set('worker', $('#workerUrl').value.trim());
-  $('#testWorker').onclick = async () => {
-    pref.set('worker', $('#workerUrl').value.trim());
-    const base = workerUrl();
-    if (!base) return ($('#workerStatus').textContent = 'Enter a URL first.');
-    $('#workerStatus').textContent = 'Testing…';
-    try {
-      const j = await (await fetch(`${base}/health`)).json();
-      $('#workerStatus').textContent = j.ok ? '✓ Connected' : `✕ ${j.error || 'Unexpected reply'}`;
-    } catch (err) {
-      $('#workerStatus').textContent = `✕ Could not reach it (${err.message}).`;
-    }
-  };
 }
 
 boot().catch((err) => {

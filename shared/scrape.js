@@ -1,5 +1,5 @@
-// Universal product-page scraper. Pure string parsing so it runs in
-// Cloudflare Workers and in Node (for tests) alike.
+// Universal product-page reader, run by the local server (npm start). Pure string parsing,
+// so it also runs in the browser (category guesses) and in tests.
 //
 // Strategy, most reliable first:
 //   1. Store-specific JSON APIs (Shopify /products/<handle>.js, IKEA 3D lookup)
@@ -8,7 +8,7 @@
 //   4. Visible text: labelled dimensions ("Width: 228 cm") and triplets ("80"W x 35"D x 30"H")
 //   5. OpenGraph / <title> for name and image
 
-import { colorFromName, isColorName } from '../../shared/colors.js';
+import { colorFromName, isColorName } from './colors.js';
 
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';

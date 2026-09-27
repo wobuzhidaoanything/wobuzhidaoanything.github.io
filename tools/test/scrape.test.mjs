@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dimsFromText, parseLength, parseProductPage, guessCategory, findModelUrls } from '../src/scrape.js';
+import { dimsFromText, parseLength, parseProductPage, guessCategory, findModelUrls } from '../../shared/scrape.js';
 
 const near = (a, b, tol = 0.006) => assert.ok(a != null && Math.abs(a - b) < tol, `${a} ≉ ${b}`);
 

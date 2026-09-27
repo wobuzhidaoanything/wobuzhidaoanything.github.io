@@ -100,7 +100,7 @@ tools/                  npm start server, MCP server, background agent runner, C
 assets/                 the sample house and shipped furniture models
 userdata/               your designs, library, models, exports, history (git-ignored, created on first run)
 docs/                   user guide (shown in the app), agent setup (MCP), R3F model components
-worker/                 optional Cloudflare Worker link reader for hosted copies
+shared/                 product-page reader and colour names (used by the server and the app)
 ```
 
 Libraries: three.js, three-mesh-bvh (fast raycasting and walking), three-bvh-csg and polygon-clipping (clean

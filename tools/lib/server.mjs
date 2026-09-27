@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, USERDATA, MODELS, TEXTURES, LIBRARY } from './paths.mjs';
-import { scrapeProduct } from '../../worker/src/scrape.js';
+import { scrapeProduct } from '../../shared/scrape.js';
 import * as store from './store.mjs';
 import { agentStatus, autoSetup, removeAgent } from './agents.mjs';
 import * as runner from './runner.mjs';
