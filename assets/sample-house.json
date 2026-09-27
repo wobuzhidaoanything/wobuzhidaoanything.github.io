@@ -114,7 +114,8 @@
           "width": 0.9,
           "height": 2.1,
           "open": true,
-          "sill": 0
+          "sill": 0,
+          "swing": "out"
         },
         {
           "id": "g-win-back",

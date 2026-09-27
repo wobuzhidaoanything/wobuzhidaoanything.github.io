@@ -426,3 +426,6 @@ body.hide-left .edge-btn.left svg, body.hide-right .edge-btn.right svg { transfo
 .auto-model { margin-top: 8px; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: flex-start; }
 .auto-model[hidden] { display: none; }
 @media (max-width: 860px) { .chat-panel { top: 96px; width: 100vw; } }
+.box-select { position: absolute; display: none; z-index: 6; border: 1px solid var(--accent); background: rgba(47,111,237,.1); pointer-events: none; }
+.btn.small.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.note.warn { background: #fdf3f2; border-color: #f3d6d3; color: #8a2d26; }

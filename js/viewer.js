@@ -158,6 +158,12 @@ export class Viewer {
     this.overlay.add(this.wallHighlight);
     this.handles = new THREE.Group();
     this.overlay.add(this.handles);
+    this.multiBoxes = new THREE.Group();
+    this.overlay.add(this.multiBoxes);
+    // Box-select rectangle
+    this.boxEl = document.createElement('div');
+    this.boxEl.className = 'box-select';
+    container.appendChild(this.boxEl);
     this.pickBoxes = new THREE.Group();
     this.overlay.add(this.pickBoxes);
     this.wallLabels = new THREE.Group();
@@ -168,7 +174,10 @@ export class Viewer {
     this.roomLabels = new THREE.Group();
     scene.add(this.roomLabels);
     // Display options (the View menu): dimension lines, room areas, grid, snapping
-    this.display = { dims: false, areas: true, grid: true, snap: true };
+    this.display = { dims: false, areas: true, grid: true, snap: true, clear: true };
+    this.clearGroup = new THREE.Group();
+    this.clearGroup.userData.helper = true;
+    scene.add(this.clearGroup);
     this.annot = new THREE.Group();
     this.annot.userData.helper = true;
     this.gridMesh = buildGrid();
@@ -488,6 +497,10 @@ export class Viewer {
       }
     }
     if (this.sel?.type === 'item' && !this.items.has(this.sel.id)) this.select(null);
+    if (this.sel?.type === 'items') {
+      const ids = this.sel.ids.filter((id) => this.items.has(id));
+      if (ids.length !== this.sel.ids.length) this.select(ids.length > 1 ? { type: 'items', ids } : ids.length ? { type: 'item', id: ids[0] } : null);
+    }
     this.updateSelection();
   }
 
@@ -572,6 +585,11 @@ export class Viewer {
 
   // ---------- selection ----------
 
+  /** Ids of the selected furniture (one or several). */
+  selectedItems() {
+    return this.sel?.type === 'item' ? [this.sel.id] : this.sel?.type === 'items' ? [...this.sel.ids] : [];
+  }
+
   select(sel) {
     this.sel = sel || null;
     this.updateSelection();
@@ -581,7 +599,28 @@ export class Viewer {
   updateSelection() {
     const s = this.sel;
     this.selBox.visible = this.rotGroup.visible = this.selLabel.visible = this.wallHighlight.visible = false;
+    this.multiBoxes.clear();
     if (!s || !this.house) return;
+    if (s.type === 'items') {
+      const all = new THREE.Box3();
+      for (const id of s.ids) {
+        const rec = this.items.get(id);
+        if (!rec) continue;
+        rec.group.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(rec.group).expandByScalar(0.01);
+        const h = new THREE.Box3Helper(b, rec.placed.locked ? 0x8a8f98 : 0x2f6fed);
+        h.userData.helper = true;
+        this.multiBoxes.add(h);
+        all.union(b);
+      }
+      if (!all.isEmpty()) {
+        const c = all.getCenter(new THREE.Vector3());
+        this.selLabel.element.textContent = `${s.ids.length} items selected`;
+        this.selLabel.position.set(c.x, all.max.y + 0.15, c.z);
+        this.selLabel.visible = true;
+      }
+      return;
+    }
     const floor = this.design.floors[this.activeFloor];
     const y0 = this.floorY;
     if (s.type === 'item') {
@@ -697,6 +736,33 @@ export class Viewer {
     this.gridMesh.position.set(c.x, y + 0.006, c.z);
     this.gridMesh.scale.set(size, size, 1);
     if (this.display.dims) this.dimGroup.add(buildDimensions(this.activeFloorData, y + 0.012));
+  }
+
+  /**
+   * Clearance overlay: `zones` (use zones of the selected/dragged items, plan polygons),
+   * `swings` (door swing areas, drawn while furniture is moved) and `problems` (placed ids to outline in red).
+   */
+  setClearance(c) {
+    this.clearGroup.clear();
+    if (!c || this.view === 'walk' || this.showAll) return;
+    const y = this.floorY + 0.015;
+    const fill = (poly, color, opacity) => {
+      const shape = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)));
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = y;
+      m.renderOrder = 3;
+      m.raycast = () => {};
+      this.clearGroup.add(m);
+    };
+    const outline = (poly, color) => {
+      const l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(poly.map(([x, z]) => new THREE.Vector3(x, y + 0.004, z))), new THREE.LineBasicMaterial({ color, depthTest: false }));
+      l.renderOrder = 13;
+      this.clearGroup.add(l);
+    };
+    for (const z of c.zones || []) fill(z.poly, z.bad ? 0xd14343 : 0x2f9e6b, z.bad ? 0.22 : 0.14);
+    for (const sw of c.swings || []) fill(sw.poly, sw.bad ? 0xd14343 : 0x5b6068, sw.bad ? 0.25 : 0.08);
+    for (const poly of c.problems || []) outline(poly, 0xd14343);
   }
 
   refreshRoomLabels() {
@@ -817,6 +883,18 @@ export class Viewer {
     return JSON.parse(JSON.stringify({ walls: f.walls, openings: f.openings }));
   }
 
+  /** If the live edit moved a locked wall, undo it (back to the snapshot) and say why. */
+  touchesLocked(snap) {
+    const f = this.activeFloorData;
+    const moved = snap.walls.some((o) => o.locked && !f.walls.some((w) => w.id === o.id && w.a[0] === o.a[0] && w.a[1] === o.a[1] && w.b[0] === o.b[0] && w.b[1] === o.b[1]));
+    if (!moved) return false;
+    this.restoreFloor(snap);
+    this.drag.changed = false;
+    this.cb.onStructureLive?.();
+    this.cb.onHover?.('Blocked: that would move a locked wall');
+    return true;
+  }
+
   restoreFloor(snap) {
     const f = this.activeFloorData;
     const c = JSON.parse(JSON.stringify(snap));
@@ -833,18 +911,44 @@ export class Viewer {
     if (this.tool) return void this.tool.onDown?.(e);
 
     // Rotation knob of the selected item
-    if (this.rotGroup.visible && this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false).length) {
+    if (this.rotGroup.visible && this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false).length && !this.items.get(this.sel?.id)?.placed.locked) {
       this.drag = { type: 'rotate', id: this.sel.id };
       this.controls.enabled = false;
       return;
     }
     const hit = this.pick();
-    if (!hit) {
-      this.pendingDeselect = true;
-      return;
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (!hit || hit.type === 'room') {
+      // Shift+drag on empty floor: box-select furniture (the camera stays put)
+      if (e.shiftKey && !this.editMode) {
+        this.drag = { type: 'box', x0: e.clientX, y0: e.clientY, add: e.ctrlKey || e.metaKey };
+        this.controls.enabled = false;
+        return;
+      }
+      if (!hit) {
+        this.pendingDeselect = true;
+        return;
+      }
     }
     if (hit.type === 'handle') {
+      const f = this.activeFloorData;
+      if (wallsAt(f, hit.data.corner).some(({ wall }) => wall.locked)) return this.cb.onLocked?.('wall');
       this.drag = { type: 'corner', from: hit.data.corner, snap: this.snapshotFloor() };
+      this.controls.enabled = false;
+      return;
+    }
+    if (hit.type === 'item' && add) {
+      // Shift/Ctrl-click adds to or removes from the selection
+      const ids = this.selectedItems();
+      const next = ids.includes(hit.id) ? ids.filter((x) => x !== hit.id) : [...ids, hit.id];
+      this.select(next.length === 0 ? null : next.length === 1 ? { type: 'item', id: next[0] } : { type: 'items', ids: next });
+      return;
+    }
+    if (hit.type === 'item' && this.sel?.type === 'items' && this.sel.ids.includes(hit.id)) {
+      // Drag the whole selection
+      const p0 = this.planePoint();
+      const orig = new Map(this.sel.ids.map((id) => [id, { x: this.items.get(id)?.placed.x, z: this.items.get(id)?.placed.z }]));
+      this.drag = { type: 'group', ids: this.sel.ids, start: p0 && [p0.x, p0.z], orig };
       this.controls.enabled = false;
       return;
     }
@@ -854,10 +958,14 @@ export class Viewer {
     }
     if (this.sel?.type !== hit.type || this.sel?.id !== hit.id) this.select({ type: hit.type, id: hit.id });
     const at = planOf(hit.point);
-    if (hit.type === 'item') {
+    if (hit.type === 'item' && this.items.get(hit.id)?.placed.locked) {
+      this.cb.onLocked?.('item');
+    } else if (hit.type === 'item') {
       const rec = this.items.get(hit.id);
       const fp = this.planePoint(rec.group.position.y) || hit.point;
       this.drag = { type: 'item', id: hit.id, offset: [rec.group.position.x - fp.x, rec.group.position.z - fp.z] };
+    } else if (this.editMode && hit.type === 'wall' && hit.id && this.activeFloorData.walls.find((w) => w.id === hit.id)?.locked) {
+      this.cb.onLocked?.('wall');
     } else if (this.editMode && hit.type === 'wall' && hit.id) {
       this.drag = { type: 'wall', id: hit.id, start: at, snap: this.snapshotFloor() };
     } else if (this.editMode && hit.type === 'opening') {
@@ -911,6 +1019,32 @@ export class Viewer {
       this.cb.onLive?.();
       return;
     }
+    if (d.type === 'box') {
+      const r = this.container.getBoundingClientRect();
+      Object.assign(this.boxEl.style, { display: 'block', left: `${Math.min(d.x0, e.clientX) - r.left}px`, top: `${Math.min(d.y0, e.clientY) - r.top}px`, width: `${Math.abs(e.clientX - d.x0)}px`, height: `${Math.abs(e.clientY - d.y0)}px` });
+      d.x1 = e.clientX;
+      d.y1 = e.clientY;
+      return;
+    }
+    if (d.type === 'group') {
+      const p = this.planePoint();
+      if (!p || !d.start) return;
+      let dx = p.x - d.start[0], dz = p.z - d.start[1];
+      const st = this.snapStep(e);
+      if (st) (dx = Math.round(dx / st) * st), (dz = Math.round(dz / st) * st);
+      for (const id of d.ids) {
+        const rec = this.items.get(id), o = d.orig.get(id);
+        if (!rec || rec.placed.locked) continue;
+        Object.assign(rec.placed, { x: +(o.x + dx).toFixed(3), z: +(o.z + dz).toFixed(3) });
+        rec.group.position.x = rec.placed.x;
+        rec.group.position.z = rec.placed.z;
+      }
+      d.changed = Math.abs(dx) + Math.abs(dz) > 0;
+      this.updateSelection();
+      this.showDragLabel(`${dx >= 0 ? '+' : ''}${Math.round(dx * 100)}, ${dz >= 0 ? '+' : ''}${Math.round(dz * 100)} cm`, [p.x, p.z]);
+      this.cb.onLive?.();
+      return;
+    }
     if (d.type === 'item') {
       const rec = this.items.get(d.id);
       const p = this.planePoint(rec.group.position.y);
@@ -943,6 +1077,7 @@ export class Viewer {
         }
       }
       moveCorner(f, d.from, at);
+      if (this.touchesLocked(d.snap)) return;
       d.to = at;
       d.changed = Math.hypot(at[0] - d.from[0], at[1] - d.from[1]) > 0.001;
       this.cb.onStructureLive?.();
@@ -955,6 +1090,7 @@ export class Viewer {
       const st = this.snapStep(e);
       if (st) dn = Math.round(dn / st) * st;
       pushWall(f, d.id, dn);
+      if (this.touchesLocked(d.snap)) return;
       d.changed = Math.abs(dn) > 0.001;
       this.cb.onStructureLive?.();
       const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
@@ -994,8 +1130,24 @@ export class Viewer {
     this.renderer.domElement.style.cursor = '';
     const clicked = this.downAt && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) < 5;
     this.downAt = null;
+    if (d?.type === 'box') {
+      this.boxEl.style.display = 'none';
+      if (d.x1 == null || Math.hypot(d.x1 - d.x0, d.y1 - d.y0) < 5) return;
+      const r = this.renderer.domElement.getBoundingClientRect();
+      const [x0, x1] = [Math.min(d.x0, d.x1), Math.max(d.x0, d.x1)], [y0, y1] = [Math.min(d.y0, d.y1), Math.max(d.y0, d.y1)];
+      const ids = [];
+      for (const [id, rec] of this.items) {
+        if (rec.floorIndex !== this.activeFloor) continue;
+        const v = new THREE.Box3().setFromObject(rec.group).getCenter(new THREE.Vector3()).project(this.camera);
+        const sx = r.left + ((v.x + 1) / 2) * r.width, sy = r.top + ((1 - v.y) / 2) * r.height;
+        if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) ids.push(id);
+      }
+      const all = [...new Set([...(d.add ? this.selectedItems() : []), ...ids])];
+      this.select(all.length === 0 ? null : all.length === 1 ? { type: 'item', id: all[0] } : { type: 'items', ids: all });
+      return;
+    }
     if (d?.changed) {
-      if (d.type === 'item' || d.type === 'rotate') this.cb.onCommit?.();
+      if (d.type === 'item' || d.type === 'rotate' || d.type === 'group') this.cb.onCommit?.();
       else this.cb.onStructureCommit?.({ type: d.type, id: d.id, corner: d.to });
       this.updateSelection();
       return;

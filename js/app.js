@@ -3,6 +3,7 @@ import { Walker } from './walk.js';
 import { Tools } from './tools.js';
 import { initChat } from './chat.js';
 import { Measure } from './measure.js';
+import { analyse as analyseClearance, zoneStatus, doorSwing, footprintRect } from './clearance.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
 import { openStorage } from './storage.js';
@@ -147,6 +148,7 @@ function renderAll() {
   $('#qualityLabel').textContent = ui.quality === 'high' ? 'High' : 'Fast';
   renderLevelBar();
   renderToolBar();
+  refreshClearance();
   if (ui.editing) renderBuildPanel();
   else renderInventory();
   renderInspector();
@@ -228,6 +230,7 @@ function renderLevelBar() {
 }
 
 const DISPLAY = [
+  ['clear', 'Clearances', 'Space furniture needs to be used and doors need to open. Problems get a red outline'],
   ['dims', 'Dimensions', 'Lengths of every outside wall and room sizes, drawn on the floor'],
   ['areas', 'Room areas', 'Floor area of each room (m²)'],
   ['grid', 'Grid', '1 m squares, with 10 cm squares when you zoom in'],
@@ -242,6 +245,7 @@ function renderViewMenu() {
 
 function setDisplay(k, on) {
   viewer.setDisplay(k, on);
+  if (k === 'clear') refreshClearance();
   pref.set('display', viewer.display);
   if (!$('#viewMenu').hidden) renderViewMenu();
 }
@@ -332,6 +336,7 @@ function renderInspector() {
   const s = viewer.sel;
   if (viewer.view === 'walk') return (el.innerHTML = walkInspector());
   if (s?.type === 'item') return itemInspector(el, s.id);
+  if (s?.type === 'items') return multiInspector(el);
   if (s?.type === 'wall') return wallInspector(el, s.id);
   if (s?.type === 'opening') return openingInspector(el, s.id);
   if (s?.type === 'stairs') return stairsInspector(el, s.id);
@@ -360,6 +365,7 @@ function itemInspector(el, id) {
     <h3>${esc(item.name)}</h3>
     <div class="sub">${esc(CATEGORY_LABELS[item.category] || item.category)} · ${esc(floor.name)}${item.price ? ` · ${esc(item.currency || '')} ${esc(item.price)}` : ''}${item.url ? ` · <a href="${esc(item.url)}" target="_blank" rel="noopener">Product ↗</a>` : ''}</div>
     ${item.verified === false ? '<div class="note">Added by an AI agent and not yet visually checked.</div>' : ''}
+    ${clearanceProblems().filter((x) => x.placedId === p.id).map((x) => `<div class="note warn">⚠ ${esc(x.message)}.</div>`).join('')}
     <div class="group"><div class="lbl">Colour <span>${esc(cur?.name || '')}</span></div>
       <div class="color-list">
         ${(item.colors || []).map((c) => `<button class="color-chip ${!custom && c.name === cur?.name ? 'on' : ''}" data-color="${esc(c.name)}"><span class="dot" style="background:${esc(c.hex)}"></span>${esc(c.name)}</button>`).join('')}
@@ -376,7 +382,7 @@ function itemInspector(el, id) {
     ${design.floors.length > 1 ? `<div class="group"><div class="lbl">Floor</div><select id="moveFloor">${design.floors.map((f) => `<option value="${esc(f.id)}" ${f === floor ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>` : ''}
     ${item.modelUrl ? `<div class="group"><label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" id="useModel" ${item.useModel !== false ? 'checked' : ''}> Use the store's 3D model</label></div>` : ''}
     <div class="group"><div class="row"><button class="btn small" id="wallBtn">Against wall</button><button class="btn small" id="dupBtn" title="Ctrl+D">Duplicate</button></div>
-      <div class="row" style="margin-top:6px"><button class="btn small danger" id="removeBtn" title="Delete">Remove</button></div></div>
+      <div class="row" style="margin-top:6px"><button class="btn small ${p.locked ? 'on' : ''}" id="lockBtn" title="A locked item can't be moved, turned or deleted by accident (L)">${p.locked ? '🔒 Locked' : 'Lock'}</button><button class="btn small danger" id="removeBtn" title="Delete">Remove</button></div></div>
   </div>`;
   $$('.color-chip[data-color]', el).forEach((b) => (b.onclick = () => ((p.color = b.dataset.color), commit({ rebuild: false }))));
   $('#customColor', el).oninput = (e) => ((p.color = e.target.value), viewer.syncFurniture());
@@ -399,7 +405,153 @@ function itemInspector(el, id) {
   if ($('#useModel', el)) $('#useModel', el).onchange = (e) => ((item.useModel = e.target.checked), commit({ lib: true, rebuild: false }));
   $('#wallBtn', el).onclick = () => (againstWall(p, floor), commit({ rebuild: false }));
   $('#dupBtn', el).onclick = () => duplicate(id);
+  $('#lockBtn', el).onclick = () => toggleLock();
   $('#removeBtn', el).onclick = () => deleteSelection();
+}
+
+// ---------- clearances ----------
+
+/** Clearance problems on the active floor (for the overlay, the panels and the Check list). */
+function clearanceProblems(f = floorNow()) {
+  return analyseClearance(f, itemById, dimsOf);
+}
+
+function refreshClearance({ dragging = false } = {}) {
+  if (!viewer.display.clear || viewer.view === 'walk' || ui.editing) return viewer.setClearance(null);
+  const f = floorNow();
+  const probs = clearanceProblems(f);
+  const bad = new Set(probs.map((x) => x.placedId));
+  const sel = new Set(viewer.selectedItems());
+  const zones = [];
+  const rects = [];
+  for (const p of f.placed) {
+    const item = itemById(p.itemId);
+    if (!item) continue;
+    const dims = dimsOf(item);
+    if (bad.has(p.id)) rects.push(footprintRect(p, dims));
+    if (sel.has(p.id)) zones.push(...zoneStatus(f, p.id, itemById, dimsOf));
+  }
+  // Door swings: while furniture is selected or moved, and any that are blocked
+  const swings = [];
+  for (const o of f.openings) {
+    const poly = doorSwing(f, o);
+    if (!poly) continue;
+    const blocked = probs.some((x) => x.door === o.id);
+    if (blocked || sel.size || dragging) swings.push({ poly, bad: blocked });
+  }
+  viewer.setClearance({ zones, swings, problems: rects });
+}
+
+// ---------- several items: align, distribute, lock ----------
+
+/** Plan footprint extents of a placed item, taking its rotation into account. */
+function extentOf(p) {
+  const d = dimsOf(itemById(p.itemId));
+  const a = ((p.rot || 0) * Math.PI) / 180;
+  const hx = (Math.abs(Math.cos(a)) * d.w + Math.abs(Math.sin(a)) * d.d) / 2;
+  const hz = (Math.abs(Math.sin(a)) * d.w + Math.abs(Math.cos(a)) * d.d) / 2;
+  return { x0: p.x - hx, x1: p.x + hx, z0: p.z - hz, z1: p.z + hz, hx, hz };
+}
+
+const selectedPlaced = () => viewer.selectedItems().map((id) => findPlaced(id).p).filter(Boolean);
+
+function multiInspector(el) {
+  const ps = selectedPlaced();
+  const locked = ps.filter((p) => p.locked).length;
+  const btn = (k, label, tip, dis = false) => `<button class="btn small icon-txt" data-align="${k}" title="${tip}" ${dis ? 'disabled' : ''}>${label}</button>`;
+  el.innerHTML = `<div class="insp"><h3>${ps.length} items</h3><div class="sub">${esc(ps.map((p) => itemById(p.itemId)?.name).filter(Boolean).slice(0, 4).join(', '))}${ps.length > 4 ? '…' : ''}${locked ? ` · ${locked} locked` : ''}</div>
+    <div class="group"><div class="lbl">Align</div>
+      <div class="row">${btn('left', '⇤ Left', 'Line up their left edges')}${btn('cx', '↔ Centre', 'Line up their centres (left–right)')}${btn('right', 'Right ⇥', 'Line up their right edges')}</div>
+      <div class="row" style="margin-top:6px">${btn('top', '⤒ Back', 'Line up their back edges (top of the plan)')}${btn('cz', '↕ Middle', 'Line up their centres (front–back)')}${btn('bottom', 'Front ⤓', 'Line up their front edges (bottom of the plan)')}</div></div>
+    <div class="group"><div class="lbl">Distribute</div>
+      <div class="row">${btn('dx', '↔ Evenly across', 'Equal gaps from left to right', ps.length < 3)}${btn('dz', '↕ Evenly down', 'Equal gaps from back to front', ps.length < 3)}</div></div>
+    <div class="group"><div class="row"><button class="btn small" id="mRot">↻ Rotate 90°</button><button class="btn small" id="mDup" title="Ctrl+D">Duplicate</button><button class="btn small" id="mCopy" title="Ctrl+C">Copy</button></div>
+      <div class="row" style="margin-top:6px"><button class="btn small" id="mLock">${locked === ps.length ? 'Unlock all' : 'Lock all'}</button><button class="btn small danger" id="mDel">Remove</button></div></div>
+    <div class="tip">Shift-click adds or removes items. Shift-drag on the floor draws a selection box. Drag any selected item to move them together.</div></div>`;
+  $$('[data-align]', el).forEach((b) => (b.onclick = () => alignItems(b.dataset.align)));
+  $('#mRot', el).onclick = () => rotateGroup(90);
+  $('#mDup', el).onclick = () => (copyItems(), pasteItems({ offset: true }));
+  $('#mCopy', el).onclick = () => copyItems();
+  $('#mLock', el).onclick = () => toggleLock();
+  $('#mDel', el).onclick = () => deleteSelection();
+}
+
+function alignItems(mode) {
+  const ps = selectedPlaced().filter((p) => !p.locked);
+  if (ps.length < 2) return toast('Select at least two unlocked items.');
+  const ex = ps.map((p) => ({ p, e: extentOf(p) }));
+  const min = (k) => Math.min(...ex.map((x) => x.e[k])), max = (k) => Math.max(...ex.map((x) => x.e[k]));
+  if (mode === 'left') ex.forEach(({ p, e }) => (p.x = min('x0') + e.hx));
+  if (mode === 'right') ex.forEach(({ p, e }) => (p.x = max('x1') - e.hx));
+  if (mode === 'cx') ex.forEach(({ p }) => (p.x = (min('x0') + max('x1')) / 2));
+  if (mode === 'top') ex.forEach(({ p, e }) => (p.z = min('z0') + e.hz));
+  if (mode === 'bottom') ex.forEach(({ p, e }) => (p.z = max('z1') - e.hz));
+  if (mode === 'cz') ex.forEach(({ p }) => (p.z = (min('z0') + max('z1')) / 2));
+  if (mode === 'dx' || mode === 'dz') {
+    // Equal gaps between neighbours, keeping the outermost two where they are
+    const [a0, a1, h] = mode === 'dx' ? ['x0', 'x1', 'hx'] : ['z0', 'z1', 'hz'];
+    const k = mode === 'dx' ? 'x' : 'z';
+    ex.sort((u, v) => u.e[a0] - v.e[a0]);
+    const span = ex.at(-1).e[a1] - ex[0].e[a0];
+    const gap = (span - ex.reduce((s, x) => s + 2 * x.e[h], 0)) / (ex.length - 1);
+    let at = ex[0].e[a0];
+    for (const x of ex) (x.p[k] = at + x.e[h]), (at += 2 * x.e[h] + gap);
+  }
+  for (const p of ps) (p.x = +p.x.toFixed(3)), (p.z = +p.z.toFixed(3));
+  commit({ rebuild: false });
+}
+
+function rotateGroup(deg) {
+  const ps = selectedPlaced().filter((p) => !p.locked);
+  if (!ps.length) return;
+  const cx = ps.reduce((s, p) => s + p.x, 0) / ps.length, cz = ps.reduce((s, p) => s + p.z, 0) / ps.length;
+  const a = (deg * Math.PI) / 180;
+  for (const p of ps) {
+    const dx = p.x - cx, dz = p.z - cz;
+    // Plan rotation matching the items' own turn direction (rot increases clockwise seen from above)
+    p.x = +(cx + dx * Math.cos(a) + dz * Math.sin(a)).toFixed(3);
+    p.z = +(cz - dx * Math.sin(a) + dz * Math.cos(a)).toFixed(3);
+    p.rot = ((((p.rot || 0) + deg) % 360) + 360) % 360;
+  }
+  commit({ rebuild: false });
+}
+
+function toggleLock() {
+  const ps = selectedPlaced();
+  if (!ps.length) return;
+  const lock = !ps.every((p) => p.locked);
+  for (const p of ps) lock ? (p.locked = true) : delete p.locked;
+  commit({ rebuild: false });
+  toast(lock ? `Locked ${ps.length > 1 ? `${ps.length} items` : 'it'}: it can't be moved or removed until you unlock it.` : 'Unlocked.');
+}
+
+let clipboard = null;
+function copyItems() {
+  const ps = selectedPlaced();
+  if (!ps.length) return;
+  const cx = ps.reduce((s, p) => s + p.x, 0) / ps.length, cz = ps.reduce((s, p) => s + p.z, 0) / ps.length;
+  clipboard = ps.map((p) => ({ ...p, dx: p.x - cx, dz: p.z - cz }));
+  toast(`Copied ${ps.length > 1 ? `${ps.length} items` : itemById(ps[0].itemId)?.name || 'item'}. Ctrl+V pastes at the pointer.`);
+}
+
+function pasteItems({ offset = false } = {}) {
+  if (!clipboard?.length) return toast('Nothing copied yet. Select furniture and press Ctrl+C.');
+  const f = floorNow();
+  const at = !offset && ui.pointer ? ui.pointer : [clipboard[0].x - clipboard[0].dx + 0.3, clipboard[0].z - clipboard[0].dz + 0.3];
+  const ids = [];
+  for (const c of clipboard) {
+    const { dx, dz, locked, ...rest } = c;
+    const q = { ...rest, id: uid('p'), x: +(at[0] + dx).toFixed(3), z: +(at[1] + dz).toFixed(3) };
+    f.placed.push(q);
+    ids.push(q.id);
+  }
+  commit({ rebuild: false });
+  viewer.select(ids.length > 1 ? { type: 'items', ids } : { type: 'item', id: ids[0] });
+}
+
+function selectAllItems() {
+  const ids = floorNow().placed.map((p) => p.id);
+  if (ids.length) viewer.select(ids.length > 1 ? { type: 'items', ids } : { type: 'item', id: ids[0] });
 }
 
 function wallInspector(el, id) {
@@ -412,7 +564,8 @@ function wallInspector(el, id) {
   const rw = Math.min(2, Math.max(0.5, +(len / 3).toFixed(2)));
   el.innerHTML = `<div class="insp"><h3>Wall</h3><div class="sub">${esc(f.name)} · ${w.exterior ? 'exterior' : 'interior'} · ${cm(len)} cm</div>
     ${edit ? `<div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Length (cm)', `type="number" min="10" step="1" id="wLen" value="${cm(len)}"`)}${field('Thickness (cm)', `type="number" min="5" max="60" step="1" id="wThick" value="${cm(w.thickness)}"`)}</div>
-      <label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="wExt" ${w.exterior ? 'checked' : ''}> Exterior wall</label></div>
+      <label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="wExt" ${w.exterior ? 'checked' : ''}> Exterior wall</label>
+      <label class="row" style="gap:8px;margin-top:6px" title="A locked wall can't be dragged, pushed or deleted by accident"><input type="checkbox" id="wLock" ${w.locked ? 'checked' : ''}> Locked</label></div>
     <div class="group"><div class="lbl">Add to this wall</div><div class="row"><button class="btn small" data-add="door">+ Door</button><button class="btn small" data-add="window">+ Window</button><button class="btn small" data-add="opening">+ Opening</button></div></div>
     <div class="group"><div class="lbl">Recess or bay</div>
       <div class="num-row">${field('From start', `type="number" min="0" step="5" id="rStart" value="${cm((len - rw) / 2)}"`)}${field('Width', `type="number" min="20" step="5" id="rWidth" value="${cm(rw)}"`)}${field('Depth', `type="number" min="5" step="5" id="rDepth" value="60"`)}</div>
@@ -436,6 +589,7 @@ function wallInspector(el, id) {
     else renderInspector();
   };
   $('#wExt', el).onchange = (e) => ((w.exterior = e.target.checked), commit());
+  $('#wLock', el).onchange = (e) => (e.target.checked ? (w.locked = true) : delete w.locked, commit({ rebuild: false }));
   $$('[data-add]', el).forEach((b) => (b.onclick = () => {
     const type = b.dataset.add;
     const width = Math.min(ui[type + 'Width'], len - 0.2);
@@ -583,7 +737,7 @@ function floorInspector(el) {
   el.innerHTML = `<div class="insp"><h3>${esc(f.name)}</h3><div class="sub">Level ${cm(ys[fi])} cm · ${gross.toFixed(1)} m² · ${f.rooms.length} rooms · ${f.placed.length} items</div>
     ${ui.editing ? `<div class="group"><label class="field-label">Floor name<input id="fName" value="${esc(f.name)}"></label></div>
     <div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Ceiling height (cm)', `type="number" min="200" max="600" step="5" id="fHeight" value="${cm(f.height)}"`)}${field(fi === 0 ? 'Ground slab (cm)' : 'Floor slab (cm)', `type="number" min="5" max="60" step="1" id="fSlab" value="${cm(f.slab)}"`)}</div></div>` : ''}
-    ${ui.editing ? floorProblems(f, fi) : ''}
+    ${floorProblems(f, fi)}
     ${f.rooms.length ? `<div class="group"><div class="lbl">Rooms</div>${f.rooms.map((r) => `<button class="btn small ghost list-btn" data-room="${esc(r.id)}"><span>${esc(r.name || 'Room')}</span><em>${Math.abs(area(r.points)).toFixed(1)} m²</em></button>`).join('')}</div>` : ''}
     ${f.placed.length ? `<div class="group"><div class="lbl">Furniture</div>${f.placed.map((p) => {
       const it = itemById(p.itemId);
@@ -620,6 +774,7 @@ function floorProblems(f, fi) {
     .map((p) => p.replace(/^floor "[^"]*":?\s*/, '').replace(/ \b(wall|stairs|door|window|opening) [a-z]+-[a-z0-9]+/g, ' $1'));
   if (fi < design.floors.length - 1) for (const s of f.stairs) if (!tools.stairFits(s, ys[fi + 1] - ys[fi])) list.push('stairs cross a wall or leave the floor');
   for (const p of f.placed) if (!itemById(p.itemId)) list.push('a placed item has no model in your library');
+  if (viewer.display.clear) for (const x of clearanceProblems(f)) list.push(x.message);
   if (!f.rooms.length && f.walls.length) list.push('no enclosed rooms yet: close the walls into a loop');
   if (!list.length) return '<div class="group problems ok">✓ No problems on this floor</div>';
   return `<div class="group problems"><div class="lbl">Check</div><ul>${list.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>`;
@@ -806,10 +961,17 @@ function deleteSelection() {
   const s = viewer.sel;
   if (!s) return;
   const f = floorNow();
-  if (s.type === 'item') {
-    const { floor } = findPlaced(s.id);
-    if (floor) floor.placed = floor.placed.filter((p) => p.id !== s.id);
+  if (s.type === 'item' || s.type === 'items') {
+    const ids = viewer.selectedItems();
+    const locked = ids.filter((id) => findPlaced(id).p?.locked);
+    if (locked.length === ids.length) return toast('Locked items can’t be removed. Unlock them first (L).');
+    for (const id of ids) {
+      const { p, floor } = findPlaced(id);
+      if (floor && !p.locked) floor.placed = floor.placed.filter((x) => x !== p);
+    }
+    if (locked.length) toast(`${locked.length} locked item${locked.length > 1 ? 's were' : ' was'} kept.`);
   } else if (!ui.editing) return;
+  else if (s.type === 'wall' && floorNow().walls.find((w) => w.id === s.id)?.locked) return toast('This wall is locked. Unlock it in the wall panel first.');
   else if (s.type === 'wall') {
     f.walls = f.walls.filter((w) => w.id !== s.id);
     f.openings = f.openings.filter((o) => o.wall !== s.id);
@@ -818,7 +980,7 @@ function deleteSelection() {
   else if (s.type === 'stairs') f.stairs = f.stairs.filter((x) => x.id !== s.id);
   else if (s.type === 'room') return toast('Rooms follow the walls. Delete a wall to merge two rooms.');
   viewer.select(null);
-  commit({ rebuild: s.type !== 'item' });
+  commit({ rebuild: s.type !== 'item' && s.type !== 'items' });
   toast('Deleted.', { undo: true });
 }
 
@@ -1368,8 +1530,12 @@ async function boot() {
 
   $('#loading').remove();
   viewer = new Viewer($('#viewport'), {
-    onSelect: () => renderInspector(),
-    onLive: () => renderInspector(),
+    onSelect: () => (renderInspector(), refreshClearance()),
+    onLive: () => {
+      renderInspector();
+      clearTimeout(ui.clearTimer);
+      ui.clearTimer = setTimeout(() => refreshClearance({ dragging: true }), 60);
+    },
     onCommit: () => commit({ rebuild: false }),
     onStructureLive: () => viewer.setDesign(design),
     onStructureCommit: () => {
@@ -1392,7 +1558,11 @@ async function boot() {
       ui.hover = t || '';
       updateHint();
     },
-    onPointer: (x, z) => ($('#coords').textContent = `x ${x.toFixed(2)} m · z ${z.toFixed(2)} m`),
+    onPointer: (x, z) => {
+      ui.pointer = [x, z];
+      $('#coords').textContent = `x ${x.toFixed(2)} m · z ${z.toFixed(2)} m`;
+    },
+    onLocked: (what) => toast(what === 'wall' ? 'This wall is locked. Unlock it in the wall panel to move it.' : 'This item is locked. Press L or use Unlock in the panel to move it.'),
     editable: () => ui.editing,
     onModelError: (item) => toast(`Couldn't load the 3D model for “${item.name}”, showing a generated one.`),
     onPointerLock: (locked) => walkHelp(locked),
@@ -1675,8 +1845,14 @@ function wireUI() {
       else viewer.select(null);
     } else if (viewer.view === 'walk') return;
     else if (mod && k === 'd' && sel?.type === 'item') (e.preventDefault(), duplicate(sel.id));
+    else if (mod && k === 'd' && sel?.type === 'items') (e.preventDefault(), copyItems(), pasteItems({ offset: true }));
+    else if (mod && k === 'c' && viewer.selectedItems().length) (e.preventDefault(), copyItems());
+    else if (mod && k === 'v') (e.preventDefault(), pasteItems());
+    else if (mod && k === 'a') (e.preventDefault(), selectAllItems());
+    else if (k === 'l' && !mod && viewer.selectedItems().length) toggleLock();
+    else if (k === 'r' && !mod && sel?.type === 'items') rotateGroup(e.shiftKey ? -90 : 90);
     else if ((k === 'delete' || k === 'backspace') && sel) (e.preventDefault(), deleteSelection());
-    else if (k === 'r' && !mod && sel?.type === 'item') rotateItem(findPlaced(sel.id).p, e.shiftKey ? -90 : 90);
+    else if (k === 'r' && !mod && sel?.type === 'item' && !findPlaced(sel.id).p?.locked) rotateItem(findPlaced(sel.id).p, e.shiftKey ? -90 : 90);
     else if (k === 'r' && !mod && sel?.type === 'stairs' && ui.editing) {
       const s = floorNow().stairs.find((x) => x.id === sel.id);
       s.rot = ((((s.rot || 0) + (e.shiftKey ? -90 : 90)) % 360) + 360) % 360;
@@ -1709,13 +1885,15 @@ function wireUI() {
     else if (['1', '2', '3'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'walk' }[k]);
     else if (k === 'pageup') (e.preventDefault(), setFloor(viewer.activeFloor + 1));
     else if (k === 'pagedown') (e.preventDefault(), setFloor(viewer.activeFloor - 1));
-    else if (k.startsWith('arrow') && sel?.type === 'item') {
+    else if (k.startsWith('arrow') && (sel?.type === 'item' || sel?.type === 'items')) {
       e.preventDefault();
-      const p = findPlaced(sel.id).p;
       const step = e.shiftKey ? 0.1 : 0.01;
       const [dx, dz] = { arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step] }[k];
-      p.x = +(p.x + dx).toFixed(3);
-      p.z = +(p.z + dz).toFixed(3);
+      for (const p of selectedPlaced()) {
+        if (p.locked) continue;
+        p.x = +(p.x + dx).toFixed(3);
+        p.z = +(p.z + dz).toFixed(3);
+      }
       viewer.syncFurniture();
       clearTimeout(wireUI.nudge);
       wireUI.nudge = setTimeout(() => commit({ rebuild: false }), 400);
