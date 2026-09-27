@@ -663,7 +663,8 @@ function guessFromUrl(url) {
   } catch {}
   const category = guessCategory(name);
   // Colour = last colour word in the name, plus a modifier before it ("Light beige").
-  const words = name.split(' ');
+  // Ignore furniture names that contain colour words ("coffee table").
+  const words = name.replace(/coffee table/gi, '').split(' ').filter(Boolean);
   let color = null;
   for (let i = words.length - 1; i >= 0 && !color; i--) {
     if (!colorFromName(words[i])) continue;
