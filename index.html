@@ -1,354 +1,156 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#090b0a" />
-<meta name="description" content="Singapore Daily Food & Water Service interface for the DIU-7." />
-<title>DIU-7 | One Day of Food and Water</title>
-<style>
-  :root {
-    --bg: #090b0a;
-    --panel: rgba(16, 20, 17, 0.92);
-    --line: rgba(221, 231, 222, 0.14);
-    --line-strong: rgba(221, 231, 222, 0.3);
-    --text: #dfe5df;
-    --bright: #f2f5f0;
-    --muted: #909b93;
-    --quiet: #68736b;
-    --accent: #9fc6c4;
-    --topbar: 64px;
-    --left: 210px;
-    --right: 294px;
-    --font: "Helvetica Neue", "Segoe UI", sans-serif;
-    --mono: "SFMono-Regular", "Roboto Mono", Consolas, monospace;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; overflow: hidden; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 15px;
-    line-height: 1.45;
-    -webkit-font-smoothing: antialiased;
-  }
-  button, select { font: inherit; }
-  button { cursor: pointer; }
-  #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
-
-  #topbar {
-    height: var(--topbar); flex: 0 0 var(--topbar);
-    display: flex; align-items: center; justify-content: space-between; gap: 20px;
-    padding: 0 22px; border-bottom: 1px solid var(--line);
-    background: rgba(9,11,10,.94); z-index: 30;
-  }
-  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .brand-mark {
-    width: 34px; height: 34px; display: grid; place-items: center;
-    border: 1px solid var(--line-strong); color: var(--bright);
-    font: 700 12px/1 var(--mono); letter-spacing: -.08em;
-  }
-  .brand-title { color: var(--bright); font-size: 15px; font-weight: 600; letter-spacing: .08em; }
-  .top-location { color: var(--text); font: 12px/1 var(--mono); letter-spacing: .1em; white-space: nowrap; }
-
-  #workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left) minmax(0,1fr) var(--right); }
-  .side-panel {
-    min-height: 0; background: var(--panel); z-index: 12; overflow: hidden;
-    display: flex; flex-direction: column;
-  }
-  #world-panel { border-right: 1px solid var(--line); }
-  #product-panel { border-left: 1px solid var(--line); }
-  .panel-head { padding: 22px 18px 17px; border-bottom: 1px solid var(--line); }
-  .eyebrow { color: var(--quiet); font: 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
-  .panel-head h2 { color: var(--bright); font-size: 18px; line-height: 1.25; font-weight: 500; margin-top: 7px; }
-  .panel-sub { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 6px; }
-
-  .readout-list { padding: 6px 18px; }
-  .readout { padding: 16px 0; border-bottom: 1px solid var(--line); }
-  .readout dt { color: var(--quiet); font: 10px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
-  .readout dd { color: var(--bright); font-size: 16px; line-height: 1.25; margin-top: 5px; }
-  .readout dd strong { font-size: 20px; font-weight: 500; }
-  #viewport {
-    position: relative; min-width: 0; min-height: 0; overflow: hidden;
-    background: radial-gradient(circle at 52% 44%, #19201c 0%, #0d110f 43%, #070908 80%);
-  }
-  #viewport::before {
-    content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
-    background: linear-gradient(rgba(188,204,191,.022) 1px, transparent 1px), linear-gradient(90deg, rgba(188,204,191,.022) 1px, transparent 1px);
-    background-size: 48px 48px; mask-image: radial-gradient(circle at center, black, transparent 78%);
-  }
-  #viewport::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; box-shadow: inset 0 0 90px rgba(0,0,0,.4); }
-  #viewport canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; touch-action: none; outline: none; }
-  .interaction-hint { position: absolute; z-index: 7; bottom: 18px; right: 18px; color: rgba(180,194,183,.58); font: 10px/1.4 var(--mono); letter-spacing: .07em; text-transform: uppercase; pointer-events: none; }
-
-  #component-tags { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
-  .component-tag {
-    position: absolute; opacity: 0; transform: translate(8px,-50%);
-    transition: opacity .22s ease, transform .22s ease;
-    padding: 5px 8px; background: #000; color: #fff;
-    font: 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap;
-  }
-  .component-tag.visible { opacity: 1; transform: translate(0,-50%); }
-  .component-tag.selected { color: #fff; }
-  .component-tag.visible.selected { opacity: 1; }
-
-  #inspection-controls {
-    position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 14;
-    display: flex; gap: 9px;
-  }
-  .control-button {
-    min-width: 176px; min-height: 48px; padding: 0 17px;
-    display: inline-flex; align-items: center; justify-content: space-between; gap: 16px;
-    border: 1px solid var(--line-strong); background: rgba(14,18,16,.94); color: var(--text);
-    font: 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
-    transition: background .18s ease, border-color .18s ease, color .18s ease;
-  }
-  .control-button .key { color: var(--quiet); }
-  .control-button:hover, .control-button:focus-visible { background: #202720; color: var(--bright); border-color: rgba(220,230,221,.5); outline: none; }
-  .control-button.active { background: #dbe2da; border-color: #dbe2da; color: #111512; }
-  .control-button.active .key { color: #626c65; }
-
-  .pack-section { padding: 15px 16px; border-bottom: 1px solid var(--line); }
-  .pack-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-  .pack-button {
-    min-height: 37px; padding: 0 7px; border: 1px solid var(--line); background: transparent; color: var(--muted);
-    font: 10px/1 var(--mono); letter-spacing: .04em; text-transform: uppercase;
-  }
-  .pack-button:hover, .pack-button:focus-visible { color: var(--bright); border-color: var(--line-strong); outline: none; }
-  .pack-button.active { color: #101411; background: var(--accent); border-color: var(--accent); }
-  #buy-button {
-    width: 100%; min-height: 42px; margin-top: 10px; border: 1px solid var(--accent);
-    background: transparent; color: var(--accent); font: 11px/1 var(--mono);
-    letter-spacing: .09em; text-transform: uppercase;
-  }
-  #buy-button:hover, #buy-button:focus-visible { background: var(--accent); color: #101411; outline: none; }
-
-  #product-overview, #selected-component { padding: 18px; min-height: 0; overflow: auto; }
-  #product-overview[hidden], #selected-component[hidden] { display: none; }
-  #pack-title, #component-name { color: var(--bright); font-size: 19px; font-weight: 500; line-height: 1.25; }
-  #pack-tagline, #component-description { color: var(--muted); font-size: 14px; line-height: 1.55; margin-top: 8px; }
-  .product-facts { margin-top: 17px; }
-  .product-fact { display: flex; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
-  .product-fact .label { color: var(--quiet); font: 10px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
-  .product-fact .value { color: var(--bright); font-size: 16px; text-align: right; }
-  #micro-summary { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 14px; }
-  .selected-kicker { color: var(--accent); font: 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 11px; }
-  #back-overview { margin-top: 20px; border: 1px solid var(--line-strong); background: transparent; color: var(--text); padding: 10px 12px; font: 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
-
-  #equivalent-panel { position: absolute; inset: 0; z-index: 10; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .38s ease, visibility .38s ease; }
-  #equivalent-panel.visible { opacity: 1; visibility: visible; }
-  .meal-card {
-    position: absolute; width: min(55%, 520px); right: 3%; top: 50%; transform: translateY(-50%);
-    padding: 22px; border: 1px solid var(--line-strong); background: rgba(13,17,15,.94); backdrop-filter: blur(12px);
-  }
-  .meal-card h2 { color: var(--bright); font-size: 19px; font-weight: 500; margin-top: 7px; }
-  .meal-context { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 8px; }
-  .meal-table { width: 100%; border-collapse: collapse; margin-top: 17px; }
-  .meal-table th { color: var(--quiet); font: 10px/1.3 var(--mono); letter-spacing: .07em; text-transform: uppercase; text-align: left; padding: 8px 0; border-bottom: 1px solid var(--line); }
-  .meal-table th:nth-child(n+2), .meal-table td:nth-child(n+2) { text-align: right; }
-  .meal-table td { color: var(--text); font-size: 13px; padding: 9px 0; border-bottom: 1px solid var(--line); }
-  .meal-table td.amount { color: var(--bright); font-family: var(--mono); }
-  .mass-equation {
-    display: flex; align-items: center; justify-content: space-between; gap: 14px;
-    margin-top: 14px; padding: 12px; border: 1px solid var(--line); background: #111512;
-  }
-  .mass-equation strong { color: var(--bright); font-size: 14px; font-weight: 500; }
-  .mass-equation .equation-result { color: var(--accent); font: 10px/1.4 var(--mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
-  .price-compare { display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .price-block { padding: 13px 12px 13px 0; }
-  .price-block + .price-block { padding-left: 14px; border-left: 1px solid var(--line); }
-  .price-block span { display: block; color: var(--quiet); font: 9px/1.3 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
-  .price-block strong { display: block; color: var(--bright); font-size: 17px; font-weight: 500; margin-top: 5px; }
-  .price-block strong.accent { color: var(--accent); }
-  .meal-note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 12px; }
-
-  #opening-card {
-    position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px;
-    background: rgba(6,8,7,.74); backdrop-filter: blur(13px); transition: opacity .55s ease, visibility .55s ease;
-  }
-  #opening-card.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
-  .opening-inner { width: min(470px,100%); padding: 30px; border: 1px solid var(--line-strong); background: rgba(15,19,17,.97); }
-  .opening-inner h1 { color: var(--bright); font-size: 22px; font-weight: 500; margin-top: 9px; }
-  .opening-copy { color: var(--text); font-size: 15px; line-height: 1.6; margin-top: 13px; }
-  #opening-dismiss { width: 100%; min-height: 48px; margin-top: 23px; border: 1px solid var(--accent); background: var(--accent); color: #111512; font: 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
-  #error-banner { display: none; position: absolute; inset: 18px; z-index: 50; padding: 18px; border: 1px solid #8f7950; background: rgba(35,29,20,.96); color: #d6c59b; font: 12px/1.6 var(--mono); white-space: pre-wrap; }
-  .mobile-pack { display: none; }
-  .reduced-motion *, .reduced-motion *::before, .reduced-motion *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
-
-  @media (max-width: 1060px) {
-    :root { --left: 188px; --right: 270px; }
-    .panel-head, .readout-list, #product-overview, #selected-component { padding-left: 14px; padding-right: 14px; }
-    .meal-card { width: min(62%, 500px); }
-  }
-  @media (max-width: 780px) {
-    :root { --topbar: 58px; }
-    #topbar { padding: 0 14px; }
-    .brand-mark { width: 30px; height: 30px; }
-    .brand-title { font-size: 12px; }
-    .top-location { font-size: 11px; }
-    #workspace { display: grid; grid-template-columns: 1fr; grid-template-rows: auto minmax(0,1fr); position: relative; }
-    #world-panel {
-      display: grid; grid-template-columns: minmax(0,1.6fr) minmax(220px,1fr);
-      border-right: 0; border-bottom: 1px solid var(--line); overflow: visible;
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roomcraft</title>
+  <meta name="description" content="Plan any room in 3D with real furniture from any store link.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='26' height='14' rx='4' fill='%232f6fed'/%3E%3Crect x='6' y='6' width='20' height='10' rx='3' fill='%2393b4f7'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
     }
-    #world-panel .panel-head { padding: 12px 14px; border-right: 1px solid var(--line); border-bottom: 0; }
-    #world-panel .panel-head h2 { font-size: 15px; }
-    #world-panel .panel-sub { font-size: 11px; line-height: 1.35; }
-    #world-panel .readout-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: center; padding: 8px 14px; }
-    #world-panel .readout { padding: 0; border-bottom: 0; }
-    #world-panel .readout dd { font-size: 13px; }
-    #product-panel { display: none; }
-    #viewport { position: relative; inset: auto; }
-    .mobile-pack {
-      display: flex; position: absolute; z-index: 12; top: 12px; left: 12px; right: 12px;
-      align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
-      border: 1px solid var(--line); background: rgba(13,17,15,.9);
-    }
-    .mobile-pack label { color: var(--bright); font: 11px/1 var(--mono); letter-spacing: .06em; }
-    .mobile-pack select { min-width: 145px; border: 1px solid var(--line-strong); background: #111512; color: var(--text); padding: 7px; font-size: 12px; }
-    .meal-card { width: calc(100% - 24px); right: 12px; top: 46%; padding: 17px; }
-    .interaction-hint { display: none; }
-    #inspection-controls { bottom: 16px; width: calc(100% - 24px); }
-    .control-button { flex: 1; min-width: 0; padding: 0 12px; }
-    .component-tag { font-size: 9px; }
   }
-  @media (max-width: 480px) {
-    .top-location { font-size: 10px; }
-    #world-panel { grid-template-columns: 1fr; }
-    #world-panel .panel-head { border-right: 0; border-bottom: 1px solid var(--line); }
-    #inspection-controls { display: grid; grid-template-columns: 1fr; gap: 6px; }
-    .control-button { min-height: 42px; }
-    .meal-card h2 { font-size: 16px; }
-    .meal-table td { font-size: 11px; padding: 7px 0; }
-    .mass-equation { align-items: flex-start; flex-direction: column; gap: 6px; padding: 9px; }
-    .mass-equation strong { font-size: 12px; }
-    .price-block strong { font-size: 14px; }
-  }
-</style>
+  </script>
 </head>
 <body>
-<div id="app">
-  <header id="topbar">
-    <div class="brand"><div class="brand-mark" aria-hidden="true">DF</div><div class="brand-title">DAILY FOOD &amp; WATER SERVICE</div></div>
-    <div class="top-location">SINGAPORE | 2074</div>
+  <header class="topbar">
+    <div class="brand"><span class="logo"></span>Roomcraft</div>
+    <div class="seg" id="viewSeg" role="tablist" aria-label="Camera">
+      <button data-view="3d" class="on" title="Orbit around the room (1)">3D</button>
+      <button data-view="plan" title="Top-down floor plan (2)">Plan</button>
+      <button data-view="eye" title="Eye level – walk with W A S D (3)">Walk</button>
+    </div>
+    <button class="btn" id="editRoomBtn" title="Change the room's shape, walls, doors and windows">Edit room</button>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <button class="icon-btn" id="shotBtn" title="Save a screenshot" aria-label="Screenshot"><svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg></button>
+    <div class="menu-wrap">
+      <button class="icon-btn" id="menuBtn" aria-haspopup="menu" aria-label="More"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+      <div class="menu" id="menu" role="menu" hidden>
+        <button data-act="export">Export project (.json)</button>
+        <button data-act="import">Import project…</button>
+        <button data-act="reload">Load project from repo</button>
+        <hr>
+        <button data-act="settings">Link scraper settings…</button>
+        <button data-act="help">Shortcuts & help</button>
+        <hr>
+        <button data-act="clear" class="danger">Clear room</button>
+      </div>
+    </div>
+    <button class="icon-btn only-narrow" id="panelToggle" aria-label="Inventory"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
   </header>
 
-  <main id="workspace">
-    <aside id="world-panel" class="side-panel" aria-label="About the DIU-7 item">
-      <div class="panel-head"><p class="eyebrow">About the item</p><h2>Daily Intake Unit (Food and Water)</h2><p class="panel-sub">One day of sealed handheld supply, including food and water. Nutrients and energy vary by pack; consume gradually over 24 hours.</p></div>
-      <dl class="readout-list">
-        <div class="readout"><dt>Contents</dt><dd>Food + drinking water</dd></div>
-        <div class="readout"><dt>Serving</dt><dd>One adult / 24 h</dd></div>
-      </dl>
+  <div class="layout">
+    <aside class="left panel" id="leftPanel">
+      <section class="import">
+        <h2>Add from a link</h2>
+        <div class="dropzone" id="dropzone">
+          <textarea id="linkInput" rows="3" placeholder="Paste or drag product links here (one per line): IKEA, Amazon, Wayfair, Shopify stores…"></textarea>
+          <div class="dz-row">
+            <span class="hint">Drop links anywhere on the page</span>
+            <button class="btn primary" id="importBtn">Import</button>
+          </div>
+        </div>
+        <ul class="queue" id="queue"></ul>
+      </section>
+      <section class="inv">
+        <div class="inv-head">
+          <h2>Inventory <span class="count" id="invCount"></span></h2>
+          <button class="btn small" id="newItemBtn">+ Custom</button>
+        </div>
+        <input class="search" id="invSearch" type="search" placeholder="Search inventory">
+        <div class="cards" id="inventory"></div>
+      </section>
     </aside>
 
-    <section id="viewport" aria-label="Interactive DIU-7 product viewer">
-      <div class="mobile-pack">
-        <label for="mobile-pack-select">DIU-7 PACK</label>
-        <select id="mobile-pack-select">
-          <option value="basic">Basic</option>
-          <option value="performance">Performance</option>
-          <option value="nutrition">Nutrition</option>
-          <option value="premium">Premium</option>
-        </select>
-      </div>
-      <div class="interaction-hint">Drag to turn · Scroll to zoom</div>
-      <div id="component-tags" aria-hidden="true"></div>
-      <div id="error-banner" role="alert"></div>
+    <main class="stage" id="stage">
+      <div class="banner" id="banner" hidden></div>
+      <div class="drop-overlay" id="dropOverlay" hidden><div>Drop links to import</div></div>
+      <div class="hintbar" id="hintbar"></div>
+      <div class="loading" id="loading">Loading 3D engine…</div>
+    </main>
 
-      <section id="equivalent-panel" aria-hidden="true">
-        <div class="meal-card">
-          <p class="eyebrow">Regular food comparison</p>
-          <h2>APPROXIMATE WHOLE-FOOD MASS REPLACED</h2>
-          <p class="meal-context">Cooked, edible masses needed to approximate this pack’s daily energy and nutrient profile. These are not recommended portion sizes.</p>
-          <table class="meal-table">
-            <thead><tr><th>Representative food</th><th>Approx. mass</th></tr></thead>
-            <tbody>
-              <tr><td>Cooked wholegrains</td><td class="amount" id="equivalent-grains">≈550 g</td></tr>
-              <tr><td>Cooked lean-protein equivalent</td><td class="amount" id="equivalent-protein">≈240 g</td></tr>
-              <tr><td>Cooked vegetables</td><td class="amount" id="equivalent-vegetables">≈180 g</td></tr>
-              <tr><td>Fresh fruit</td><td class="amount" id="equivalent-fruit">≈234 g</td></tr>
-              <tr><td>Drinking water</td><td class="amount" id="equivalent-water">2.8 L</td></tr>
-            </tbody>
-          </table>
-          <div class="mass-equation">
-            <strong><span id="equivalent-food-weight">≈1.20 kg</span> conventional food + <span id="equivalent-water-total">2.8 L</span> water</strong>
-            <span class="equation-result">→ 1 DIU-7 unit</span>
-          </div>
-          <div class="price-compare">
-            <div class="price-block"><span>Regular food + water</span><strong>S$186.40 / day</strong></div>
-            <div class="price-block"><span id="equivalent-pack-name">Basic Pack</span><strong class="accent" id="equivalent-pack-price">S$22.10 / day</strong></div>
-          </div>
-          <p class="meal-note">Fresh food is still available, but costs much more.</p>
-        </div>
-      </section>
-
-      <div id="inspection-controls" aria-label="Product controls">
-        <button class="control-button" id="exploded-toggle" type="button" aria-pressed="false"><span id="exploded-label">See what’s inside</span><span class="key">E</span></button>
-        <button class="control-button" id="meal-toggle" type="button" aria-pressed="false"><span id="meal-label">Compare with regular food</span><span class="key">M</span></button>
-      </div>
-    </section>
-
-    <aside id="product-panel" class="side-panel" aria-label="DIU-7 pack information">
-      <div class="pack-section">
-        <p class="eyebrow">Choose pack</p>
-        <div class="pack-switch" role="group" aria-label="Choose a DIU-7 pack">
-          <button class="pack-button active" type="button" data-pack="basic" aria-pressed="true">Basic</button>
-          <button class="pack-button" type="button" data-pack="performance" aria-pressed="false">Performance</button>
-          <button class="pack-button" type="button" data-pack="nutrition" aria-pressed="false">Nutrition</button>
-          <button class="pack-button" type="button" data-pack="premium" aria-pressed="false">Premium</button>
-        </div>
-        <button id="buy-button" type="button">Buy pack</button>
-      </div>
-      <section id="product-overview">
-        <h2 id="pack-title">BASIC PACK</h2>
-        <p id="pack-tagline">Balanced everyday formula for a typical adult.</p>
-        <div class="product-facts">
-          <div class="product-fact"><span class="label">Daily calories</span><span class="value" id="m-energy">2,140</span></div>
-          <div class="product-fact"><span class="label">Protein</span><span class="value" id="m-protein">60 g</span></div>
-          <div class="product-fact"><span class="label">Drinking water</span><span class="value" id="m-water">2.8 L</span></div>
-          <div class="product-fact"><span class="label">Public price</span><span class="value" id="m-price">S$22.10 / day</span></div>
-        </div>
-        <p id="micro-summary">90% daily vitamin and mineral profile.</p>
-      </section>
-      <section id="selected-component" aria-live="polite" hidden>
-        <p class="selected-kicker">Selected part</p>
-        <h2 id="component-name">OUTER PROTECTIVE CASE</h2>
-        <p id="component-description">Seals the unit against contaminated air and protects it during delivery.</p>
-        <button id="back-overview" type="button">Back to pack overview</button>
-      </section>
-    </aside>
-  </main>
-</div>
-
-<div id="opening-card" role="dialog" aria-modal="true" aria-labelledby="opening-title">
-  <div class="opening-inner">
-    <p class="eyebrow">Daily Intake Unit Store</p>
-    <h1 id="opening-title">Choose your daily pack.</h1>
-    <p class="opening-copy">Purchase one sealed day of food and drinking water. Compare Basic, Performance, Nutrition and Premium packs, then choose the energy, protein and vitamin profile that fits your needs.</p>
-    <button id="opening-dismiss" type="button">Browse packs</button>
+    <aside class="right panel" id="inspector"></aside>
   </div>
-</div>
 
-<script src="world-data.js?v=20260817-4"></script>
-<script>
-  window.__DAILY_FOOD_BOOT_WATCH = setTimeout(function () {
-    if (!window.__DAILY_FOOD_BOOTED && !window.__CIVIC_BOOTED) {
-      var banner = document.getElementById("error-banner");
-      if (banner) {
-        banner.style.display = "block";
-        banner.textContent = "DIU-7 DISPLAY ERROR\n\nRefresh the page. If opening local files, serve this folder over static HTTP and allow access to the Three.js module CDN.";
-      }
-    }
-  }, 12000);
-  // Keep the previous boot handle available while older cached modules expire.
-  window.__CIVIC_BOOT_WATCH = window.__DAILY_FOOD_BOOT_WATCH;
-</script>
-<script type="importmap">
-  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
-</script>
-<script type="module" src="scene.js?v=20260817-4"></script>
+  <dialog id="itemDialog" class="dialog">
+    <form method="dialog" id="itemForm">
+      <h3 id="itemDialogTitle">Item</h3>
+      <div class="note" id="itemNote" hidden></div>
+      <label>Name<input name="name" required></label>
+      <div class="grid2">
+        <label>Type<select name="category" id="categorySelect"></select></label>
+        <label>Product link<input name="url" type="url" placeholder="https://"></label>
+      </div>
+      <fieldset class="dims">
+        <legend>Size (cm)</legend>
+        <label>Width<input name="w" type="number" min="1" step="0.5" required></label>
+        <label>Depth<input name="d" type="number" min="0.5" step="0.5" required></label>
+        <label>Height<input name="h" type="number" min="0.5" step="0.5" required></label>
+      </fieldset>
+      <fieldset>
+        <legend>Colours available</legend>
+        <div id="colorRows" class="color-rows"></div>
+        <button type="button" class="btn small" id="addColorBtn">+ Add colour</button>
+      </fieldset>
+      <details>
+        <summary>More: legs colour, photo, 3D model</summary>
+        <div class="grid2">
+          <label>Legs / frame colour<span class="inline"><input type="checkbox" name="accentOn"> <input type="color" name="accent" value="#4a3426"></span></label>
+          <label>Photo URL<input name="image" type="url"></label>
+        </div>
+        <label>3D model URL (.glb / .gltf)<input name="modelUrl" type="url" placeholder="Leave empty to use a generated model"></label>
+        <label class="check"><input type="checkbox" name="useModel" checked> Use the 3D model when available</label>
+      </details>
+      <div class="actions">
+        <button type="button" class="btn danger ghost" id="deleteItemBtn">Delete item</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="cancelItemBtn">Cancel</button>
+        <button type="submit" class="btn primary" id="saveItemBtn">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="dialog">
+    <form method="dialog">
+      <h3>Link scraper</h3>
+      <p class="muted">Links are read by your own free Cloudflare Worker (see <code>worker/README.md</code>). Paste its URL here.</p>
+      <label>Worker URL<input id="workerUrl" type="url" placeholder="https://room-planner-worker.<you>.workers.dev"></label>
+      <div class="test-row"><button type="button" class="btn small" id="testWorker">Test connection</button><span id="workerStatus" class="muted"></span></div>
+      <div class="actions"><span class="spacer"></span><button class="btn primary" value="ok">Done</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="helpDialog" class="dialog">
+    <form method="dialog">
+      <h3>How to use</h3>
+      <ul class="help">
+        <li><b>Add furniture:</b> paste or drop a product link, or click <b>+ Custom</b>. Drag a card from the inventory into the room, or press <b>Add</b>.</li>
+        <li><b>Move:</b> drag an item. It snaps flush to walls and sits on tables, shelves and rugs. Hold <kbd>Shift</kbd> for free movement.</li>
+        <li><b>Rotate:</b> drag the blue dot on the ring (15° steps, <kbd>Shift</kbd> for 1°), or press <kbd>R</kbd>.</li>
+        <li><b>Room shape:</b> <b>Edit room</b>, then drag the blue corners. Double-click a wall to add a corner. Click a wall to add doors and windows.</li>
+        <li><b>Walk:</b> switch to Walk view and use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, dragging to look around.</li>
+      </ul>
+      <table class="keys">
+        <tr><td><kbd>Del</kbd></td><td>Remove selected</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate</td></tr>
+        <tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>Rotate ±90°</td><td>Arrows</td><td>Nudge 1 cm (Shift: 10)</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td><kbd>Esc</kbd></td><td>Deselect</td></tr>
+        <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>3D / Plan / Walk</td><td></td><td></td></tr>
+      </table>
+      <div class="actions"><span class="spacer"></span><button class="btn primary">Got it</button></div>
+    </form>
+  </dialog>
+
+  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>
