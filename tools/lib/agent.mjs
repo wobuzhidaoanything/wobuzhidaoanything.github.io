@@ -158,6 +158,7 @@ export function updateItem(args) {
 export async function writeModelComponent({ id, code }) {
   const { compileSource, componentPath } = await import('./r3f.mjs');
   if (!store.getLibrary().items?.some((i) => i.id === id)) throw new Error(`No model "${id}". Create it first with add_item, then write its component.`);
+  if (String(code || '').length > 150 * 1024) throw new Error('The component is over 150 KB of code. Use loops/arrays for repeated parts (slats, buttons, legs) instead of writing each one out.');
   await compileSource(String(code || ''), `${id}.jsx`);
   const f = componentPath(id);
   fs.mkdirSync(path.dirname(f), { recursive: true });
@@ -180,19 +181,29 @@ export async function readModelComponent(id) {
 
 /** Download a .glb into userdata/models/ (served at /models/…) so the model has a permanent local copy. */
 export async function saveModelFile({ id, url }) {
+  if (!store.getLibrary().items?.some((i) => i.id === id)) throw new Error(`No model "${id}".`);
   const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 roomcraft' } });
   if (!r.ok) throw new Error(`Download failed: HTTP ${r.status}`);
-  const buf = Buffer.from(await r.arrayBuffer());
-  if (buf.length > 40e6) throw new Error('Model is larger than 40 MB; keep it as a URL instead.');
-  if (buf.subarray(0, 4).toString() !== 'glTF') throw new Error('That file is not a binary glTF (.glb).');
+  const raw = Buffer.from(await r.arrayBuffer());
+  if (raw.length > 200e6) throw new Error('That file is over 200 MB; build the model with write_model_component instead.');
+  if (raw.subarray(0, 4).toString() !== 'glTF') throw new Error('That file is not a binary glTF (.glb).');
+  // Keep it within the storage budget: clean up, shrink textures, simplify only if needed, compress
+  const { shrinkGLB } = await import('./shrink.mjs');
+  const { blankPage } = await import('./render.mjs');
+  const page = await blankPage().catch(() => null);
+  let result;
+  try {
+    result = await shrinkGLB(raw, { page });
+  } finally {
+    await page?.close().catch(() => {});
+  }
   fs.mkdirSync(MODELS, { recursive: true });
   const rel = `models/${slug(id)}.glb`;
-  fs.writeFileSync(path.join(MODELS, `${slug(id)}.glb`), buf);
+  fs.writeFileSync(path.join(MODELS, `${slug(id)}.glb`), result.buf);
   return withLibrary((lib) => {
     const item = lib.items.find((i) => i.id === id);
-    if (!item) throw new Error(`No model "${id}".`);
     Object.assign(item, { modelUrl: rel, useModel: true, verified: false });
-    return { item, file: rel, bytes: buf.length };
+    return { item, file: rel, bytes: result.after, before: result.before, triangles: result.triangles, steps: result.steps };
   });
 }
 
@@ -202,7 +213,7 @@ export async function renderItemImages(id, opts = {}) {
   if (!item) throw new Error(`No model "${id}".`);
   const shots = await renderItem(id, opts);
   recordRender(item);
-  return { item, shots };
+  return { item, shots, stats: shots.stats };
 }
 
 /** Record a visual check. Refused unless the current version was rendered (i.e. looked at). */

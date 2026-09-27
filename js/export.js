@@ -25,6 +25,15 @@ export async function exportGLB(viewer, { roof = false } = {}) {
   const drop = [];
   group.traverse((o) => (o.isLight || o.userData.helper) && drop.push(o));
   for (const o of drop) o.removeFromParent();
+  // Keep only small, useful tags as glTF "extras" (internal data such as collision lines
+  // would otherwise bloat the file by megabytes)
+  const KEEP = ['itemId', 'placedId', 'color', 'room', 'opening', 'stair', 'floorId', 'ceiling'];
+  group.traverse((o) => {
+    const u = o.userData || {};
+    o.userData = Object.fromEntries(KEEP.filter((k) => u[k] != null && typeof u[k] !== 'object').map((k) => [k, u[k]]));
+    if (o.geometry) o.geometry.userData = {};
+    for (const m of [].concat(o.material || [])) m.userData = {};
+  });
   group.updateMatrixWorld(true);
   const exporter = new GLTFExporter();
   const glb = await exporter.parseAsync(group, { binary: true, onlyVisible: true, maxTextureSize: 2048 });

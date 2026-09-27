@@ -1963,6 +1963,7 @@ async function boot() {
     local: store.kind === 'device',
     context: chatContext,
     openAgents,
+    onLinks: (urls) => importUrls(urls),
     onReady: (r) => {
       $('#autoModelRow').hidden = !r;
       $('#autoModelAgent').textContent = r?.name || 'my agent';

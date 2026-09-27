@@ -60,6 +60,7 @@ async function capture(query, views) {
     const err = await page.evaluate(() => window.preview.error || (window.preview.componentError && `the model component failed: ${window.preview.componentError}`));
     if (err) throw new Error(err);
     const out = [];
+    out.stats = await page.evaluate(() => window.preview.stats || null);
     for (const view of views) {
       await page.evaluate((v) => window.preview.show(v), view);
       await page.waitForTimeout(150);
@@ -71,6 +72,14 @@ async function capture(query, views) {
   } finally {
     await page.close();
   }
+}
+
+/** A blank page in the render browser (e.g. to resize textures with a canvas); close it after. */
+export async function blankPage() {
+  const { context, srv } = await getSession();
+  const page = await context.newPage();
+  await page.goto(`${srv.url}/health`);
+  return page;
 }
 
 /** Render one furniture model from the library. Views: three-quarter, front, side, top. */

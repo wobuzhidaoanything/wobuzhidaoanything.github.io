@@ -4,6 +4,8 @@
 // Exposes window.preview = { ready, error, show(view), exportGLB() }.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildParametric, tintModel, DEFAULT_DIMS, CATEGORY_LABELS } from './models.js';
 import { Viewer, fitModel } from './viewer.js';
@@ -67,7 +69,9 @@ async function itemMode(itemId) {
     }
   } else if (item.modelUrl && item.useModel !== false) {
     try {
-      const gltf = await new GLTFLoader().loadAsync(proxy(item.modelUrl));
+      // Same decoders as the app: compressed models (meshopt, Draco) load here too
+      const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setDRACOLoader(new DRACOLoader().setDecoderPath('./vendor/three/examples/jsm/libs/draco/gltf/'));
+      const gltf = await loader.loadAsync(proxy(item.modelUrl));
       fitModel(gltf.scene, dims);
       tintModel(gltf.scene, item.colors?.length > 1 ? color?.hex : null);
       model = gltf.scene;
@@ -78,6 +82,14 @@ async function itemMode(itemId) {
   }
   model.traverse((o) => o.isMesh && (o.castShadow = o.receiveShadow = true));
   scene.add(model);
+  // Size report for the agent (triangle budget)
+  let triangles = 0, meshes = 0;
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++;
+    triangles += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
+  });
+  api.stats = { triangles: Math.round(triangles), meshes, source };
 
   const tag = document.getElementById('tag');
   tag.hidden = false;

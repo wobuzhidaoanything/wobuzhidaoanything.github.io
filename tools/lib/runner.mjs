@@ -196,16 +196,26 @@ export function enqueue(kind, data) {
   return { ok: true, job: job.id, ...chatState() };
 }
 
-function modelPrompt({ url, itemId, name }) {
+/**
+ * The instructions sent with every product link (link box or chat). Realistic, but light: the
+ * full guide is docs/MODELLING.md.
+ */
+export function modelPrompt({ url, itemId, name }) {
   return [
-    `Make an accurate 3D model for this product: ${url}`,
-    itemId ? `A quick draft is already in the library as item "${itemId}"${name ? ` (${name})` : ''}. Improve that item with update_item; do not add a duplicate.` : 'Add it with add_item (from_url).',
-    '1. read_link: study every product photo and the description. Find the real overall width, depth and height in cm (check the description and dimension text, and sanity-check them against the photos).',
-    '2. Set the right category, dimensions, colour options with realistic hex values and any accent (legs/frame) colour. If the store has a real 3D model file (model_url), use save_model_file.',
-    '   If the generated shape for the category cannot look like the product (unusual shape, curves, special base or arms), build it as a React Three Fiber component with write_model_component (read docs/R3F-MODELS.md for the rules).',
-    '3. render_item and compare the renders with the photos: shape, proportions, colours. Fix with update_item and render again until it matches.',
-    '4. verify_item with notes on what you compared.',
-    'Finish with one short line saying what the model now looks like and anything you could not match.',
+    `Make a realistic 3D model of this product for Roomcraft: ${url}`,
+    itemId ? `A quick draft is already in the library as item "${itemId}"${name ? ` (${name})` : ''}. Improve that item (update_item / save_model_file / write_model_component); don't add a duplicate.` : 'Add it with add_item (from_url).',
+    '',
+    'Goal: looks like the real product at a glance, at the exact size, and small on disk. Rules (full guide: docs/MODELLING.md in the Roomcraft repo):',
+    '1. read_link. Study EVERY product photo and the description. Find the real overall width × depth × height in cm (width = side to side facing the front); sanity-check against the photos (seat ≈ 45 cm, table ≈ 75 cm).',
+    '2. Pick the lightest way that looks right:',
+    '   a. The store has a real 3D file → save_model_file (it is compressed to the 5 MB budget automatically; check it is not a placeholder, wrongly scaled or rotated).',
+    '   b. A standard shape fits → update_item with the right category, size, colour options (realistic hex values; wood finishes named with a wood word) and accent colour for legs/frames.',
+    '   c. An unusual shape → write_model_component (React Three Fiber). Soft edges (RoundedBox/bevels), realistic roughness/metalness, 24–48 segments on round parts, loops for repeated parts, front facing +z, bottom at y = 0. No image textures, internet assets, animation or text.',
+    '3. Budget: ≤ 5 MB per model file, ≤ 200k triangles (aim for 5k–60k; the renders report the count). Include detail you would notice from 2 m away (cushions, seams, legs, handles, buttons); skip stitching and screws.',
+    '4. Look at the renders and compare with every photo: silhouette, proportions, colours, materials. Fix and render again until it matches.',
+    '5. verify_item with notes on what you compared and anything you could not match.',
+    '',
+    'Finish with one short line: what the model looks like now, its size and file weight, and anything you could not match.',
   ].join('\n');
 }
 

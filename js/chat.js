@@ -3,7 +3,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-export function initChat({ context, openAgents, onJobDone, onReady, local }) {
+export function initChat({ context, openAgents, onJobDone, onReady, local, onLinks }) {
   const panel = $('#chatPanel');
   const log = $('#chatLog');
   const input = $('#chatInput');
@@ -83,6 +83,14 @@ export function initChat({ context, openAgents, onJobDone, onReady, local }) {
     text = text.trim();
     if (!text) return;
     input.value = '';
+    // Every link is treated as a product: it goes through the same modelling job as the link box
+    const urls = [...new Set(text.match(/https?:\/\/[^\s<>"']+/g) || [])].map((u) => u.replace(/[).,;!?]+$/, ''));
+    if (urls.length && onLinks) {
+      await onLinks(urls);
+      const rest = urls.reduce((t, u) => t.split(u).join(''), text).trim();
+      if (!rest) return; // just links: nothing else to say
+      text = `${text}\n\n(Roomcraft has already queued a separate modelling job for each link above; don't model them again here.)`;
+    }
     try {
       const r = await api('/send', { text, context: context(), runner: st.runner });
       st.busy = r.busy;
