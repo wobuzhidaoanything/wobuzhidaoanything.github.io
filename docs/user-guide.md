@@ -280,8 +280,7 @@ most others work.
   - checks it against the photos;
   - marks it as checked. You can keep working meanwhile.
 - Every link counts as a product, whether you paste it here or in the Assistant chat. Your agent gets
-  instructions to make the model **realistic but compact** (a few MB at most), so a full house stays quick. Shop 3D
-  files are compressed automatically.
+  instructions to make the model **realistic**. A shop's own 3D file is kept exactly as the shop provides it.
 - When the model is done, it moves to the top of your models with a green **Ready to place** badge, and a message
   offers **Add to room**.
 

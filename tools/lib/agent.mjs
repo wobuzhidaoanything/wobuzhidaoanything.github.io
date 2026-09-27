@@ -179,7 +179,7 @@ export async function readModelComponent(id) {
   return fs.readFileSync(f, 'utf8');
 }
 
-/** Download a .glb into userdata/models/ (served at /models/…) so the model has a permanent local copy. */
+/** Download a .glb into userdata/models/ (served at /models/…), exactly as the shop provides it, so the model has a permanent local copy. */
 export async function saveModelFile({ id, url }) {
   if (!store.getLibrary().items?.some((i) => i.id === id)) throw new Error(`No model "${id}".`);
   const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 roomcraft' } });
@@ -187,23 +187,15 @@ export async function saveModelFile({ id, url }) {
   const raw = Buffer.from(await r.arrayBuffer());
   if (raw.length > 200e6) throw new Error('That file is over 200 MB; build the model with write_model_component instead.');
   if (raw.subarray(0, 4).toString() !== 'glTF') throw new Error('That file is not a binary glTF (.glb).');
-  // Keep it within the storage budget: clean up, shrink textures, simplify only if needed, compress
-  const { shrinkGLB } = await import('./shrink.mjs');
-  const { blankPage } = await import('./render.mjs');
-  const page = await blankPage().catch(() => null);
-  let result;
-  try {
-    result = await shrinkGLB(raw, { page });
-  } finally {
-    await page?.close().catch(() => {});
-  }
+  const { inspectGLB } = await import('./glb.mjs');
+  const info = await inspectGLB(raw).catch(() => null);
   fs.mkdirSync(MODELS, { recursive: true });
   const rel = `models/${slug(id)}.glb`;
-  fs.writeFileSync(path.join(MODELS, `${slug(id)}.glb`), result.buf);
+  fs.writeFileSync(path.join(MODELS, `${slug(id)}.glb`), raw);
   return withLibrary((lib) => {
     const item = lib.items.find((i) => i.id === id);
     Object.assign(item, { modelUrl: rel, useModel: true, verified: false });
-    return { item, file: rel, bytes: result.after, before: result.before, triangles: result.triangles, steps: result.steps };
+    return { item, file: rel, bytes: raw.length, triangles: info?.triangles ?? null };
   });
 }
 

@@ -74,14 +74,6 @@ async function capture(query, views) {
   }
 }
 
-/** A blank page in the render browser (e.g. to resize textures with a canvas); close it after. */
-export async function blankPage() {
-  const { context, srv } = await getSession();
-  const page = await context.newPage();
-  await page.goto(`${srv.url}/health`);
-  return page;
-}
-
 /** Render one furniture model from the library. Views: three-quarter, front, side, top. */
 export function renderItem(itemId, { color, views = ['three-quarter', 'front'] } = {}) {
   const q = new URLSearchParams({ item: itemId });

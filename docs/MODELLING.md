@@ -3,23 +3,18 @@
 This guide is for AI agents that turn a product link into a furniture model. Every product link a person gives
 Roomcraft (through the link box or in chat) is sent to their agent with a short version of these rules.
 
-**The goal: it should look like the real product at a glance, at the right size, while staying small on disk.**
+**The goal: it should look like the real product at a glance, at the right size.**
 
-## Budget
+## Limits
 
 | | Limit | Why |
 | --- | --- | --- |
-| Model file (store .glb) | **5 MB** after compression | A house has 50–150 items; keeps the library under a few hundred MB |
-| Triangles per item | **200,000** (aim for 5k–60k) | The app stays smooth with a full house; renders report the count |
+| Triangles per item you build | **200,000** (aim for 5k–60k) | The app stays smooth with a full house; renders report the count |
 | Component source (`.jsx`) | 150 KB | Use loops for repeated parts |
-| Textures | 1024 px max | Downloads are resized automatically |
 
-`save_model_file` compresses store models to fit the budget automatically:
-- clean-up and 1024 px textures;
-- simplification only if still needed;
-- meshopt compression.
-
-It reports the result. The render tools report the triangle count, so keep an eye on it.
+`save_model_file` keeps store models **exactly as the shop provides them**: nothing is compressed, simplified or
+resized. It reports the file size and triangle count. If a store model is very heavy (well over 200k triangles),
+the app warns the person and offers the simple shape; building the model yourself may be the better choice.
 
 ## Which way to build it
 

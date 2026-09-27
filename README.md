@@ -80,8 +80,8 @@ Roomcraft's tools where the agent allows it. It knows which design, floor and se
 - Paste product links into the link box: a quick draft appears at once, then your agent reads every product photo
   and the description, models the item, compares renders with the photos, and marks it checked. You can turn this
   off with the checkbox under the link box.
-- Links pasted into the chat are modelled the same way. Models are kept realistic but compact (5 MB at most; shop
-  3D files are compressed automatically; see [docs/MODELLING.md](docs/MODELLING.md)).
+- Links pasted into the chat are modelled the same way (see [docs/MODELLING.md](docs/MODELLING.md)). A shop's own
+  3D file is kept exactly as downloaded.
 - Changes the agent makes to the house are applied at once and show as cards in the chat with **Undo**.
 - You can chat while jobs run. They queue, and the panel shows each job's progress and the tools used.
 - Desktop-only apps (Claude Desktop, VS Code, Windsurf) can still use Roomcraft from their own window, but the app

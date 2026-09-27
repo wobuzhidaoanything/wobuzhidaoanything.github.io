@@ -8,7 +8,7 @@ import {
   listDesigns, getDesign, writeDesign, renderDesignImages, exportGLB, stairInfo, placeItem, writeModelComponent, readModelComponent
 } from './lib/agent.mjs';
 import { recordConnection } from './lib/agents.mjs';
-import { TRIANGLE_BUDGET } from './lib/shrink.mjs';
+import { TRIANGLE_BUDGET } from './lib/glb.mjs';
 
 const SERVER = { name: 'roomcraft', version: '1.0.0' };
 
@@ -98,7 +98,7 @@ const TOOLS = [
   },
   {
     name: 'save_model_file',
-    description: "Download a store .glb 3D model into userdata/models/ on this computer, compressed to the 5 MB budget (textures ≤1024 px, simplified only if needed) and use it for a model (keeps a permanent copy). Returns renders to check.",
+    description: "Download a store .glb 3D model into userdata/models/ on this computer, exactly as the shop provides it (not compressed or changed), and use it for a model (keeps a permanent copy). Returns renders to check.",
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, url: { type: 'string' } }, required: ['id', 'url'] },
   },
   { name: 'list_designs', description: 'List the house designs saved on this device, and which one is open in the app (active).', inputSchema: { type: 'object', properties: {} } },
@@ -211,7 +211,7 @@ async function callTool(name, args = {}) {
     }
     case 'save_model_file': {
       const r = await saveModelFile(args);
-      return withRenders(`Saved ${r.file}: ${(r.before / 1e6).toFixed(1)} MB → ${(r.bytes / 1e6).toFixed(2)} MB (${r.steps.join(', ')}; ${r.triangles.toLocaleString('en')} triangles), set as the model for ${r.item.id}. Status: UNVERIFIED.`, r.item.id);
+      return withRenders(`Saved ${r.file} as downloaded (${(r.bytes / 1e6).toFixed(1)} MB${r.triangles != null ? `, ${r.triangles.toLocaleString('en')} triangles` : ''}), set as the model for ${r.item.id}. Status: UNVERIFIED.`, r.item.id);
     }
     case 'list_designs':
       return [text(listDesigns())];
