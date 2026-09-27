@@ -457,3 +457,15 @@ table.qty td em { font-style: normal; color: var(--muted); }
 .plan-preview { border: 1px solid var(--line); border-radius: 8px; background: #fff; min-height: 300px; display: grid; place-items: center; overflow: hidden; }
 .plan-preview svg { display: block; width: 100%; height: auto; }
 #planDialog { width: min(1100px, 94vw); }
+
+.sun-panel { position: absolute; z-index: 8; width: 280px; padding: 12px; }
+.sun-grid { display: flex; flex-direction: column; gap: 8px; }
+.sun-grid .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sun-grid input[type=range] { width: 100%; }
+.sun-grid .hint { margin: 0; }
+.level-bar button[data-sun].on { background: #fff4d6; color: #7a5a10; }
+.north-arrow { position: absolute; left: 14px; bottom: 44px; z-index: 4; width: 44px; height: 44px; pointer-events: none; }
+.north-arrow svg { width: 44px; height: 44px; transition: transform .1s linear; }
+.north-arrow circle { fill: rgba(255,255,255,.9); stroke: var(--line-strong); }
+.north-arrow path { fill: #d14343; }
+.north-arrow text { font-size: 7px; font-weight: 700; fill: var(--text); }

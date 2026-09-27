@@ -334,8 +334,7 @@ export class Viewer {
     const sc = this.sun.shadow.camera;
     Object.assign(sc, { left: -this.span, right: this.span, top: this.span, bottom: -this.span, near: 0.5, far: size.y + this.span * 4 + 20 });
     sc.updateProjectionMatrix();
-    this.sun.position.set(c.x + this.span * 0.6, box.max.y + this.span * 1.2 + 4, c.z + this.span * 0.9);
-    this.sun.target.position.set(c.x, 0, c.z);
+    this.placeSun();
     this.ground.position.set(c.x, (this.house.elevations[0] ?? 0) - (this.design.floors[0]?.slab ?? 0.15) - 0.002, c.z);
     this.resize();
     this.applyFloorVisibility();
@@ -1474,6 +1473,37 @@ export class Viewer {
     this.applyFloorVisibility();
     // Labels (room names, dimensions, lengths) belong to the plan half
     this.labels.render(this.scene, this.ortho);
+  }
+
+  /**
+   * Sun study: `v` is a unit vector towards the sun (see sun.js), or null for the default
+   * daylight. Below the horizon the sun goes out and the sky dims.
+   */
+  setSun(v) {
+    this.sunDir = v;
+    this.placeSun();
+  }
+
+  placeSun() {
+    if (!this.bounds) return;
+    const c = this.bounds.getCenter(new THREE.Vector3());
+    const d = this.span * 1.8 + 10;
+    const v = this.sunDir;
+    if (!v) {
+      this.sun.position.set(c.x + this.span * 0.6, this.bounds.max.y + this.span * 1.2 + 4, c.z + this.span * 0.9);
+      Object.assign(this.sun, { intensity: 2.2 });
+      this.sun.color.set(0xfff3e0);
+      this.hemi.intensity = 0.9;
+    } else {
+      const up = Math.max(0, v[1]);
+      this.sun.position.set(c.x + v[0] * d, c.y + v[1] * d, c.z + v[2] * d);
+      // Weaker and warmer low in the sky; gone at night
+      this.sun.intensity = v[1] > 0 ? 0.6 + 2.4 * Math.min(1, up * 2.2) : 0;
+      this.sun.color.setHSL(0.09, 0.9, 0.62 + 0.3 * Math.min(1, up * 2));
+      this.hemi.intensity = v[1] > 0 ? 0.45 + 0.5 * Math.min(1, up * 3) : 0.18;
+    }
+    this.sun.target.position.set(c.x, 0, c.z);
+    this.sun.target.updateMatrixWorld();
   }
 
   /** Hide overlays for clean output (screenshots, exports). */

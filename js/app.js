@@ -8,6 +8,7 @@ import { FINISHES, FINISH_NAMES } from './materials.js';
 import { paintSpan } from './house.js';
 import { floorQuantities, quantitiesCSV } from './quantities.js';
 import { planSVG, fitScale, svgToCanvas, makePDF } from './planexport.js';
+import { sunPosition, sunTimes, sunVector } from './sun.js';
 import { analyse as analyseClearance, zoneStatus, doorSwing, footprintRect } from './clearance.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
@@ -154,6 +155,7 @@ function renderAll() {
   renderLevelBar();
   renderToolBar();
   refreshClearance();
+  applySun();
   if (viewer.view === 'elevation') viewer.buildElevationDims();
   if (ui.editing) renderBuildPanel();
   else renderInventory();
@@ -210,7 +212,8 @@ function renderLevelBar() {
     (design.floors.length > 1 && viewer.view !== 'walk' ? `<button role="tab" class="${all ? 'on' : ''}" data-all title="See the whole house">All floors</button>` : '') +
     (ui.editing ? '<span class="sep"></span><button class="add" data-addfloor title="Add a floor above the top one">+ Floor</button>' : '') +
     ((viewer.view === '3d' || viewer.split) && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '') +
-    (viewer.view !== 'walk' && viewer.view !== 'elevation' ? `<span class="sep"></span><button data-paint class="${ui.tool === 'paint' ? 'on' : ''}" title="Paint walls and floors: paint, wallpaper, tiles, wood… (P)">Paint</button>` : '') +
+    (viewer.view !== 'elevation' ? `<span class="sep"></span><button data-sun class="${ui.sunOn ? 'on' : ''}" title="Sun and shadows for a place, date and time">${ui.sunOn ? `☀ ${esc(ui.sunTime)}` : 'Sun'}</button>` : '') +
+    (viewer.view !== 'walk' && viewer.view !== 'elevation' ? `<button data-paint class="${ui.tool === 'paint' ? 'on' : ''}" title="Paint walls and floors: paint, wallpaper, tiles, wood… (P)">Paint</button>` : '') +
     (viewer.view !== 'walk' ? `<button data-measure class="${ui.tool === 'measure' ? 'on' : ''}" title="Measure distances, paths and along surfaces (M)">Measure</button>` : '') +
     (viewer.view !== 'walk' ? `<span class="sep"></span><button data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, areas and the grid">View ▾</button>` : '');
   $$('[data-floor]', el).forEach((b) => {
@@ -228,6 +231,15 @@ function renderLevelBar() {
   });
   $('[data-addfloor]', el)?.addEventListener('click', addFloorAbove);
   $('[data-measure]', el)?.addEventListener('click', () => setTool(ui.tool === 'measure' ? null : 'measure'));
+  $('[data-sun]', el)?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const m = $('#sunPanel');
+    if (!m.hidden) return (m.hidden = true);
+    renderSunPanel();
+    const r = e.currentTarget.getBoundingClientRect(), s = $('#stage').getBoundingClientRect();
+    Object.assign(m.style, { left: `${Math.max(8, r.left - s.left - 120)}px`, top: `${r.bottom - s.top + 6}px` });
+    m.hidden = false;
+  });
   $('[data-paint]', el)?.addEventListener('click', () => setTool(ui.tool === 'paint' ? null : 'paint'));
   $('[data-viewmenu]', el)?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1382,6 +1394,75 @@ async function exportAs(kind) {
   }
 }
 
+// ---------- sun study ----------
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** Apply the sun for the design's site and the chosen date/time (or the default daylight). */
+function applySun() {
+  const site = design.site;
+  if (!ui.sunOn || !site || !Number.isFinite(site.lat) || !Number.isFinite(site.lon)) {
+    viewer.setSun(null);
+    $('#northArrow').hidden = !site;
+    return null;
+  }
+  const when = new Date(`${ui.sunDate}T${ui.sunTime}`);
+  const pos = sunPosition(when, site.lat, site.lon);
+  viewer.setSun(sunVector(pos, site.north || 0));
+  $('#northArrow').hidden = false;
+  return pos;
+}
+
+function renderSunPanel() {
+  const site = design.site || {};
+  const m = $('#sunPanel');
+  const pos = applySun();
+  const t = site.lat != null ? sunTimes(new Date(`${ui.sunDate}T12:00`), site.lat, site.lon) : null;
+  const hm = (d) => (d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : '—');
+  const [h, mi] = ui.sunTime.split(':').map(Number);
+  m.innerHTML = `<div class="sun-grid">
+      <label class="check small-check"><input type="checkbox" id="sunOn" ${ui.sunOn ? 'checked' : ''}> <b>Sun study</b></label>
+      <div class="row"><label class="field-label">Latitude<input id="sunLat" type="number" step="0.01" value="${site.lat ?? ''}" placeholder="51.50"></label><label class="field-label">Longitude<input id="sunLon" type="number" step="0.01" value="${site.lon ?? ''}" placeholder="-0.12"></label></div>
+      <button class="btn small" id="sunHere">Use my location</button>
+      <label class="field-label">North <span id="sunNorthV">${Math.round(site.north || 0)}°</span><input id="sunNorth" type="range" min="0" max="359" value="${Math.round(site.north || 0)}"></label>
+      <label class="field-label">Date<input id="sunDate" type="date" value="${ui.sunDate}"></label>
+      <label class="field-label">Time <b id="sunTimeV">${ui.sunTime}</b><input id="sunTime" type="range" min="0" max="1439" step="15" value="${h * 60 + mi}"></label>
+      <p class="hint">${site.lat == null ? 'Enter where the house is (or use your location) to see real sunlight and shadows.' : `Sunrise ${hm(t?.rise)} · sunset ${hm(t?.set)}${pos ? ` · sun ${Math.round((pos.altitude * 180) / Math.PI)}° up, from ${compass(pos.bearing)}` : ''}`}</p>
+    </div>`;
+  const save = () => {
+    const lat = parseFloat($('#sunLat', m).value), lon = parseFloat($('#sunLon', m).value);
+    design.site = { ...(design.site || {}), lat: Number.isFinite(lat) ? Math.max(-90, Math.min(90, lat)) : undefined, lon: Number.isFinite(lon) ? Math.max(-180, Math.min(180, lon)) : undefined, north: +$('#sunNorth', m).value };
+    commit({ rebuild: false });
+  };
+  $('#sunOn', m).onchange = (e) => ((ui.sunOn = e.target.checked), pref.set('sunOn', ui.sunOn), renderSunPanel(), renderLevelBar());
+  $('#sunLat', m).onchange = () => (save(), renderSunPanel());
+  $('#sunLon', m).onchange = () => (save(), renderSunPanel());
+  $('#sunNorth', m).oninput = (e) => {
+    $('#sunNorthV', m).textContent = `${e.target.value}°`;
+    design.site = { ...(design.site || {}), north: +e.target.value };
+    applySun();
+  };
+  $('#sunNorth', m).onchange = () => save();
+  $('#sunDate', m).onchange = (e) => ((ui.sunDate = e.target.value || ui.sunDate), renderSunPanel());
+  $('#sunTime', m).oninput = (e) => {
+    const v = +e.target.value;
+    ui.sunTime = `${pad2(Math.floor(v / 60))}:${pad2(v % 60)}`;
+    $('#sunTimeV', m).textContent = ui.sunTime;
+    applySun();
+    renderLevelBar();
+  };
+  $('#sunTime', m).onchange = () => renderSunPanel();
+  $('#sunHere', m).onclick = () =>
+    navigator.geolocation
+      ? navigator.geolocation.getCurrentPosition(
+          (p) => ((design.site = { ...(design.site || {}), lat: +p.coords.latitude.toFixed(4), lon: +p.coords.longitude.toFixed(4) }), commit({ rebuild: false }), renderSunPanel()),
+          () => toast('Couldn’t get your location. Type the latitude and longitude instead (search the address on a map).')
+        )
+      : toast('Location isn’t available in this browser.');
+}
+
+const compass = (b) => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(((b * 180) / Math.PI) / 45) % 8];
+
 // ---------- 2D plan export ----------
 
 function planOpts(fi) {
@@ -1720,6 +1801,16 @@ async function boot() {
   viewer.library = library.items;
   viewer.wallMode = pref.get('wallMode', 'cut');
   Object.assign(viewer.display, pref.get('display', {}));
+  ui.sunOn = pref.get('sunOn', false);
+  const now = new Date();
+  ui.sunDate = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  ui.sunTime = `${pad2(now.getHours())}:00`;
+  // North arrow follows the camera
+  viewer.frameHooks.add(() => {
+    if ($('#northArrow').hidden) return;
+    const az = viewer.view === 'plan' || viewer.view === 'elevation' ? 0 : viewer.orbit.azimuthAngle;
+    $('#northArrow svg').style.transform = `rotate(${(design.site?.north || 0) + (az * 180) / Math.PI}deg)`;
+  });
   viewer.setAssetProxy((u) => {
     const base = workerUrl();
     if (!base || !/^https?:/i.test(u) || u.startsWith(location.origin)) return u;
@@ -1848,7 +1939,7 @@ function wireUI() {
       for (const [, o] of menus) if (o !== m) $(o).hidden = true;
       $(m).hidden = !$(m).hidden;
     };
-  document.addEventListener('click', (e) => [...menus.map(([, m]) => m), '#viewMenu'].forEach((m) => !$(m).contains(e.target) && ($(m).hidden = true)));
+  document.addEventListener('click', (e) => [...menus.map(([, m]) => m), '#viewMenu', '#sunPanel'].forEach((m) => !$(m).contains(e.target) && ($(m).hidden = true)));
   $('#exportMenu').onclick = (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     $('#exportMenu').hidden = true;

@@ -151,6 +151,11 @@ export function planSVG(design, fi, opts = {}) {
   for (let i = 0; i < 5; i++) bar.push(`<rect x="${sbX + i * k}" y="${sbY}" width="${k}" height="1.6" fill="${i % 2 ? '#ffffff' : '#2b2f35'}" stroke="#2b2f35" ${lw(0.15)}/>`);
   bar.push(`<text x="${sbX}" y="${sbY + 5}" font-size="2.2" fill="#1f2226">0</text><text x="${sbX + 5 * k}" y="${sbY + 5}" font-size="2.2" text-anchor="end" fill="#1f2226">5 m</text>`);
   const date = new Date().toISOString().slice(0, 10);
+  // North arrow (when the design has a site with north set)
+  if (design.site && Number.isFinite(design.site.north)) {
+    const cx = W - MARGIN - 124, cy = H - MARGIN - TITLE_H / 2 + 1;
+    bar.push(`<g transform="rotate(${design.site.north} ${cx} ${cy})"><circle cx="${cx}" cy="${cy}" r="6" fill="#fff" stroke="#2b2f35" ${lw(0.25)}/><path d="M${cx} ${cy - 5} L${cx + 2.2} ${cy + 2.5} L${cx} ${cy + 1} L${cx - 2.2} ${cy + 2.5} Z" fill="#2b2f35"/></g><text x="${cx}" y="${cy - 7}" font-size="2.6" font-weight="700" text-anchor="middle" fill="#1f2226">N</text>`);
+  }
   const title = `<rect x="${W - MARGIN - 110}" y="${H - MARGIN - TITLE_H + 2}" width="110" height="${TITLE_H - 2}" fill="#ffffff" stroke="#2b2f35" ${lw(0.3)}/>
     <text x="${W - MARGIN - 106}" y="${H - MARGIN - TITLE_H + 9}" font-size="4" font-weight="700" fill="#1f2226">${esc(opts.title || design.name)}</text>
     <text x="${W - MARGIN - 106}" y="${H - MARGIN - TITLE_H + 14.5}" font-size="3" fill="#1f2226">${esc(floor.name)} · ${Math.round(footprint(floor).reduce((s, p) => s + Math.abs(area(p[0].slice(0, -1))), 0) * 10) / 10} m² gross</text>
