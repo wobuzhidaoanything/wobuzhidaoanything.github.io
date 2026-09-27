@@ -119,10 +119,27 @@ function openingDressing(o, pl, y0, group) {
     doorMat.name = 'Door';
     const pivot = new THREE.Group();
     pivot.name = 'Door leaf';
-    pivot.position.copy(at(u0 + f, 0, 0));
-    // Swing into the side the normal points to (flip with o.swing = 'out').
-    const sw = o.swing === 'out' ? -1 : 1;
-    pivot.rotation.y = angle + (o.open ? sw * Math.PI / 2.4 : 0);
+    // Hinge at the wall's start side (default) or end side; swing toward the wall's normal side
+    // (default) or away from it.
+    const atEnd = o.hinge === 'end';
+    pivot.position.copy(at(atEnd ? u1 - f : u0 + f, 0, 0));
+    const base = angle + (atEnd ? Math.PI : 0);
+    const sw = (o.swing === 'out' ? -1 : 1) * (atEnd ? -1 : 1);
+    pivot.rotation.y = base + (o.open ? sw * Math.PI / 2.4 : 0);
+    // Plan symbol: the leaf fully open and its swing arc (shown in plan view only).
+    const arcPts = [];
+    for (let i = 0; i <= 24; i++) {
+      const t = (i / 24) * (Math.PI / 2) * sw;
+      arcPts.push(new THREE.Vector3(Math.cos(t) * leafW, 0, -Math.sin(t) * leafW));
+    }
+    arcPts.push(new THREE.Vector3(0, 0, 0));
+    const arc = new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPts), new THREE.LineBasicMaterial({ color: 0x5b6068 }));
+    arc.position.copy(pivot.position).setY(y0 + 0.02);
+    arc.rotation.y = base;
+    arc.userData.planOnly = true;
+    arc.userData.helper = true;
+    arc.visible = false;
+    g.add(arc);
     const leaf = mesh(new THREE.BoxGeometry(leafW, height - f, 0.04), doorMat, 'Leaf');
     leaf.position.set(leafW / 2, (height - f) / 2, 0);
     pivot.add(leaf);

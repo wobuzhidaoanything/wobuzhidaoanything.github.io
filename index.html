@@ -95,9 +95,12 @@
 
     <main class="stage" id="stage">
       <div class="viewport" id="viewport"></div>
-      <div class="floor-stack" id="floorStack"></div>
+      <div class="level-bar" id="levelBar" role="tablist" aria-label="Floors"></div>
+      <div class="tool-bar" id="toolBar" hidden></div>
+      <button class="edge-btn left" id="toggleLeft" title="Hide/show the left panel ([)" aria-label="Toggle left panel"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+      <button class="edge-btn right" id="toggleRight" title="Hide/show the right panel (])" aria-label="Toggle right panel"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
       <div class="banner" id="banner" hidden></div>
-      <div class="hintbar" id="hintbar"></div>
+      <div class="status-bar"><span id="hintbar"></span><span class="coords" id="coords"></span></div>
       <div class="walk-ui" id="walkUI" hidden>
         <div class="crosshair"></div>
         <div class="walk-help" id="walkHelp"></div>
@@ -210,9 +213,10 @@
     <form method="dialog">
       <h3>How to use</h3>
       <ul class="help">
-        <li><b>Floors:</b> pick a floor on the left of the view. Upper floors hide so you can see into the one you're on.</li>
+        <li><b>Floors:</b> pick a floor from the tabs at the top of the view (or <kbd>PgUp</kbd>/<kbd>PgDn</kbd>). Upper floors hide so you can see into the one you're on; <b>All floors</b> shows the whole house.</li>
         <li><b>Furniture:</b> drag a model card into the room, or press <b>Add</b>. Drag to move (it snaps to walls and sits on tables and rugs), drag the blue dot to rotate.</li>
-        <li><b>Edit house:</b> draw walls (click corners, double-click or Esc to finish), click inside enclosed walls to make a room, click a wall to add a door or window, place stairs. Drag walls, corners, doors and stairs to adjust them.</li>
+        <li><b>Edit house</b> (<kbd>E</kbd>): furniture fades so walls are easy to grab. Drag a corner to move it, drag a wall to push or pull it (neighbouring walls stretch, or new walls are added to make a recess or bay), double-click a wall to add a corner. Drag doors and windows along a wall or onto another wall. Rooms follow the walls automatically.</li>
+        <li><b>Tools:</b> <kbd>V</kbd> select, <kbd>W</kbd> wall, <kbd>D</kbd> door, <kbd>N</kbd> window, <kbd>O</kbd> opening, <kbd>S</kbd> stairs. Hold <kbd>Shift</kbd> while drawing or dragging to turn off snapping.</li>
         <li><b>Walk:</b> click the view to look around with the mouse, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to walk, <kbd>Shift</kbd> to hurry, and take the stairs between floors. <kbd>Esc</kbd> releases the mouse.</li>
         <li><b>Designs</b> are saved on this device automatically. Export a design file to share it, or a .glb to open in Blender.</li>
       </ul>
@@ -221,6 +225,7 @@
         <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Floor up / down</td><td><kbd>Del</kbd></td><td>Delete selection</td></tr>
         <tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>Rotate ±90°</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td><kbd>Esc</kbd></td><td>Deselect / stop tool</td></tr>
+        <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Hide/show side panels</td><td></td><td></td></tr>
       </table>
       <div class="actions"><span class="spacer"></span><button class="btn primary">Got it</button></div>
     </form>

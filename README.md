@@ -20,13 +20,17 @@ so pulling never touches them.
 
 - **Houses of any size, multi-floor:**
   - start a new house at any width, depth, number of floors and ceiling height;
-  - draw walls with snapping and live lengths;
-  - click to create rooms;
-  - add doors, windows and openings;
+  - draw walls with snapping and live lengths; rooms follow the walls automatically (names and finishes are kept);
+  - reshape like a CAD tool: drag corners, push or pull walls (neighbours stretch or a step is added), make a
+    recess or bay, double-click a wall to add a corner;
+  - add doors, windows and openings, then drag them along a wall or onto another; they never overlap, and you
+    can set the exact distance from either end, flip the hinge side and the swing;
   - place straight, L or U stairs, whose step height and depth follow real building rules and adapt to the
     floor-to-floor height (the stairwell is cut in the floor above);
   - import CAD floor plans (DXF).
-- **Floor by floor:** switch floors and see each one cut like an architect's plan, in 3D or top-down.
+- **Floor by floor:** level tabs over the view switch floors (or show the whole house); each floor is cut like
+  an architect's plan, in 3D or top-down. A status bar shows what a click will do and the pointer position;
+  `[` and `]` hide the side panels.
 - **Walk through:** first-person with mouse-look and W A S D. You collide with walls and furniture and climb
   the stairs step by step between floors.
 - **Furniture from links:** paste or drop product links (IKEA, Amazon, Wayfair, Shopify stores…). Their size,
@@ -54,7 +58,8 @@ js/plan.js              2D plan operations (wall union, room detection)
 js/house.js             house geometry (walls with CSG openings, slabs, stairs, railings)
 js/viewer.js            three.js viewer, floors, selection, dragging
 js/walk.js              walk-through with collisions and stairs
-js/tools.js             wall/room/door/window/stairs tools
+js/tools.js             wall/door/window/stairs tools
+js/edit.js              structure edits (corners, push/pull, recess, split, door moves, cleanup)
 js/app.js               UI, designs, undo, import/export
 js/models.js            parametric furniture models
 js/effects.js           ambient occlusion (quality setting)

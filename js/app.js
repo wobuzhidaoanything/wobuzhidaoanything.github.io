@@ -4,8 +4,9 @@ import { Tools } from './tools.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
 import { openStorage } from './storage.js';
-import { newHouse, newFloor, normalize, migrate, elevations, wallFrame, stairLayout, area, pointInPolygon, closestOnSegment, DEFAULTS } from './design.js';
-import { detectRooms, footprint } from './plan.js';
+import { newHouse, newFloor, normalize, migrate, elevations, wallFrame, stairLayout, area, pointInPolygon, closestOnSegment, validate, DEFAULTS } from './design.js';
+import { footprint } from './plan.js';
+import { cleanFloor, syncRooms, splitWall, makeRecess, moveCorner, moveOpening, openingGaps } from './edit.js';
 import { colorFromName } from '../shared/colors.js';
 import { guessCategory } from '../worker/src/scrape.js';
 import { WORKER_URL } from './config.js';
@@ -39,6 +40,7 @@ const ui = {
   editing: false, tool: null, pickedColor: {}, queue: [],
   quality: pref.get('quality', matchMedia('(pointer: coarse)').matches ? 'low' : 'high'),
   wallExterior: false, wallThickness: DEFAULTS.interiorWall, stairShape: 'straight', stairTurn: 'left',
+  doorWidth: 0.9, windowWidth: 1.2, openingWidth: 1.0, hint: '',
 };
 const history = { stack: [], index: -1 };
 
@@ -58,6 +60,17 @@ const dimsOf = (item) => {
   return { w: item.dims?.w || def[0], d: item.dims?.d || def[1], h: item.dims?.h || def[2] };
 };
 const colorOf = (item, p) => item.colors?.find((c) => c.name === p?.color) || (p?.color?.startsWith?.('#') ? { name: 'Custom', hex: p.color } : item.colors?.[0]);
+
+/**
+ * After any change to walls: no zero-length or duplicate walls, openings
+ * inside their walls, rooms re-detected (keeping names and finishes).
+ */
+function tidy(floor = floorNow()) {
+  const r = cleanFloor(floor);
+  syncRooms(floor);
+  if (r.droppedOpenings.length) toast(`${r.droppedOpenings.length} door/window${r.droppedOpenings.length > 1 ? 's' : ''} no longer fit and ${r.droppedOpenings.length > 1 ? 'were' : 'was'} removed.`, { undo: true });
+  return r;
+}
 
 // ---------- saving & undo ----------
 
@@ -130,7 +143,8 @@ function renderAll() {
   $('#furniturePanel').hidden = ui.editing;
   $('#buildPanel').hidden = !ui.editing;
   $('#qualityLabel').textContent = ui.quality === 'high' ? 'High' : 'Fast';
-  renderFloorStack();
+  renderLevelBar();
+  renderToolBar();
   if (ui.editing) renderBuildPanel();
   else renderInventory();
   renderInspector();
@@ -138,47 +152,93 @@ function renderAll() {
 }
 
 function updateHint() {
+  if (ui.hover) return ($('#hintbar').textContent = ui.hover);
   const v = viewer.view;
   const t = ui.tool;
   $('#hintbar').textContent =
     v === 'walk'
       ? ''
       : t === 'wall'
-        ? 'Click to start a wall, click again for each corner · double-click or Esc to finish · Shift for free angles'
+        ? 'Click to start a wall, click again for each corner · click the start point, double-click or Esc to finish · Shift for free angles'
         : t === 'room'
           ? 'Click inside an area enclosed by walls to make it a room'
-          : ['door', 'window', 'opening'].includes(t)
+          : t && ['door', 'window', 'opening'].includes(t)
             ? `Click a wall to add ${t === 'opening' ? 'an opening' : `a ${t}`}`
             : t === 'stairs'
               ? 'Click where the stairs start; they climb away from you (rotate them afterwards)'
               : ui.editing
-                ? 'Pick a tool on the left · drag walls, corners, doors and stairs to adjust them'
+                ? 'Drag corners, walls, doors and stairs · double-click a wall to add a corner · V W D N O S pick tools · E to finish'
                 : v === 'plan'
                   ? 'Drag furniture to move it · drag the blue dot to rotate · scroll to zoom · drag to pan'
                   : 'Drag furniture to move it · drag the blue dot to rotate · drag to orbit · right-drag to pan';
 }
 
-// ---------- floor stack ----------
+// ---------- level tabs & tool options ----------
 
-function renderFloorStack() {
+function renderLevelBar() {
   const ys = elevations(design);
-  const el = $('#floorStack');
+  const all = viewer.showAll;
+  const el = $('#levelBar');
   el.innerHTML =
     design.floors
-      .map((f, i) => ({ f, i }))
-      .reverse()
-      .map(({ f, i }) => `<button class="${i === viewer.activeFloor ? 'on' : ''}" data-floor="${i}" title="${esc(f.name)} · level ${cm(ys[i])} cm"><span>${i === 0 ? 'G' : i}</span><em>${esc(f.name)}</em></button>`)
+      .map((f, i) => `<button role="tab" class="${!all && i === viewer.activeFloor ? 'on' : ''}" data-floor="${i}" title="${esc(f.name)} · level ${cm(ys[i])} cm · double-click to rename"><span class="lv">${i === 0 ? 'G' : i}</span>${esc(f.name)}</button>`)
       .join('') +
-    (viewer.view === '3d' ? `<button class="walls" id="wallModeBtn" title="Show walls full height or cut like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '');
-  $$('[data-floor]', el).forEach((b) => (b.onclick = () => setFloor(+b.dataset.floor)));
-  const wm = $('#wallModeBtn', el);
-  if (wm) wm.onclick = () => (viewer.setWallMode(viewer.wallMode === 'cut' ? 'up' : 'cut'), pref.set('wallMode', viewer.wallMode), renderFloorStack());
+    (design.floors.length > 1 && viewer.view !== 'walk' ? `<button role="tab" class="${all ? 'on' : ''}" data-all title="See the whole house">All floors</button>` : '') +
+    (ui.editing ? '<span class="sep"></span><button class="add" data-addfloor title="Add a floor above the top one">+ Floor</button>' : '') +
+    (viewer.view === '3d' && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '');
+  $$('[data-floor]', el).forEach((b) => {
+    b.onclick = () => setFloor(+b.dataset.floor);
+    b.ondblclick = () => {
+      const f = design.floors[+b.dataset.floor];
+      const name = prompt('Floor name', f.name);
+      if (name?.trim()) (f.name = name.trim()), commit({ rebuild: false });
+    };
+  });
+  $('[data-all]', el)?.addEventListener('click', () => {
+    if (ui.tool) setTool(null);
+    viewer.setShowAll(true);
+    renderAll();
+  });
+  $('[data-addfloor]', el)?.addEventListener('click', addFloorAbove);
+  $('[data-walls]', el)?.addEventListener('click', () => {
+    viewer.setWallMode(viewer.wallMode === 'cut' ? 'up' : 'cut');
+    pref.set('wallMode', viewer.wallMode);
+    renderLevelBar();
+  });
 }
 
 function setFloor(i) {
+  if (i < 0 || i >= design.floors.length) return;
+  viewer.setShowAll(false);
   viewer.setActiveFloor(i);
   if (viewer.view === 'walk') walker.start(viewer.activeFloor);
   renderAll();
+}
+
+/** Options for the active tool, floating over the view (like a CAD options bar). */
+function renderToolBar() {
+  const el = $('#toolBar');
+  const t = ui.tool;
+  el.hidden = !t;
+  if (!t) return (el.innerHTML = '');
+  const seg = (attr, opts, cur) => `<div class="small-seg">${opts.map(([k, n]) => `<button data-${attr}="${k}" class="${cur === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+  const widthKey = { door: 'doorWidth', window: 'windowWidth', opening: 'openingWidth' }[t];
+  el.innerHTML =
+    `<b>${{ wall: 'Wall', door: 'Door', window: 'Window', opening: 'Opening', stairs: 'Stairs' }[t]}</b>` +
+    (t === 'wall' ? seg('ext', [['0', 'Interior'], ['1', 'Exterior']], ui.wallExterior ? '1' : '0') + `<label>Thickness <input type="number" id="tbThick" min="5" max="60" step="1" value="${cm(ui.wallThickness)}"> cm</label>` : '') +
+    (widthKey ? `<label>Width <input type="number" id="tbWidth" min="30" max="400" step="5" value="${cm(ui[widthKey])}"> cm</label>` : '') +
+    (t === 'stairs' ? seg('sshape', [['straight', 'Straight'], ['L', 'L-turn'], ['U', 'U-turn']], ui.stairShape) + (ui.stairShape !== 'straight' ? seg('sturn', [['left', 'Turn left'], ['right', 'Turn right']], ui.stairTurn) : '') : '') +
+    '<span>Esc to finish</span><button class="x" id="tbClose" title="Stop (Esc)">×</button>';
+  $$('[data-ext]', el).forEach((b) => (b.onclick = () => {
+    ui.wallExterior = b.dataset.ext === '1';
+    ui.wallThickness = ui.wallExterior ? DEFAULTS.exteriorWall : DEFAULTS.interiorWall;
+    renderToolBar();
+  }));
+  $('#tbThick', el)?.addEventListener('change', (e) => (ui.wallThickness = Math.max(0.05, parseFloat(e.target.value) / 100 || ui.wallThickness)));
+  $('#tbWidth', el)?.addEventListener('change', (e) => (ui[widthKey] = Math.max(0.3, parseFloat(e.target.value) / 100 || ui[widthKey])));
+  $$('[data-sshape]', el).forEach((b) => (b.onclick = () => ((ui.stairShape = b.dataset.sshape), renderToolBar())));
+  $$('[data-sturn]', el).forEach((b) => (b.onclick = () => ((ui.stairTurn = b.dataset.sturn), renderToolBar())));
+  $('#tbClose', el).onclick = () => setTool(null);
 }
 
 // ---------- furniture inventory ----------
@@ -305,47 +365,69 @@ function wallInspector(el, id) {
   const w = f.walls.find((x) => x.id === id);
   if (!w) return (el.innerHTML = '');
   const { len } = wallFrame(w);
-  const ops = f.openings.filter((o) => o.wall === id);
+  const ops = f.openings.filter((o) => o.wall === id).sort((a, b) => a.offset - b.offset);
   const edit = ui.editing;
+  const rw = Math.min(2, Math.max(0.5, +(len / 3).toFixed(2)));
   el.innerHTML = `<div class="insp"><h3>Wall</h3><div class="sub">${esc(f.name)} · ${w.exterior ? 'exterior' : 'interior'} · ${cm(len)} cm</div>
-    ${edit ? `<div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Length (cm)', `type="number" min="10" step="1" id="wLen" value="${cm(len)}"`)}${field('Thickness (cm)', `type="number" min="5" max="60" step="1" id="wThick" value="${cm(w.thickness)}"`)}</div></div>
-    <div class="group"><label class="row" style="gap:8px"><input type="checkbox" id="wExt" ${w.exterior ? 'checked' : ''}> Exterior wall</label></div>
-    <div class="group"><div class="lbl">Add to this wall</div><div class="row"><button class="btn small" data-add="door">+ Door</button><button class="btn small" data-add="window">+ Window</button><button class="btn small" data-add="opening">+ Opening</button></div></div>` : ''}
-    ${ops.length ? `<div class="group"><div class="lbl">On this wall</div>${ops.map((o) => `<button class="btn small ghost list-btn" data-op="${esc(o.id)}">${o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening'} · ${cm(o.width)} cm</button>`).join('')}</div>` : ''}
-    ${edit ? `<div class="group"><div class="row"><button class="btn small" id="wSplit">Split in two</button><button class="btn small danger" id="wDel">Delete wall</button></div></div>
-    <div class="tip">Drag the wall to move it, or drag the dots at its ends. Connected walls follow. Hold Shift for free movement.</div>` : '<div class="tip">Turn on <b>Edit house</b> to change walls.</div>'}</div>`;
+    ${edit ? `<div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Length (cm)', `type="number" min="10" step="1" id="wLen" value="${cm(len)}"`)}${field('Thickness (cm)', `type="number" min="5" max="60" step="1" id="wThick" value="${cm(w.thickness)}"`)}</div>
+      <label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="wExt" ${w.exterior ? 'checked' : ''}> Exterior wall</label></div>
+    <div class="group"><div class="lbl">Add to this wall</div><div class="row"><button class="btn small" data-add="door">+ Door</button><button class="btn small" data-add="window">+ Window</button><button class="btn small" data-add="opening">+ Opening</button></div></div>
+    <div class="group"><div class="lbl">Recess or bay</div>
+      <div class="num-row">${field('From start', `type="number" min="0" step="5" id="rStart" value="${cm((len - rw) / 2)}"`)}${field('Width', `type="number" min="20" step="5" id="rWidth" value="${cm(rw)}"`)}${field('Depth', `type="number" min="5" step="5" id="rDepth" value="60"`)}</div>
+      <div class="row" style="margin-top:8px"><button class="btn small" id="rIn" title="Push part of the wall into the building">Make recess</button><button class="btn small" id="rOut" title="Push part of the wall outward">Make bay</button></div></div>` : ''}
+    ${ops.length ? `<div class="group"><div class="lbl">On this wall</div>${ops.map((o) => `<button class="btn small ghost list-btn" data-op="${esc(o.id)}"><span>${o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening'} · ${cm(o.width)} cm</span><em>${cm(o.offset)} cm in</em></button>`).join('')}</div>` : ''}
+    ${edit ? `<div class="group"><div class="row"><button class="btn small" id="wSplit" title="Adds a corner in the middle; drag it to angle the wall">Add corner</button><button class="btn small danger" id="wDel">Delete wall</button></div></div>
+    <div class="tip">Drag the wall to push or pull it: square neighbours stretch, others get a step. Drag the dots to move corners (Shift for any angle). Double-click a wall to add a corner there.</div>` : '<div class="tip">Turn on <b>Edit house</b> (E) to change walls.</div>'}</div>`;
   $$('[data-op]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'opening', id: b.dataset.op })));
   if (!edit) return;
   $('#wLen', el).onchange = (e) => {
     const L = parseFloat(e.target.value) / 100;
-    if (!(L > 0.1)) return;
+    if (!(L >= 0.1)) return renderInspector();
     const { dir } = wallFrame(w);
-    const old = w.b.slice();
-    const nb = [+(w.a[0] + dir[0] * L).toFixed(4), +(w.a[1] + dir[1] * L).toFixed(4)];
-    for (const o of f.walls) for (const k of ['a', 'b']) if (Math.hypot(o[k][0] - old[0], o[k][1] - old[1]) < 0.01) o[k] = nb.slice();
+    moveCorner(f, w.b.slice(), [+(w.a[0] + dir[0] * L).toFixed(4), +(w.a[1] + dir[1] * L).toFixed(4)]);
+    tidy(f);
     commit();
   };
   $('#wThick', el).onchange = (e) => {
     const t = parseFloat(e.target.value) / 100;
-    if (t >= 0.05) (w.thickness = t), commit();
+    if (t >= 0.05 && t <= 0.6) (w.thickness = t), tidy(f), commit();
+    else renderInspector();
   };
   $('#wExt', el).onchange = (e) => ((w.exterior = e.target.checked), commit());
   $$('[data-add]', el).forEach((b) => (b.onclick = () => {
     const type = b.dataset.add;
-    const width = Math.min(type === 'window' ? 1.2 : 0.9, len - 0.2);
-    if (width < 0.3) return toast('This wall is too short for that.');
+    const width = Math.min(ui[type + 'Width'], len - 0.2);
+    if (width < (type === 'door' ? 0.6 : 0.3)) return toast('This wall is too short for that.');
     const oid = uid('o');
-    f.openings.push({ id: oid, type, wall: w.id, offset: +((len - width) / 2).toFixed(3), width, height: type === 'window' ? 1.3 : Math.min(2.1, f.height - 0.1), sill: type === 'window' ? 0.9 : 0 });
+    const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+    const probe = structuredClone(f);
+    probe.openings.push({ id: oid, type, wall: w.id, offset: 0, width, height: 1, sill: 0 });
+    if (!moveOpening(probe, oid, mid, { reach: 0.01 })) return toast('No free space left on this wall.');
+    const offset = probe.openings.find((o) => o.id === oid).offset;
+    f.openings.push({ id: oid, type, wall: w.id, offset, width, height: type === 'window' ? Math.min(1.3, f.height - 1) : Math.min(2.1, f.height - 0.1), sill: type === 'window' ? 0.9 : 0 });
     commit();
     viewer.select({ type: 'opening', id: oid });
   }));
-  $('#wSplit', el).onclick = () => {
-    const mid = [+((w.a[0] + w.b[0]) / 2).toFixed(4), +((w.a[1] + w.b[1]) / 2).toFixed(4)];
-    const nw = { ...w, id: uid('w'), a: mid, b: w.b.slice() };
-    for (const o of f.openings.filter((o) => o.wall === w.id && o.offset >= len / 2)) (o.wall = nw.id), (o.offset -= len / 2);
-    w.b = mid;
-    f.walls.push(nw);
+  const recess = (sign) => {
+    const start = parseFloat($('#rStart', el).value) / 100;
+    const width = parseFloat($('#rWidth', el).value) / 100;
+    const depth = parseFloat($('#rDepth', el).value) / 100;
+    if (!(start >= 0 && width >= 0.2 && depth >= 0.05)) return toast('Enter a start, width (20 cm or more) and depth.');
+    if (start + width > len + 1e-6) return toast(`That runs past the end of the wall (${cm(len)} cm).`);
+    const cut = f.openings.find((o) => o.wall === w.id && o.offset < start + width && o.offset + o.width > start && (o.offset < start || o.offset + o.width > start + width));
+    if (cut) return toast(`A ${cut.type} crosses the edge of that ${sign > 0 ? 'recess' : 'bay'}. Move it or change the numbers.`);
+    const mid = makeRecess(f, w.id, { start, width, depth: sign * depth });
+    tidy(f);
     commit();
+    viewer.select({ type: 'wall', id: mid });
+    toast(sign > 0 ? 'Recess made. Drag the back wall to change its depth.' : 'Bay made. Drag the front wall to change its depth.', { undo: true });
+  };
+  $('#rIn', el).onclick = () => recess(1);
+  $('#rOut', el).onclick = () => recess(-1);
+  $('#wSplit', el).onclick = () => {
+    if (!splitWall(f, w.id, len / 2)) return toast('This wall is too short to split.');
+    commit();
+    toast('Corner added in the middle. Drag its dot to move it.');
   };
   $('#wDel', el).onclick = () => deleteSelection();
 }
@@ -356,31 +438,54 @@ function openingInspector(el, id) {
   if (!o) return (el.innerHTML = '');
   const w = f.walls.find((x) => x.id === o.wall);
   const { len } = wallFrame(w);
+  const g = openingGaps(f, id);
   const name = o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening';
-  if (!ui.editing) return (el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · ${cm(o.width)} × ${cm(o.height)} cm</div><div class="tip">Turn on <b>Edit house</b> to change it.</div></div>`);
-  el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · wall ${cm(len)} cm</div>
+  if (!ui.editing) return (el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · ${cm(o.width)} × ${cm(o.height)} cm</div><div class="tip">Turn on <b>Edit house</b> (E) to change it.</div></div>`);
+  el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · on a ${cm(len)} cm wall</div>
     <div class="group"><div class="lbl">Type</div><div class="seg small-seg">${['door', 'window', 'opening'].map((t) => `<button data-type="${t}" class="${o.type === t ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div></div>
-    <div class="group"><div class="num-row">${field('Width', `type="number" min="30" step="1" data-k="width" value="${cm(o.width)}"`)}${field('Height', `type="number" min="30" step="1" data-k="height" value="${cm(o.height)}"`)}${o.type === 'window' ? field('Sill', `type="number" min="0" step="1" data-k="sill" value="${cm(o.sill)}"`) : field('From corner', `type="number" min="0" step="1" data-k="offset" value="${cm(o.offset)}"`)}</div>
-    ${o.type === 'window' ? `<div class="num-row" style="margin-top:6px">${field('From corner', `type="number" min="0" step="1" data-k="offset" value="${cm(o.offset)}"`)}</div>` : ''}</div>
-    ${o.type === 'door' ? `<div class="group"><label class="row" style="gap:8px"><input type="checkbox" id="oOpen" ${o.open ? 'checked' : ''}> Shown open</label><div class="row" style="margin-top:8px"><button class="btn small" id="oSwing">Flip swing side</button></div></div>` : ''}
+    <div class="group"><div class="num-row">${field('Width', `type="number" min="30" step="1" data-k="width" value="${cm(o.width)}"`)}${field('Height', `type="number" min="30" step="1" data-k="height" value="${cm(o.height)}"`)}${o.type === 'window' ? field('Sill', `type="number" min="0" step="1" data-k="sill" value="${cm(o.sill)}"`) : '<span></span>'}</div></div>
+    <div class="group"><div class="lbl">Position <span>${cm(g.left)} cm clear · ${cm(g.right)} cm clear</span></div><div class="num-row" style="grid-template-columns:1fr 1fr">${field('From start', `type="number" min="0" step="1" data-pos="start" value="${cm(o.offset)}"`)}${field('From end', `type="number" min="0" step="1" data-pos="end" value="${cm(len - o.offset - o.width)}"`)}</div></div>
+    ${o.type === 'door' ? `<div class="group"><div class="lbl">Swing</div><div class="row"><button class="btn small" id="oHinge" title="Hinge on the other side">⇄ Hinge side</button><button class="btn small" id="oSwing" title="Open to the other side of the wall">⇅ Flip swing</button></div><label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="oOpen" ${o.open ? 'checked' : ''}> Shown open</label></div>` : ''}
     <div class="group"><button class="btn small danger" id="oDel">Delete</button></div>
-    <div class="tip">Drag it along the wall to move it.</div></div>`;
+    <div class="tip">Drag it along the wall, or onto another wall. It stops at other doors and windows. Arrow keys nudge it 1 cm (Shift: 10 cm).</div></div>`;
   $$('[data-type]', el).forEach((b) => (b.onclick = () => {
     o.type = b.dataset.type;
-    if (o.type === 'window') Object.assign(o, { sill: 0.9, height: Math.min(o.height, 1.4) });
-    else Object.assign(o, { sill: 0, height: Math.min(2.1, f.height - 0.1) });
+    if (o.type === 'window') Object.assign(o, { sill: 0.9, height: Math.min(o.height, 1.4, f.height - 1) });
+    else Object.assign(o, { sill: 0, height: Math.min(2.1, f.height - 0.1), width: o.type === 'door' ? Math.max(o.width, 0.6) : o.width });
+    tidy(f);
     commit();
   }));
+  const place = (offset) => {
+    // Through moveOpening so it never overlaps a neighbour or leaves the wall.
+    const { dir } = wallFrame(w);
+    const u = Math.max(0, Math.min(len - o.width, offset)) + o.width / 2;
+    moveOpening(f, id, [w.a[0] + dir[0] * u, w.a[1] + dir[1] * u], { reach: 0.01, snap: 0.01 });
+  };
   $$('[data-k]', el).forEach((inp) => (inp.onchange = () => {
     const v = parseFloat(inp.value) / 100;
-    if (!Number.isFinite(v) || v < 0) return;
-    o[inp.dataset.k] = v;
-    o.width = Math.min(o.width, len - 0.04);
-    o.offset = Math.max(0.02, Math.min(len - o.width - 0.02, o.offset));
+    const k = inp.dataset.k;
+    const min = { width: o.type === 'door' ? 0.6 : 0.3, height: 0.3, sill: 0 }[k];
+    if (!Number.isFinite(v) || v < min) return toast(`Minimum ${cm(min)} cm.`), renderInspector();
+    if (k === 'width') {
+      const room = g.left + g.right + o.width - 0.1;
+      if (v > room) return toast(`Only ${cm(room)} cm free here.`), renderInspector();
+      const grow = v - o.width;
+      o.width = v;
+      if (g.right < grow + 0.05) o.offset = Math.max(0.05, o.offset - (grow + 0.05 - g.right));
+    } else if (k === 'height') o.height = Math.min(v, f.height - (o.type === 'window' ? o.sill : 0) - 0.05);
+    else o.sill = Math.min(v, f.height - o.height - 0.05);
+    tidy(f);
+    commit();
+  }));
+  $$('[data-pos]', el).forEach((inp) => (inp.onchange = () => {
+    const v = parseFloat(inp.value) / 100;
+    if (!Number.isFinite(v) || v < 0) return renderInspector();
+    place(inp.dataset.pos === 'start' ? v : len - o.width - v);
     commit();
   }));
   if ($('#oOpen', el)) $('#oOpen', el).onchange = (e) => ((o.open = e.target.checked), commit());
   if ($('#oSwing', el)) $('#oSwing', el).onclick = () => ((o.swing = o.swing === 'out' ? 'in' : 'out'), commit());
+  if ($('#oHinge', el)) $('#oHinge', el).onclick = () => ((o.hinge = o.hinge === 'end' ? 'start' : 'end'), commit());
   $('#oDel', el).onclick = () => deleteSelection();
 }
 
@@ -420,13 +525,12 @@ function roomInspector(el, id) {
     <div class="group"><label class="field-label">Name<input id="rName" value="${esc(r.name || '')}"></label></div>
     <div class="group"><div class="lbl">Floor finish</div><div class="swatch-input"><select id="rKind">${['wood', 'tiles', 'carpet', 'concrete'].map((k) => `<option ${r.floorKind === k ? 'selected' : ''}>${k}</option>`).join('')}</select><input type="color" id="rColor" value="${esc(r.floorColor || '#c49a6c')}"></div></div>
     ${items.length ? `<div class="group"><div class="lbl">In this room</div>${items.map((p) => `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}">${esc(itemById(p.itemId)?.name || 'Item')}</button>`).join('')}</div>` : ''}
-    ${ui.editing ? '<div class="group"><button class="btn small danger" id="rDel">Remove room floor</button></div>' : ''}</div>`;
+    ${ui.editing ? '<div class="tip">Rooms follow the walls. Delete or move a wall to merge or reshape rooms.</div>' : ''}</div>`;
   $('#rName', el).onchange = (e) => ((r.name = e.target.value.trim()), commit());
   $('#rKind', el).onchange = (e) => ((r.floorKind = e.target.value), commit());
   $('#rColor', el).oninput = (e) => (r.floorColor = e.target.value);
   $('#rColor', el).onchange = () => commit();
   $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'item', id: b.dataset.sel })));
-  if ($('#rDel', el)) $('#rDel', el).onclick = () => deleteSelection();
 }
 
 function floorInspector(el) {
@@ -437,6 +541,7 @@ function floorInspector(el) {
   el.innerHTML = `<div class="insp"><h3>${esc(f.name)}</h3><div class="sub">Level ${cm(ys[fi])} cm · ${gross.toFixed(1)} m² · ${f.rooms.length} rooms · ${f.placed.length} items</div>
     ${ui.editing ? `<div class="group"><label class="field-label">Floor name<input id="fName" value="${esc(f.name)}"></label></div>
     <div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Ceiling height (cm)', `type="number" min="200" max="600" step="5" id="fHeight" value="${cm(f.height)}"`)}${field(fi === 0 ? 'Ground slab (cm)' : 'Floor slab (cm)', `type="number" min="5" max="60" step="1" id="fSlab" value="${cm(f.slab)}"`)}</div></div>` : ''}
+    ${ui.editing ? floorProblems(f, fi) : ''}
     ${f.rooms.length ? `<div class="group"><div class="lbl">Rooms</div>${f.rooms.map((r) => `<button class="btn small ghost list-btn" data-room="${esc(r.id)}"><span>${esc(r.name || 'Room')}</span><em>${Math.abs(area(r.points)).toFixed(1)} m²</em></button>`).join('')}</div>` : ''}
     ${f.placed.length ? `<div class="group"><div class="lbl">Furniture</div>${f.placed.map((p) => {
       const it = itemById(p.itemId);
@@ -466,12 +571,24 @@ function floorInspector(el) {
   if ($('#editHouse', el)) $('#editHouse', el).onclick = () => setEditing(true);
 }
 
+function floorProblems(f, fi) {
+  const ys = elevations(design);
+  const list = validate(design)
+    .filter((p) => p.startsWith(`floor "${f.name}"`) && !/refers to missing item/.test(p))
+    .map((p) => p.replace(/^floor "[^"]*":?\s*/, '').replace(/ \b(wall|stairs|door|window|opening) [a-z]+-[a-z0-9]+/g, ' $1'));
+  if (fi < design.floors.length - 1) for (const s of f.stairs) if (!tools.stairFits(s, ys[fi + 1] - ys[fi])) list.push('stairs cross a wall or leave the floor');
+  for (const p of f.placed) if (!itemById(p.itemId)) list.push('a placed item has no model in your library');
+  if (!f.rooms.length && f.walls.length) list.push('no enclosed rooms yet: close the walls into a loop');
+  if (!list.length) return '<div class="group problems ok">✓ No problems on this floor</div>';
+  return `<div class="group problems"><div class="lbl">Check</div><ul>${list.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>`;
+}
+
 // ---------- build panel (edit mode) ----------
 
+const TOOL_KEYS = { select: 'V', wall: 'W', door: 'D', window: 'N', opening: 'O', stairs: 'S' };
 const TOOLS = [
   ['select', 'Select', '<path d="M5 3l14 8-6 2-2 6z"/>'],
   ['wall', 'Wall', '<path d="M3 17h18M3 17V7h18v10M8 7v10M14 7v10"/>'],
-  ['room', 'Room', '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M9 9h6v6H9z"/>'],
   ['door', 'Door', '<path d="M6 21V4h10v17M4 21h16"/><circle cx="13" cy="13" r="1"/>'],
   ['window', 'Window', '<rect x="4" y="5" width="16" height="14"/><path d="M12 5v14M4 12h16"/>'],
   ['opening', 'Opening', '<path d="M5 21V8a7 7 0 0 1 14 0v13"/>'],
@@ -484,12 +601,8 @@ function renderBuildPanel() {
   const fi = viewer.activeFloor;
   el.innerHTML = `<section>
       <h2>Build · ${esc(floorNow().name)}</h2>
-      <div class="tool-grid">${TOOLS.map(([k, name, svg]) => `<button class="tool ${t === k ? 'on' : ''}" data-tool="${k}"><svg viewBox="0 0 24 24">${svg}</svg>${name}</button>`).join('')}</div>
-      ${t === 'wall' ? `<div class="tool-opts"><div class="seg small-seg"><button data-ext="0" class="${!ui.wallExterior ? 'on' : ''}">Interior</button><button data-ext="1" class="${ui.wallExterior ? 'on' : ''}">Exterior</button></div>
-        <label class="inline-field">Thickness <input type="number" id="wallT" min="5" max="60" step="1" value="${cm(ui.wallThickness)}"> cm</label></div>` : ''}
-      ${t === 'stairs' ? `<div class="tool-opts"><div class="seg small-seg">${[['straight', 'Straight'], ['L', 'L-turn'], ['U', 'U-turn']].map(([k, n]) => `<button data-sshape="${k}" class="${ui.stairShape === k ? 'on' : ''}">${n}</button>`).join('')}</div>
-        ${ui.stairShape !== 'straight' ? `<div class="seg small-seg">${['left', 'right'].map((k) => `<button data-sturn="${k}" class="${ui.stairTurn === k ? 'on' : ''}">Turn ${k}</button>`).join('')}</div>` : ''}</div>` : ''}
-      <div class="row" style="margin-top:10px"><button class="btn small" id="detectRooms" title="Create rooms for every area enclosed by walls">Detect rooms</button></div>
+      <div class="tool-grid">${TOOLS.map(([k, name, svg]) => `<button class="tool ${t === k ? 'on' : ''}" data-tool="${k}" title="${name} (${TOOL_KEYS[k]})"><svg viewBox="0 0 24 24">${svg}</svg>${name}</button>`).join('')}</div>
+      <p class="hint" style="margin:10px 0 0">Rooms follow the walls automatically. Drag a corner or a wall to reshape; double-click a wall to add a corner.</p>
     </section>
     <section>
       <h2>Floors</h2>
@@ -502,27 +615,6 @@ function renderBuildPanel() {
       <p class="hint" style="margin-top:8px">Have a floor plan image? Give it to your AI agent (see <b>Agents</b>) and it will trace it into this house.</p>
     </section>`;
   $$('[data-tool]', el).forEach((b) => (b.onclick = () => setTool(b.dataset.tool === 'select' ? null : b.dataset.tool)));
-  $$('[data-ext]', el).forEach((b) => (b.onclick = () => {
-    ui.wallExterior = b.dataset.ext === '1';
-    ui.wallThickness = ui.wallExterior ? DEFAULTS.exteriorWall : DEFAULTS.interiorWall;
-    renderBuildPanel();
-  }));
-  if ($('#wallT', el)) $('#wallT', el).onchange = (e) => (ui.wallThickness = Math.max(0.05, parseFloat(e.target.value) / 100 || ui.wallThickness));
-  $$('[data-sshape]', el).forEach((b) => (b.onclick = () => ((ui.stairShape = b.dataset.sshape), renderBuildPanel())));
-  $$('[data-sturn]', el).forEach((b) => (b.onclick = () => ((ui.stairTurn = b.dataset.sturn), renderBuildPanel())));
-  $('#detectRooms', el).onclick = () => {
-    const f = floorNow();
-    const found = detectRooms(f);
-    let added = 0;
-    for (const pts of found) {
-      const [cx, cz] = pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
-      const existing = f.rooms.find((r) => pointInPolygon(cx, cz, r.points));
-      if (existing) existing.points = pts;
-      else (f.rooms.push({ id: uid('r'), name: `Room ${f.rooms.length + 1}`, points: pts, floorKind: 'wood', floorColor: '#c49a6c' }), added++);
-    }
-    commit();
-    toast(found.length ? `${found.length} enclosed area${found.length > 1 ? 's' : ''} found, ${added} new room${added === 1 ? '' : 's'}.` : 'No fully enclosed areas yet. Close the walls first.');
-  };
   $$('[data-f]', el).forEach((b) => (b.onclick = () => setFloor(+b.dataset.f)));
   $('#addFloor', el).onclick = addFloorAbove;
   $('#delFloor', el).onclick = deleteFloor;
@@ -543,7 +635,7 @@ function addFloorAbove() {
   // Copy the exterior walls so the new storey sits on the one below.
   f.walls = top.walls.filter((w) => w.exterior).map((w) => ({ ...w, id: uid('w'), a: w.a.slice(), b: w.b.slice() }));
   if (!f.walls.length) f.walls = top.walls.map((w) => ({ ...w, id: uid('w'), a: w.a.slice(), b: w.b.slice() }));
-  f.rooms = detectRooms(f).map((pts, i) => ({ id: uid('r'), name: `Room ${i + 1}`, points: pts, floorKind: 'wood', floorColor: '#c49a6c' }));
+  syncRooms(f);
   design.floors.push(f);
   commit();
   setFloor(design.floors.length - 1);
@@ -563,9 +655,11 @@ function deleteFloor() {
 }
 
 function setEditing(on) {
+  if (on && viewer.view === 'walk') setView('3d');
   ui.editing = on;
   if (!on && ui.tool) setTool(null);
-  if (on && viewer.view === 'walk') setView('3d');
+  if (on && viewer.showAll) viewer.setShowAll(false);
+  viewer.setEditMode(on);
   viewer.select(null);
   renderAll();
 }
@@ -676,9 +770,10 @@ function deleteSelection() {
   else if (s.type === 'wall') {
     f.walls = f.walls.filter((w) => w.id !== s.id);
     f.openings = f.openings.filter((o) => o.wall !== s.id);
+    tidy(f);
   } else if (s.type === 'opening') f.openings = f.openings.filter((o) => o.id !== s.id);
   else if (s.type === 'stairs') f.stairs = f.stairs.filter((x) => x.id !== s.id);
-  else if (s.type === 'room') f.rooms = f.rooms.filter((r) => r.id !== s.id);
+  else if (s.type === 'room') return toast('Rooms follow the walls. Delete a wall to merge two rooms.');
   viewer.select(null);
   commit({ rebuild: s.type !== 'item' });
   toast('Deleted.', { undo: true });
@@ -1001,8 +1096,8 @@ async function importDxf(file) {
       f.rooms = [];
     }
     for (const [a, b] of j.lines) f.walls.push({ id: uid('w'), a, b, thickness: DEFAULTS.interiorWall });
-    const rooms = detectRooms(f);
-    for (const pts of rooms) f.rooms.push({ id: uid('r'), name: `Room ${f.rooms.length + 1}`, points: pts, floorKind: 'wood', floorColor: '#c49a6c' });
+    tidy(f);
+    const rooms = f.rooms;
     commit();
     viewer.frameHouse(true);
     toast(`Imported ${j.lines.length} wall lines (${j.spanMetres} m across${j.unitsKnown ? '' : ', units guessed'}) and found ${rooms.length} rooms. Mark exterior walls and set thickness in Edit house.`);
@@ -1087,7 +1182,9 @@ async function refreshAgentsDot() {
 // ---------- views & walking ----------
 
 function setView(v) {
+  if (v === 'walk' && ui.editing) setEditing(false);
   if (v === 'walk' && ui.tool) setTool(null);
+  if (v === 'walk' && viewer.showAll) viewer.setShowAll(false);
   viewer.setView(v);
   $$('#viewSeg button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
   $('#walkUI').hidden = v !== 'walk';
@@ -1191,7 +1288,27 @@ async function boot() {
     onLive: () => renderInspector(),
     onCommit: () => commit({ rebuild: false }),
     onStructureLive: () => viewer.setDesign(design),
-    onStructureCommit: () => commit(),
+    onStructureCommit: () => {
+      tidy();
+      commit();
+    },
+    onWallDblClick: (id, [x, z]) => {
+      if (!ui.editing || ui.tool) return;
+      const f = floorNow();
+      const w = f.walls.find((q) => q.id === id);
+      if (!w) return;
+      const c = closestOnSegment([x, z], w.a, w.b);
+      const at = Math.round(c.t * wallFrame(w).len * 20) / 20;
+      const nw = splitWall(f, id, at);
+      if (!nw) return toast('Too close to a corner to add one here.');
+      commit();
+      toast('Corner added. Drag its dot to move it.');
+    },
+    onHover: (t) => {
+      ui.hover = t || '';
+      updateHint();
+    },
+    onPointer: (x, z) => ($('#coords').textContent = `x ${x.toFixed(2)} m · z ${z.toFixed(2)} m`),
     editable: () => ui.editing,
     onModelError: (item) => toast(`Couldn't load the 3D model for “${item.name}”, showing a generated one.`),
     onPointerLock: (locked) => walkHelp(locked),
@@ -1208,7 +1325,7 @@ async function boot() {
   walker = new Walker(viewer, {
     onFloor: (fi) => {
       viewer.activeFloor = fi;
-      renderFloorStack();
+      renderLevelBar();
       walkHelp(!!document.pointerLockElement);
       renderInspector();
       if ($('#leaveWalk')) $('#leaveWalk').onclick = () => setView('3d');
@@ -1217,6 +1334,7 @@ async function boot() {
   tools = new Tools(viewer, {
     edit: (fn) => {
       fn(floorNow());
+      tidy();
       commit();
     },
     notify: (name, msg) => {
@@ -1226,7 +1344,7 @@ async function boot() {
         renderAll();
       }
     },
-    options: () => ({ exterior: ui.wallExterior, thickness: ui.wallThickness, stairShape: ui.stairShape, stairTurn: ui.stairTurn }),
+    options: () => ({ exterior: ui.wallExterior, thickness: ui.wallThickness, stairShape: ui.stairShape, stairTurn: ui.stairTurn, doorWidth: ui.doorWidth, windowWidth: ui.windowWidth, openingWidth: ui.openingWidth }),
   });
   resetHistory();
   wireUI();
@@ -1449,6 +1567,27 @@ function wireUI() {
       s.rot = ((((s.rot || 0) + (e.shiftKey ? -90 : 90)) % 360) + 360) % 360;
       commit();
     } else if (k === 'e' && !mod) setEditing(!ui.editing);
+    else if (ui.editing && !mod && !e.shiftKey && { v: 1, w: 1, d: 1, n: 1, o: 1, s: 1 }[k]) {
+      const t = { v: null, w: 'wall', d: 'door', n: 'window', o: 'opening', s: 'stairs' }[k];
+      setTool(t === ui.tool ? null : t);
+    } else if (k === '[' && !mod) togglePanel('left');
+    else if (k === ']' && !mod) togglePanel('right');
+    else if (k.startsWith('arrow') && sel?.type === 'opening' && ui.editing && (k === 'arrowleft' || k === 'arrowright')) {
+      e.preventDefault();
+      const f = floorNow();
+      const o = f.openings.find((q) => q.id === sel.id);
+      const w = f.walls.find((q) => q.id === o.wall);
+      const { dir, len } = wallFrame(w);
+      // Left/right along the wall as seen on screen
+      const sx = Math.sign(dir[0]) || Math.sign(dir[1]);
+      const step = (e.shiftKey ? 0.1 : 0.01) * (k === 'arrowright' ? sx : -sx);
+      const u = Math.max(0, Math.min(len - o.width, o.offset + step)) + o.width / 2;
+      moveOpening(f, o.id, [w.a[0] + dir[0] * u, w.a[1] + dir[1] * u], { reach: 0.01, snap: 0.01 });
+      viewer.setDesign(design);
+      renderInspector();
+      clearTimeout(wireUI.nudge);
+      wireUI.nudge = setTimeout(() => commit(), 400);
+    }
     else if (['1', '2', '3'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'walk' }[k]);
     else if (k === 'pageup') (e.preventDefault(), setFloor(viewer.activeFloor + 1));
     else if (k === 'pagedown') (e.preventDefault(), setFloor(viewer.activeFloor - 1));
@@ -1464,7 +1603,16 @@ function wireUI() {
       wireUI.nudge = setTimeout(() => commit({ rebuild: false }), 400);
     }
   });
+  $('#toggleLeft').onclick = () => togglePanel('left');
+  $('#toggleRight').onclick = () => togglePanel('right');
+  for (const side of ['left', 'right']) if (pref.get('hide-' + side, false)) document.body.classList.add('hide-' + side);
   walkHelp(false);
+}
+
+function togglePanel(side) {
+  document.body.classList.toggle('hide-' + side);
+  pref.set('hide-' + side, document.body.classList.contains('hide-' + side));
+  setTimeout(() => viewer.resize?.(), 0);
 }
 
 function openSettings() {

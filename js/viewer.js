@@ -13,6 +13,7 @@ import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-
 import { buildParametric, tintModel, DEFAULT_DIMS } from './models.js';
 import { buildHouse, wallUnion } from './house.js';
 import { elevations, wallFrame, wallRect, pointInPolygon, closestOnSegment, area } from './design.js';
+import { pushWall, moveCorner, moveOpening, openingGaps, wallsAt } from './edit.js';
 
 // Fast raycasting everywhere (picking, walking) via bounding volume hierarchies.
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -65,6 +66,8 @@ export class Viewer {
     this.modelCache = new Map();
     this.assetProxy = null;
     this.tool = null; // set by tools.js
+    this.editMode = false;
+    this.showAll = false;
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }));
     r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -154,6 +157,10 @@ export class Viewer {
     this.overlay.add(this.wallHighlight);
     this.handles = new THREE.Group();
     this.overlay.add(this.handles);
+    this.pickBoxes = new THREE.Group();
+    this.overlay.add(this.pickBoxes);
+    this.wallLabels = new THREE.Group();
+    scene.add(this.wallLabels);
     this.selLabel = label('dim-label');
     this.selLabel.visible = false;
     scene.add(this.selLabel);
@@ -167,13 +174,15 @@ export class Viewer {
 
     const el = r.domElement;
     this.listeners = [
-      [el, 'pointerdown', (e) => this.onDown(e)],
+      // Capture phase on the container: runs before the camera controls see the press, so a drag
+      // on a wall, door or item never also pans or orbits the view.
+      [container, 'pointerdown', (e) => e.target === el && this.onDown(e), true],
       [el, 'pointermove', (e) => this.onMove(e)],
       [window, 'pointerup', (e) => this.onUp(e)],
-      [el, 'dblclick', (e) => this.tool?.onDblClick?.(e)],
+      [el, 'dblclick', (e) => this.onDblClick(e)],
       [el, 'contextmenu', (e) => e.preventDefault()],
     ];
-    for (const [t, n, f] of this.listeners) t.addEventListener(n, f);
+    for (const [t, n, f, c] of this.listeners) t.addEventListener(n, f, !!c);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -185,7 +194,7 @@ export class Viewer {
 
   dispose() {
     this.renderer.setAnimationLoop(null);
-    for (const [t, n, f] of this.listeners) t.removeEventListener(n, f);
+    for (const [t, n, f, c] of this.listeners) t.removeEventListener(n, f, !!c);
     this.resizeObserver.disconnect();
     this.orbit.dispose();
     this.plan.dispose();
@@ -298,6 +307,7 @@ export class Viewer {
     this.resize();
     this.applyFloorVisibility();
     this.refreshRoomLabels();
+    this.refreshEditOverlay();
     this.updateSelection();
   }
 
@@ -320,6 +330,7 @@ export class Viewer {
     if (this.sel?.type !== 'item' || this.items.get(this.sel.id)?.floorIndex !== i) this.select(null);
     this.applyFloorVisibility();
     this.refreshRoomLabels();
+    this.refreshEditOverlay();
     if (this.view === 'walk') return;
     for (const c of [this.orbit, this.plan]) {
       const pos = c.getPosition(new THREE.Vector3());
@@ -331,21 +342,102 @@ export class Viewer {
   setWallMode(mode) {
     this.wallMode = mode;
     this.applyFloorVisibility();
+    this.refreshEditOverlay();
+    this.updateSelection();
   }
 
   /** Floors above the active one are hidden; the active floor is cut at plan height (or full). */
   applyFloorVisibility() {
     if (!this.house) return;
     const walk = this.view === 'walk';
-    const allUp = this.activeFloor === -1;
+    const all = this.showAll && !walk;
     for (const f of this.house.floors) {
       const above = f.index > this.activeFloor;
-      f.group.visible = walk || allUp || !above;
-      const cut = !walk && f.index === this.activeFloor && (this.view === 'plan' || this.wallMode === 'cut');
+      f.group.visible = walk || all || !above;
+      const cut = !walk && !all && f.index === this.activeFloor && (this.view === 'plan' || this.wallMode === 'cut');
       for (const m of f.clipMaterials || []) m.clippingPlanes = cut ? [f.clipPlane] : [];
       if (f.cap) f.cap.visible = cut;
     }
-    this.house.group.traverse((o) => o.userData.roof && (o.visible = walk));
+    this.house.group.traverse((o) => {
+      if (o.userData.roof) o.visible = walk || all;
+    });
+    // Door swings are drawn for the floor being edited only (lower floors show through outside the slab)
+    for (const f of this.house.floors)
+      f.group.traverse((o) => {
+        if (o.userData.planOnly) o.visible = this.view === 'plan' && !all && f.index === this.activeFloor;
+      });
+  }
+
+  setShowAll(on) {
+    this.showAll = on;
+    if (on) this.select(null);
+    this.applyFloorVisibility();
+    this.refreshRoomLabels();
+    this.refreshEditOverlay();
+  }
+
+  /** Edit mode: furniture fades and can't be picked, so structure is always easy to grab. */
+  setEditMode(on) {
+    this.editMode = on;
+    for (const rec of this.items.values()) this.ghost(rec, on);
+    if (this.sel?.type === 'item' && on) this.select(null);
+    this.refreshEditOverlay();
+  }
+
+  ghost(rec, on) {
+    rec.group.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material)) {
+        if (on && !m.userData.ghost) {
+          m.userData.ghost = { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite };
+          Object.assign(m, { transparent: true, opacity: m.opacity * 0.22, depthWrite: false });
+          m.needsUpdate = true;
+        } else if (!on && m.userData.ghost) {
+          Object.assign(m, m.userData.ghost);
+          delete m.userData.ghost;
+          m.needsUpdate = true;
+        }
+      }
+      o.castShadow = !on;
+    });
+  }
+
+  /** Corner handles, wall lengths and opening pick boxes for the active floor (edit mode). */
+  refreshEditOverlay() {
+    this.handles.clear();
+    this.pickBoxes.clear();
+    this.wallLabels.clear();
+    const floor = this.activeFloorData;
+    if (!this.editMode || !floor || !this.house || this.view === 'walk' || this.showAll) return;
+    const y0 = this.floorY;
+    const top = y0 + (this.view === 'plan' || this.wallMode === 'cut' ? CUT_HEIGHT : floor.height) + 0.03;
+    const seen = [];
+    for (const w of floor.walls) {
+      for (const p of [w.a, w.b]) {
+        if (seen.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.01)) continue;
+        seen.push(p);
+        this.handles.add(this.handle(p, top, { corner: p.slice() }));
+      }
+      const { len, normal } = wallFrame(w);
+      const l = label('wall-label');
+      l.element.textContent = `${Math.round(len * 100)}`;
+      const mx = (w.a[0] + w.b[0]) / 2, mz = (w.a[1] + w.b[1]) / 2;
+      l.position.set(mx + normal[0] * (w.thickness / 2 + 0.22), top, mz + normal[1] * (w.thickness / 2 + 0.22));
+      this.wallLabels.add(l);
+    }
+    const inv = new THREE.MeshBasicMaterial({ visible: false });
+    for (const o of floor.openings) {
+      const w = floor.walls.find((x) => x.id === o.wall);
+      if (!w) continue;
+      const { dir } = wallFrame(w);
+      const h = Math.min(o.height, top - y0 - (o.type === 'window' ? o.sill : 0));
+      const box = new THREE.Mesh(new THREE.BoxGeometry(o.width, Math.max(0.3, h + 0.2), w.thickness + 0.14), inv);
+      const u = o.offset + o.width / 2;
+      box.position.set(w.a[0] + dir[0] * u, y0 + (o.type === 'window' ? o.sill : 0) + h / 2, w.a[1] + dir[1] * u);
+      box.rotation.y = Math.atan2(-dir[1], dir[0]);
+      box.userData.opening = o.id;
+      this.pickBoxes.add(box);
+    }
   }
 
   // ---------- furniture ----------
@@ -399,6 +491,7 @@ export class Viewer {
     model.traverse((o) => o.isMesh && o.geometry.computeBoundsTree?.());
     group.add(model);
     const rec = { group, sig, dims, loading: false };
+    if (this.editMode) queueMicrotask(() => this.ghost(rec, true));
     if (item.modelUrl && item.useModel !== false) {
       rec.loading = true;
       this.loadModel(item.modelUrl)
@@ -415,6 +508,7 @@ export class Viewer {
           });
           model.removeFromParent();
           group.add(m);
+          if (this.editMode) this.ghost(rec, true);
           rec.loading = false;
           this.updateSelection();
         })
@@ -459,7 +553,6 @@ export class Viewer {
   updateSelection() {
     const s = this.sel;
     this.selBox.visible = this.rotGroup.visible = this.selLabel.visible = this.wallHighlight.visible = false;
-    this.handles.clear();
     if (!s || !this.house) return;
     const floor = this.design.floors[this.activeFloor];
     const y0 = this.floorY;
@@ -493,12 +586,24 @@ export class Viewer {
       this.wallHighlight.geometry = geo;
       this.wallHighlight.position.y = y0 - 0.01;
       this.wallHighlight.visible = true;
-      for (const [k, p] of [['a', w.a], ['b', w.b]]) this.handles.add(this.handle(p, y0 + h + 0.03, { wall: w.id, end: k }));
       const { len } = wallFrame(w);
       this.selLabel.element.textContent = `${Math.round(len * 100)} cm`;
       this.selLabel.position.set((w.a[0] + w.b[0]) / 2, y0 + h + 0.25, (w.a[1] + w.b[1]) / 2);
       this.selLabel.visible = true;
-    } else if (s.type === 'opening' || s.type === 'stairs') {
+    }
+    if (s.type === 'opening') {
+      const g = openingGaps(floor, s.id);
+      const o = floor.openings.find((x) => x.id === s.id);
+      const w = o && floor.walls.find((x) => x.id === o.wall);
+      if (g && w) {
+        const { dir } = wallFrame(w);
+        const u = o.offset + o.width / 2;
+        this.selLabel.element.textContent = `◂ ${Math.round(g.left * 100)}   ·   ${Math.round(o.width * 100)} wide   ·   ${Math.round(g.right * 100)} ▸`;
+        this.selLabel.position.set(w.a[0] + dir[0] * u, y0 + (this.view === 'plan' || this.wallMode === 'cut' ? CUT_HEIGHT : o.sill + o.height) + 0.3, w.a[1] + dir[1] * u);
+        this.selLabel.visible = true;
+      }
+    }
+    if (s.type === 'opening' || s.type === 'stairs') {
       let obj = null;
       this.house.floors[this.activeFloor]?.group.traverse((o) => {
         if ((s.type === 'opening' && o.userData.opening === s.id) || (s.type === 'stairs' && o.userData.stair === s.id)) obj = o;
@@ -543,7 +648,7 @@ export class Viewer {
 
   refreshRoomLabels() {
     this.roomLabels.clear();
-    if (!this.design || this.view === 'walk') return;
+    if (!this.design || this.view === 'walk' || this.showAll) return;
     const floor = this.design.floors[this.activeFloor];
     for (const r of floor?.rooms || []) {
       if (!r.name) continue;
@@ -572,6 +677,7 @@ export class Viewer {
     this.persp.updateProjectionMatrix();
     this.applyFloorVisibility();
     this.refreshRoomLabels();
+    this.refreshEditOverlay();
     this.updateSelection();
   }
 
@@ -597,14 +703,23 @@ export class Viewer {
     return p ? [p.x, p.z] : null;
   }
 
+  /**
+   * What's under the pointer. Edit mode: corners › doors/windows › stairs › walls › rooms
+   * (furniture is ignored). Furnishing mode: furniture first, structure only for info.
+   */
   pick() {
     const hf = this.house?.floors[this.activeFloor];
-    if (!hf) return null;
-    const handle = this.raycaster.intersectObjects(this.handles.children, true)[0];
-    if (handle) return { type: 'handle', data: handle.object.userData.handle, point: handle.point };
-    const targets = [hf.group];
-    const hits = this.raycaster.intersectObjects(targets, true).filter((h) => {
+    if (!hf || this.showAll) return null;
+    if (this.editMode) {
+      const handle = this.raycaster.intersectObjects(this.handles.children, true)[0];
+      if (handle) return { type: 'handle', data: handle.object.userData.handle, point: handle.point };
+      const box = this.raycaster.intersectObjects(this.pickBoxes.children, false)[0];
+      if (box) return { type: 'opening', id: box.object.userData.opening, point: box.point };
+    }
+    const hits = this.raycaster.intersectObjects([hf.group], true).filter((h) => {
+      if (h.object === hf.cap) return isVisible(h.object); // the cut face of the walls in plan
       if (h.object.userData.helper || !isVisible(h.object)) return false;
+      if (this.editMode && isInside(h.object, hf.furniture)) return false;
       // Ignore geometry clipped away by the cut plane.
       if (hf.clipMaterials?.[0]?.clippingPlanes?.length && !isInside(h.object, hf.furniture) && h.point.y > hf.y0 + CUT_HEIGHT + 0.001) return false;
       return true;
@@ -620,7 +735,7 @@ export class Viewer {
         }
         if (o.userData.opening) return { type: 'opening', id: o.userData.opening, point: h.point };
         if (o.userData.stair) return { type: 'stairs', id: o.userData.stair, point: h.point };
-        if (o === hf.wallMesh) return { type: 'wall', id: this.nearestWall([h.point.x, h.point.z])?.id, point: h.point };
+        if (o === hf.wallMesh || o === hf.cap) return { type: 'wall', id: this.nearestWall([h.point.x, h.point.z])?.id, point: h.point };
         if (o.userData.room) return { type: 'room', id: o.userData.room, point: h.point };
         o = o.parent;
       }
@@ -642,6 +757,19 @@ export class Viewer {
     return best;
   }
 
+  snapshotFloor() {
+    const f = this.activeFloorData;
+    return JSON.parse(JSON.stringify({ walls: f.walls, openings: f.openings }));
+  }
+
+  restoreFloor(snap) {
+    const f = this.activeFloorData;
+    const c = JSON.parse(JSON.stringify(snap));
+    f.walls = c.walls;
+    f.openings = c.openings;
+    return f;
+  }
+
   onDown(e) {
     if (this.view === 'walk' || e.button !== 0) return;
     this.setPointer(e);
@@ -660,25 +788,25 @@ export class Viewer {
       return;
     }
     if (hit.type === 'handle') {
-      this.drag = { type: 'wall-end', ...hit.data };
+      this.drag = { type: 'corner', from: hit.data.corner, snap: this.snapshotFloor() };
       this.controls.enabled = false;
       return;
     }
-    if (hit.type !== 'room' && (this.sel?.type !== hit.type || this.sel?.id !== hit.id)) this.select({ type: hit.type, id: hit.id });
     if (hit.type === 'room') {
       this.pendingRoom = hit.id;
       return;
     }
+    if (this.sel?.type !== hit.type || this.sel?.id !== hit.id) this.select({ type: hit.type, id: hit.id });
     const at = planOf(hit.point);
     if (hit.type === 'item') {
       const rec = this.items.get(hit.id);
       const fp = this.planePoint(rec.group.position.y) || hit.point;
       this.drag = { type: 'item', id: hit.id, offset: [rec.group.position.x - fp.x, rec.group.position.z - fp.z] };
-    } else if (hit.type === 'wall' && hit.id && this.cb.editable?.()) {
-      this.drag = { type: 'wall', id: hit.id, start: at };
-    } else if (hit.type === 'opening' && this.cb.editable?.()) {
+    } else if (this.editMode && hit.type === 'wall' && hit.id) {
+      this.drag = { type: 'wall', id: hit.id, start: at, snap: this.snapshotFloor() };
+    } else if (this.editMode && hit.type === 'opening') {
       this.drag = { type: 'opening', id: hit.id };
-    } else if (hit.type === 'stairs' && this.cb.editable?.()) {
+    } else if (this.editMode && hit.type === 'stairs') {
       const s = this.activeFloorData.stairs.find((x) => x.id === hit.id);
       this.drag = { type: 'stairs', id: hit.id, offset: [s.x - at[0], s.z - at[1]] };
     }
@@ -688,17 +816,28 @@ export class Viewer {
     }
   }
 
+  onDblClick(e) {
+    if (this.tool) return this.tool.onDblClick?.(e);
+    if (!this.editMode) return;
+    this.setPointer(e);
+    const hit = this.pick();
+    if (hit?.type === 'wall' && hit.id) this.cb.onWallDblClick?.(hit.id, planOf(hit.point));
+  }
+
   onMove(e) {
     if (this.view === 'walk') return;
     this.setPointer(e);
+    const pp = this.planePoint();
+    if (pp) this.cb.onPointer?.(pp.x, pp.z);
     if (this.tool?.onMove?.(e)) return;
     const d = this.drag;
     if (!d) {
       const overKnob = this.rotGroup.visible && this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false).length;
       if (overKnob) return (this.renderer.domElement.style.cursor = 'ew-resize');
       const hit = this.pick();
-      const editable = this.cb.editable?.();
-      this.renderer.domElement.style.cursor = !hit ? '' : hit.type === 'item' || hit.type === 'handle' || (editable && hit.type !== 'room') ? 'grab' : 'pointer';
+      const cursor = !hit ? '' : hit.type === 'handle' ? 'move' : hit.type === 'item' ? 'grab' : this.editMode && hit.type === 'wall' ? 'grab' : this.editMode && hit.type !== 'room' ? 'grab' : 'pointer';
+      this.renderer.domElement.style.cursor = cursor;
+      this.hoverTip(hit);
       return;
     }
     const floor = this.activeFloorData;
@@ -732,41 +871,40 @@ export class Viewer {
       this.cb.onLive?.();
       return;
     }
-    const p = this.planePoint();
+    const p = pp;
     if (!p) return;
-    let at = snapPoint([p.x, p.z], floor, e.shiftKey ? null : d.id);
-    if (d.type === 'wall-end') {
-      const w = floor.walls.find((x) => x.id === d.wall);
-      const old = w[d.end];
-      if (!e.shiftKey) at = orthoSnap(at, d.end === 'a' ? w.b : w.a);
-      // Move every wall end joined at this corner so walls stay connected.
-      for (const o of floor.walls) for (const k of ['a', 'b']) if (Math.hypot(o[k][0] - old[0], o[k][1] - old[1]) < 0.01) o[k] = at.slice();
-      d.changed = true;
+    if (d.type === 'corner') {
+      const f = this.restoreFloor(d.snap);
+      // Snap to other corners / 5 cm grid, then square up with the walls meeting here.
+      let at = e.shiftKey ? [p.x, p.z] : snapPoint([p.x, p.z], { walls: f.walls.filter((w) => !wallsAt({ walls: [w] }, d.from).length) });
+      if (!e.shiftKey) {
+        for (const { wall, end } of wallsAt(f, d.from)) {
+          const other = end === 'a' ? wall.b : wall.a;
+          if (Math.abs(at[0] - other[0]) < 0.12) at = [other[0], at[1]];
+          if (Math.abs(at[1] - other[1]) < 0.12) at = [at[0], other[1]];
+        }
+      }
+      moveCorner(f, d.from, at);
+      d.to = at;
+      d.changed = Math.hypot(at[0] - d.from[0], at[1] - d.from[1]) > 0.001;
       this.cb.onStructureLive?.();
+      this.showDragLabel(`${(at[0]).toFixed(2)}, ${(at[1]).toFixed(2)} m`, at);
     } else if (d.type === 'wall') {
-      const w = floor.walls.find((x) => x.id === d.id);
+      const f = this.restoreFloor(d.snap);
+      const w = f.walls.find((x) => x.id === d.id);
       const { normal } = wallFrame(w);
-      let dn = (at[0] - d.start[0]) * normal[0] + (at[1] - d.start[1]) * normal[1];
+      let dn = (p.x - d.start[0]) * normal[0] + (p.z - d.start[1]) * normal[1];
       if (!e.shiftKey) dn = Math.round(dn / 0.05) * 0.05;
-      const move = [normal[0] * (dn - (d.moved || 0)), normal[1] * (dn - (d.moved || 0))];
-      if (!move[0] && !move[1]) return;
-      d.moved = dn;
-      const ends = [w.a.slice(), w.b.slice()];
-      for (const o of floor.walls)
-        for (const k of ['a', 'b'])
-          if (ends.some((q) => Math.hypot(o[k][0] - q[0], o[k][1] - q[1]) < 0.01)) o[k] = [+(o[k][0] + move[0]).toFixed(4), +(o[k][1] + move[1]).toFixed(4)];
-      d.changed = true;
+      pushWall(f, d.id, dn);
+      d.changed = Math.abs(dn) > 0.001;
       this.cb.onStructureLive?.();
+      const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+      this.showDragLabel(`${dn > 0 ? '+' : ''}${Math.round(dn * 100)} cm`, mid);
     } else if (d.type === 'opening') {
-      const o = floor.openings.find((x) => x.id === d.id);
-      const w = floor.walls.find((x) => x.id === o.wall);
-      const { len } = wallFrame(w);
-      const c = closestOnSegment([p.x, p.z], w.a, w.b);
-      let off = c.t * len - o.width / 2;
-      if (!e.shiftKey) off = Math.round(off / 0.05) * 0.05;
-      o.offset = +Math.max(0.05, Math.min(len - o.width - 0.05, off)).toFixed(3);
-      d.changed = true;
-      this.cb.onStructureLive?.();
+      if (moveOpening(floor, d.id, [p.x, p.z], { snap: e.shiftKey ? 0 : 0.05 })) {
+        d.changed = true;
+        this.cb.onStructureLive?.();
+      }
     } else if (d.type === 'stairs') {
       const s = floor.stairs.find((x) => x.id === d.id);
       let x = p.x + d.offset[0], z = p.z + d.offset[1];
@@ -775,6 +913,17 @@ export class Viewer {
       d.changed = true;
       this.cb.onStructureLive?.();
     }
+  }
+
+  showDragLabel(text, [x, z]) {
+    this.selLabel.element.textContent = text;
+    this.selLabel.position.set(x, this.floorY + (this.view === 'plan' || this.wallMode === 'cut' ? CUT_HEIGHT : this.activeFloorData.height) + 0.35, z);
+    this.selLabel.visible = true;
+  }
+
+  hoverTip(hit) {
+    const t = !hit ? '' : hit.type === 'handle' ? 'Drag to move this corner' : this.editMode && hit.type === 'wall' ? 'Drag to push or pull this wall · double-click to add a corner' : this.editMode && hit.type === 'opening' ? 'Drag along the wall, or onto another wall' : this.editMode && hit.type === 'stairs' ? 'Drag to move the stairs' : '';
+    this.cb.onHover?.(t);
   }
 
   onUp(e) {
@@ -787,8 +936,13 @@ export class Viewer {
     this.downAt = null;
     if (d?.changed) {
       if (d.type === 'item' || d.type === 'rotate') this.cb.onCommit?.();
-      else this.cb.onStructureCommit?.();
+      else this.cb.onStructureCommit?.({ type: d.type, id: d.id, corner: d.to });
+      this.updateSelection();
       return;
+    }
+    if (d?.snap) {
+      this.restoreFloor(d.snap);
+      this.updateSelection();
     }
     if (this.pendingRoom && clicked) this.select({ type: 'room', id: this.pendingRoom });
     else if (this.pendingDeselect && clicked) this.select(null);

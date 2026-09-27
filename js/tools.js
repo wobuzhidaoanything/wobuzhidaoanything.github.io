@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { snapPoint, orthoSnap } from './viewer.js';
 import { detectRooms, footprint } from './house.js';
+import { moveOpening } from './edit.js';
 import { wallFrame, closestOnSegment, pointInPolygon, area, DEFAULTS, stairLayout, elevations, toPlan } from './design.js';
 
 const rid = (p) => p + '-' + Math.random().toString(36).slice(2, 8);
@@ -120,12 +121,19 @@ export class Tools {
         return true;
       }
       const { len } = wallFrame(w);
-      const width = Math.min(this.name === 'window' ? 1.2 : 0.9, len - 0.2);
-      if (width < 0.3) return this.notify(this.name, 'That wall is too short.'), true;
-      const offset = Math.max(0.1, Math.min(len - width - 0.1, w.t * len - width / 2));
+      const width = Math.min(this.openingWidth(), len - 0.2);
+      if (width < (this.name === 'door' ? 0.6 : 0.3)) return this.notify(this.name, 'That wall is too short.'), true;
       const id = rid('o');
+      // Try on a copy first: it must fit between the other doors and windows on that wall.
+      const probe = structuredClone(floor);
+      probe.openings.push({ id, type: this.name, wall: w.id, offset: 0, width, height: 1, sill: 0 });
+      if (!moveOpening(probe, id, at, { reach: 0.6 }) || probe.openings.find((o) => o.id === id).wall !== w.id) {
+        this.notify(this.name, 'No room for it there: that part of the wall is taken.');
+        return true;
+      }
+      const offset = probe.openings.find((o) => o.id === id).offset;
       this.edit((f) =>
-        f.openings.push({ id, type: this.name, wall: w.id, offset: +offset.toFixed(3), width, height: this.name === 'window' ? 1.3 : Math.min(2.1, f.height - 0.1), sill: this.name === 'window' ? 0.9 : 0 })
+        f.openings.push({ id, type: this.name, wall: w.id, offset: +offset.toFixed(3), width, height: this.name === 'window' ? Math.min(1.3, f.height - 1) : Math.min(2.1, f.height - 0.1), sill: this.name === 'window' ? 0.9 : 0 })
       );
       this.v.select({ type: 'opening', id });
       return true;
@@ -153,6 +161,11 @@ export class Tools {
   }
 
   /** True when a stair's footprint lies inside the floor (and clear of walls). */
+  openingWidth() {
+    const o = this.options();
+    return { door: o.doorWidth, window: o.windowWidth, opening: o.openingWidth }[this.name] || 0.9;
+  }
+
   stairFits(stair, H) {
     const floor = this.v.activeFloorData;
     const L = stairLayout(stair, H);
@@ -202,7 +215,7 @@ export class Tools {
       const w = this.v.nearestWall(at, 0.6);
       if (w) {
         const { len, dir } = wallFrame(w);
-        const width = Math.min(this.name === 'window' ? 1.2 : 0.9, len - 0.2);
+        const width = Math.min(this.openingWidth(), len - 0.2);
         const c = closestOnSegment(at, w.a, w.b);
         const u = Math.max(0.1 + width / 2, Math.min(len - width / 2 - 0.1, c.t * len));
         const hgt = this.name === 'window' ? 1.3 : 2.1;
