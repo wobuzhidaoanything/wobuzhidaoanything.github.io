@@ -9,6 +9,7 @@ import { paintSpan } from './house.js';
 import { floorQuantities, quantitiesCSV } from './quantities.js';
 import { planSVG, fitScale, svgToCanvas, makePDF } from './planexport.js';
 import { sunPosition, sunTimes, sunVector } from './sun.js';
+import { openGuide } from './help.js';
 import { analyse as analyseClearance, zoneStatus, doorSwing, footprintRect } from './clearance.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
@@ -2040,7 +2041,7 @@ function wireUI() {
       renderAll();
       toast(ui.quality === 'high' ? 'High quality: soft shadows and ambient occlusion.' : 'Fast graphics for older computers.');
     } else if (act === 'settings') openSettings();
-    else if (act === 'help') $('#helpDialog').showModal();
+    else if (act === 'help') openGuide($('#helpDialog'));
   };
 
   // Models
@@ -2165,6 +2166,7 @@ function wireUI() {
     if (/input|textarea|select/i.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.key.toLowerCase();
+    if (e.key === 'F1' || (e.key === '?' && !mod)) return e.preventDefault(), openGuide($('#helpDialog'));
     const sel = viewer.sel;
     if (mod && k === 'z') (e.preventDefault(), restore(history.index + (e.shiftKey ? 1 : -1)));
     else if (mod && k === 'y') (e.preventDefault(), restore(history.index + 1));
@@ -2232,6 +2234,7 @@ function wireUI() {
       wireUI.nudge = setTimeout(() => commit({ rebuild: false }), 400);
     }
   });
+  $('#helpBtn').onclick = () => openGuide($('#helpDialog'));
   $('#toggleLeft').onclick = () => togglePanel('left');
   $('#toggleRight').onclick = () => togglePanel('right');
   for (const side of ['left', 'right']) if (pref.get('hide-' + side, false)) document.body.classList.add('hide-' + side);

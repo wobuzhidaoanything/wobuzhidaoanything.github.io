@@ -1,13 +1,16 @@
 # Guide for AI agents working with Roomcraft
 
 Roomcraft is a 3D house planner (plain HTML/CSS/JS + three.js/WebGL) that runs locally with `npm start`.
-Everything a person designs lives **on their device**, in the git-ignored `designs/` folder:
+Everything a person designs lives **on their device**, in the git-ignored `userdata/` folder:
 
-- `designs/<id>.json`: one house design (multi-floor), format below
-- `designs/library.json`: the furniture model library shared by all designs
-- `designs/.active`: the design currently open in the app
+- `userdata/designs/<id>.json`: one house design (multi-floor), format below
+- `userdata/library.json`: the furniture model library shared by all designs
+- `userdata/models/`: downloaded `.glb` files and model components (`<id>.jsx`)
+- `userdata/exports/`: exports
+- `userdata/.state/`: the active design, version history, render log and chat
 
-Git only carries the software. Never commit `designs/`, `models/` or `exports/`.
+Git only carries the software (`assets/` holds the shipped sample house and furniture). Never commit `userdata/`.
+Always use the tools below rather than editing these files: saves go through conflict checks and version history.
 
 ## Use the tools
 
@@ -22,6 +25,11 @@ same operations exist on the command line: `node tools/cli.mjs` (run it without 
 | Model an unusual shape in code | `write_model_component`, `get_model_component`: a React Three Fiber component, see [docs/R3F-MODELS.md](docs/R3F-MODELS.md) |
 | Look at / edit a house | `list_designs`, `get_design`, `write_design`, `render_design`, `stair_info`, `place_item` |
 | Export for Blender | `export_glb` |
+
+Designs can also carry `site: { lat, lon, north }` (for the sun study), per-side wall finishes
+`walls[].finishes: { l|r: [{ from, to, kind, color }] }` (`kind`: paint, wallpaper, tiles, wood, brick, stone, concrete,
+carpet; `from`/`to` in metres along the wall from its `a` end; `l` is the side to the left of a→b), room
+`ceiling: { kind, color }`, and `locked: true` on walls or placed items.
 
 The app open in the browser updates live when you write a design or the library.
 
@@ -89,7 +97,7 @@ All lengths in metres. Rotation in degrees around the vertical axis: 0 = the obj
 }
 ```
 
-Library models (`designs/library.json` → `items[]`):
+Library models (`userdata/library.json` → `items[]`):
 `{ id, name, category, dims: {w, d, h}, colors: [{name, hex}], accent?, url?, image?, modelUrl?, verified? }`.
 
 **Categories:** sofa, armchair, chair, stool, ottoman, bed, wardrobe, bookshelf, dresser, nightstand, sideboard,
@@ -108,4 +116,13 @@ tvstand, desk, table, coffeetable, sidetable, floorlamp, lamp, rug, plant, tv, m
   - `js/tools.js`: editing tools
   - `js/app.js`: UI
   - `tools/`: local server, MCP server, CLI
+- More key files:
+  - `js/edit.js`: structure edits
+  - `js/annotate.js`: dimensions and grid
+  - `js/measure.js`, `js/paint.js`: measure and paint tools
+  - `js/clearance.js`, `js/quantities.js`, `js/sun.js`, `js/planexport.js`: pure logic, tested in Node
+  - `js/r3f-host.js`: React Three Fiber model components
+  - `docs/user-guide.md`: the in-app Help. **Update it when you change a feature.**
+- User data paths come from `tools/lib/paths.mjs`. Tests set `ROOMCRAFT_USERDATA` to a temporary folder.
+- Desktop only: don't spend effort on mobile layouts.
 - Tests: `npm test`. Check UI changes in a real browser, not just the tests.

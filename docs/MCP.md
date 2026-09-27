@@ -32,7 +32,7 @@ the replies to the page:
 
 | Agent | Command the app runs | Tools allowed |
 | --- | --- | --- |
-| Claude Code | `claude -p … --output-format stream-json --mcp-config .roomcraft/mcp.json --allowedTools mcp__roomcraft` | Roomcraft's only |
+| Claude Code | `claude -p … --output-format stream-json --mcp-config userdata/.state/mcp.json --allowedTools mcp__roomcraft` | Roomcraft's only |
 | Codex | `codex exec --json --sandbox read-only -c mcp_servers.roomcraft…` | Roomcraft's + read-only sandbox |
 | Gemini CLI | `gemini -p … --output-format stream-json --allowed-mcp-server-names roomcraft` | Roomcraft's (set up with `--trust`) |
 | OpenCode | `opencode run --format json …` | per your OpenCode permissions |
@@ -56,7 +56,7 @@ Use absolute paths. `node` is your Node.js; `<repo>` is where you cloned Roomcra
 | VS Code (Copilot) | `code --add-mcp '{"name":"roomcraft","command":"node","args":["<repo>/tools/mcp-server.mjs"]}'` |
 | Cursor | `~/.cursor/mcp.json` → `mcpServers.roomcraft` (JSON below) |
 | OpenCode | `~/.config/opencode/opencode.json` → `"mcp": {"roomcraft": {"type": "local", "command": ["node", "<repo>/tools/mcp-server.mjs"], "enabled": true}}` |
-| Grok Build / Grok CLI | `grok mcp add` if your version has it (check `grok mcp --help`), otherwise `~/.grok/user-settings.json` → `mcpServers.roomcraft` |
+| Grok Build | `grok mcp add` if your version has it (check `grok mcp --help` and xAI's current Grok Build docs), otherwise `~/.grok/user-settings.json` → `mcpServers.roomcraft`. For the Assistant: `grok -p`, or set `ROOMCRAFT_GROK_CMD` (e.g. `"grok --prompt"`) |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` → `mcpServers.roomcraft` |
 | Claude Desktop | `claude_desktop_config.json` → `mcpServers.roomcraft` (use the app's "Add it automatically") |
 | Anything else | the JSON below in its MCP config |
@@ -72,13 +72,14 @@ Use absolute paths. `node` is your Node.js; `<repo>` is where you cloned Roomcra
 | `read_link` | Product page → name, size (cm), colours, category, 3D model URL, **product photo (image)** |
 | `list_models` / `add_item` / `update_item` | The furniture model library; add and update **return renders** |
 | `render_item` / `verify_item` | Look at a model, then record the visual check. **Refused unless the current version was rendered** |
-| `save_model_file` | Download a store `.glb` into `models/` for a permanent copy |
+| `save_model_file` | Download a store `.glb` into `userdata/models/` for a permanent copy |
+| `write_model_component` / `get_model_component` | Build a model as a React Three Fiber component ([R3F-MODELS.md](R3F-MODELS.md)) |
 | `list_designs` / `get_design` | The houses on this device, and one house's full JSON with a summary and problems |
 | `write_design` | Save a whole house, e.g. a traced floor plan. **Returns plan + 3D renders of every floor** |
 | `render_design` | Plan and/or 3D renders per floor, plus an outside view |
 | `stair_info` | Real stair numbers (steps, rise, tread, footprint) for a floor |
 | `place_item` | Put a model in a house and get a render of that floor back |
-| `export_glb` | Whole house as `.glb` for Blender, saved to `exports/` |
+| `export_glb` | Whole house as `.glb` for Blender, saved to `userdata/exports/` |
 
 The vision rule and the design format are in [AGENTS.md](../AGENTS.md).
 
@@ -88,7 +89,7 @@ The vision rule and the design format are in [AGENTS.md](../AGENTS.md).
 npm run -s link -- https://…                          # product info as JSON
 echo "https://…" | npm run -s link -- -               # pipe links in
 node tools/cli.mjs add '{"name":"…","category":"sofa","width_cm":228,"depth_cm":95,"height_cm":83}'
-node tools/cli.mjs render <itemId>                    # PNGs in .roomcraft/renders/, look at them
+node tools/cli.mjs render <itemId>                    # PNGs in userdata/.state/renders/, look at them
 node tools/cli.mjs verify <itemId> --notes "…"
 node tools/cli.mjs write-design plan.json             # save a design, render every floor
 node tools/cli.mjs render-design --views plan,3d --exterior

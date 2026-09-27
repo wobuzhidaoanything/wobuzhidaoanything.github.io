@@ -13,8 +13,12 @@ npm start
 That's the only command. The first run installs dependencies. After that it opens the app at
 http://127.0.0.1:5173. It needs Node.js 18.17 or newer.
 
-`git pull` updates the software. Your designs and models stay on your computer in `designs/`, which git ignores,
-so pulling never touches them.
+`git pull` updates the software. Your designs, models and exports stay on your computer in `userdata/`, which git
+ignores, so pulling never touches them. To back everything up, copy that one folder. Designs from older versions
+(`designs/`, `models/`) move there automatically.
+
+The full **user guide** is in the app: the **Help** button, or **F1**. It's also in
+[docs/user-guide.md](docs/user-guide.md).
 
 ## What you can do
 
@@ -31,12 +35,25 @@ so pulling never touches them.
 - **Floor by floor:** level tabs over the view switch floors (or show the whole house); each floor is cut like
   an architect's plan, in 3D or top-down. A status bar shows what a click will do and the pointer position;
   `[` and `]` hide the side panels.
+- **Views:** 3D dollhouse, 2D plan, split plan + 3D side by side, wall elevations (straight-on, with heights; drag
+  things up and down to hang them), walk-through, all floors.
+- **Precision:** dimension lines and room areas on the floor, an adaptive grid with snapping (Alt = free), and a
+  measure tool (distance, path, along a curved surface).
+- **Arranging:** multi-select (Shift-click or box), align and distribute, copy/paste at the pointer, lock.
+  Clearance checks flag furniture that blocks a door or crowds another item's use space.
+- **Finishes:** paint, wallpaper, tiles, wood, brick, stone, concrete or carpet on each side of each wall (per room),
+  floors and ceilings.
+- **Sun study:** the real sun and shadows for the house's location, date and time.
 - **Walk through:** first-person with mouse-look and W A S D. You collide with walls and furniture and climb
   the stairs step by step between floors.
 - **Furniture from links:** paste or drop product links (IKEA, Amazon, Wayfair, Shopify stores…). Their size,
   colours and 3D models are read on your computer. Models without a store 3D file are generated in detail at the
   exact size. Drag to place, rotate, recolour; items snap to walls and stack on tables and rugs.
 - **Photo:** a path-traced, photoreal image of the current view.
+- **2D plans and quantities:** print-ready floor plans to scale (PDF/PNG, A4/A3, 1:50/1:100) and a quantities
+  schedule (areas, paint, flooring, skirting, furniture costs) as CSV.
+- **Safe by design:** autosave with version history; nothing is overwritten when an agent edits at the same time;
+  clear warnings if the server stops.
 - **Export:** one `.glb` for Blender with everything named and grouped by floor, room, walls, openings, stairs and
   furniture. Design files (`.json`) are for backup and sharing.
 - **Several designs:** create, switch, duplicate, rename and import designs. Everything saves automatically.
@@ -60,7 +77,7 @@ Roomcraft's tools where the agent allows it. It knows which design, floor and se
 - You can chat while jobs run. They queue, and the panel shows each job's progress and the tools used.
 - Desktop-only apps (Claude Desktop, VS Code, Windsurf) can still use Roomcraft from their own window, but the app
   can't drive them.
-- The conversation is kept on this computer in `.roomcraft/chat.json` (git ignores it). The **+** button starts a new
+- The conversation is kept on this computer in `userdata/.state/chat.json` (git ignores it). The **+** button starts a new
   one.
 
 ## Structure
@@ -80,7 +97,9 @@ js/models.js            parametric furniture models
 js/effects.js           ambient occlusion (quality setting)
 js/photo.js, export.js  photoreal render, GLB export
 tools/                  npm start server, MCP server, background agent runner, CLI, headless renderer
-data/                   the sample house and shipped furniture models
+assets/                 the sample house and shipped furniture models
+userdata/               your designs, library, models, exports, history (git-ignored, created on first run)
+docs/                   user guide (shown in the app), agent setup (MCP), R3F model components
 worker/                 optional Cloudflare Worker link reader for hosted copies
 ```
 
