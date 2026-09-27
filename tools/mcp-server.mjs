@@ -29,7 +29,7 @@ placed: [{id, itemId, x, z, rot, color, y?}] } ] }. x runs right, z runs down th
 const TOOLS = [
   {
     name: 'read_link',
-    description: 'Read a product page (IKEA, Amazon, Wayfair, Shopify stores, most shops). Returns name, dimensions (cm), colour options, category, 3D model URL if any, and the product photo as an image so you can see the real product.',
+    description: 'Read a product page (IKEA, Amazon, Wayfair, Shopify stores, most shops). Returns name, dimensions (cm), colour options, category, description, 3D model URL if any, and the product photos (up to 6) as images so you can see the real product from several angles.',
     inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Product page URL' } }, required: ['url'] },
   },
   { name: 'list_models', description: 'List the furniture model library (ids, sizes, colours, verified status).', inputSchema: { type: 'object', properties: {} } },
@@ -158,11 +158,11 @@ async function designRenders(id, floors, note) {
 async function callTool(name, args = {}) {
   switch (name) {
     case 'read_link': {
-      const { product, image: photo } = await readLink(args.url);
+      const { product, images } = await readLink(args.url);
       const cm = (m) => (m ? Math.round(m * 1000) / 10 : null);
       const out = [text({ ...product, dims_cm: { width: cm(product.dims.w), depth: cm(product.dims.d), height: cm(product.dims.h) }, dims: undefined })];
-      if (photo) out.push(text('Product photo:'), image(photo.data, photo.mimeType));
-      else out.push(text('No product photo could be fetched.'));
+      images.forEach((p, i) => out.push(text(`Product photo ${i + 1} of ${images.length}${i === 0 ? ' (main)' : ''}: ${p.url}`), image(p.data, p.mimeType)));
+      if (!images.length) out.push(text('No product photo could be fetched.'));
       out.push(text('To add it: add_item with from_url (override any wrong or missing fields), then check the renders.'));
       return out;
     }

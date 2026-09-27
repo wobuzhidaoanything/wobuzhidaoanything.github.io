@@ -24,6 +24,26 @@ It works on the designs saved on your computer, and the open app updates live.
 For agents that can't run commands, such as **Claude Desktop**, and for any agent with a JSON config file, the app
 also offers **Add it automatically**.
 
+## Assistant: the app drives your agent
+
+With a terminal agent installed, the app's **Assistant** panel runs it in the background. Nothing extra needs to be
+open. The local server (`tools/lib/runner.mjs`) starts one headless run at a time, in this repository, and streams
+the replies to the page:
+
+| Agent | Command the app runs | Tools allowed |
+| --- | --- | --- |
+| Claude Code | `claude -p … --output-format stream-json --mcp-config .roomcraft/mcp.json --allowedTools mcp__roomcraft` | Roomcraft's only |
+| Codex | `codex exec --json --sandbox read-only -c mcp_servers.roomcraft…` | Roomcraft's + read-only sandbox |
+| Gemini CLI | `gemini -p … --output-format stream-json --allowed-mcp-server-names roomcraft` | Roomcraft's (set up with `--trust`) |
+| OpenCode | `opencode run --format json …` | per your OpenCode permissions |
+| Cursor CLI | `cursor-agent -p … --output-format stream-json --approve-mcps` | per your Cursor permissions |
+| Grok CLI | `grok -p …` | per your Grok settings |
+
+Claude Code and Codex get the server on the command line, so they work even before setup. The others use the
+server they were set up with (**Agents**). Conversations continue across messages (the agent's own session id; for
+Gemini and Grok the recent messages are sent along). Pasted product links become jobs: *read every photo and the
+description → set size, category and colours → render → compare → verify*.
+
 ## Manual setup
 
 Use absolute paths. `node` is your Node.js; `<repo>` is where you cloned Roomcraft.

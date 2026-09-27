@@ -22,6 +22,15 @@ if (!fs.existsSync(marker) || fs.statSync(marker).mtimeMs < fs.statSync(path.joi
 const { startServer } = await import('./lib/server.mjs');
 const { url } = await startServer({ port });
 console.log('Links pasted into the site are read by this local server. Press Ctrl+C to stop.');
+try {
+  const { runners } = await import('./lib/runner.mjs');
+  const ready = runners().filter((r) => r.ready);
+  console.log(
+    ready.length
+      ? `Assistant: ${ready.map((r) => r.name).join(', ')} ready. Chat in the app (Assistant button); pasted links are modelled by it in the background.`
+      : 'Assistant: no terminal agent found yet. Open Agents in the app to set one up (Claude Code, Codex, Gemini CLI, OpenCode, Cursor CLI or Grok CLI).'
+  );
+} catch {}
 
 if (!args.includes('--no-open') && !process.env.CI) {
   const opener = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];

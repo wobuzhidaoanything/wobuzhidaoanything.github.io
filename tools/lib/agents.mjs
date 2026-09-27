@@ -50,7 +50,8 @@ export const HARNESSES = [
   {
     id: 'gemini', name: 'Gemini CLI', match: /gemini/i,
     config: path.join(HOME, '.gemini', 'settings.json'), json: 'mcpServers',
-    add: `gemini mcp add --scope user roomcraft ${q(NODE)} ${q(SERVER)}`,
+    jsonEntry: () => ({ ...serverJson(), trust: true }), // trusted: Roomcraft's tools run without a confirmation each time
+    add: `gemini mcp add --scope user --trust roomcraft ${q(NODE)} ${q(SERVER)}`,
     list: 'gemini mcp list', remove: ['gemini', ['mcp', 'remove', '--scope', 'user', 'roomcraft']],
     after: 'Restart Gemini CLI so it loads the server.',
   },
@@ -126,7 +127,7 @@ export function setupPrompt(h) {
   if (h.hint) lines.push(h.hint);
   lines.push(
     '',
-    `Then check it is registered${h.list ? ` (\`${h.list}\`)` : ''}, tell me exactly what I need to approve or restart (${h.after}), and once you can see the roomcraft tools, call its list_items tool once so Roomcraft knows the connection works.`
+    `Then check it is registered${h.list ? ` (\`${h.list}\`)` : ''}, tell me exactly what I need to approve or restart (${h.after}), and once you can see the roomcraft tools, call its list_models tool once so Roomcraft knows the connection works.`
   );
   return lines.join('\n');
 }

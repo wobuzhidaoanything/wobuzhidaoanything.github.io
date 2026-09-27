@@ -1,6 +1,7 @@
 import { Viewer, webglSupport } from './viewer.js';
 import { Walker } from './walk.js';
 import { Tools } from './tools.js';
+import { initChat } from './chat.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
 import { openStorage } from './storage.js';
@@ -862,7 +863,7 @@ function renderQueue() {
     .slice(-6)
     .reverse()
     .map((q) => `<li class="${q.status === 'error' ? 'err' : q.status === 'warn' ? 'warn' : ''}" data-q="${q.id}">
-      <span class="st">${q.status === 'pending' ? '<span class="spin"></span>' : q.status === 'error' ? '✕' : q.status === 'warn' ? '!' : '✓'}</span>
+      <span class="st">${q.status === 'pending' || q.status === 'busy' ? '<span class="spin"></span>' : q.status === 'error' ? '✕' : q.status === 'warn' ? '!' : '✓'}</span>
       <div class="body"><div class="t" title="${esc(q.url)}">${esc(q.title || q.url)}</div><div class="m">${q.message || 'Reading page…'}</div></div>
       ${q.status !== 'pending' ? '<button class="x" data-dismiss title="Dismiss">×</button>' : ''}
     </li>`)
@@ -874,6 +875,7 @@ function renderQueue() {
   }));
   $$('#queue [data-edit]').forEach((a) => (a.onclick = () => itemById(a.dataset.edit) && openItemDialog(itemById(a.dataset.edit))));
   $$('#queue [data-add]').forEach((a) => (a.onclick = () => addToRoom(a.dataset.add)));
+  $$('#queue [data-chat]').forEach((a) => (a.onclick = () => chat?.toggle(true)));
   $$('#queue [data-manual]').forEach((a) => (a.onclick = () => {
     const q = ui.queue.find((x) => x.id === a.dataset.manual);
     openItemDialog(guessFromUrl(q.url), { isNew: true, note: "We couldn't read this page automatically. Check the name and enter the size from the product page." });
@@ -960,11 +962,35 @@ async function importUrls(urls) {
       const bits = [`${cm(item.dims.w)} × ${cm(item.dims.d)} × ${cm(item.dims.h)} cm`];
       if (item.colors.length > 1) bits.push(`${item.colors.length} colours`);
       if (item.modelUrl) bits.push('3D model found');
-      Object.assign(q, { status: item.needsDims ? 'warn' : 'ok', title: item.name, message: (item.needsDims ? `Size partly guessed. <a data-edit="${item.id}">Check size</a> · ` : '') + bits.join(' · ') + ` · <a data-add="${item.id}">Add to room</a>` });
+      Object.assign(q, { status: item.needsDims ? 'warn' : 'ok', title: item.name, itemId: item.id, message: (item.needsDims ? `Size partly guessed. <a data-edit="${item.id}">Check size</a> · ` : '') + bits.join(' · ') + ` · <a data-add="${item.id}">Add to room</a>` });
+      await handToAgent(q, url, item);
     } catch (err) {
-      Object.assign(q, { status: 'error', message: `${esc(err.message || err)} <a data-manual="${q.id}">Add manually</a>` });
+      if (agentModels()) {
+        // The page couldn't be read here; the agent may still manage (it can look harder).
+        const item = guessFromUrl(url);
+        item.needsDims = true;
+        library.items.unshift(item);
+        commit({ lib: true, rebuild: false });
+        Object.assign(q, { status: 'warn', title: item.name, itemId: item.id, message: `Couldn’t read the page here (${esc(err.message || err)}).` });
+        await handToAgent(q, url, item);
+      } else Object.assign(q, { status: 'error', message: `${esc(err.message || err)} <a data-manual="${q.id}">Add manually</a>` });
     }
     renderQueue();
+  }
+  renderQueue();
+}
+
+const agentModels = () => !!chat?.ready && $('#autoModel').checked;
+
+/** Pasted links go to the user's agent, which models them from the product photos. */
+async function handToAgent(q, url, item) {
+  if (!agentModels()) return;
+  try {
+    await chat.modelLink(url, item);
+    q.status = 'busy';
+    q.message = `${q.message ? q.message + ' ' : ''}Your agent is modelling it from the photos… <a data-chat>watch</a>`;
+  } catch (err) {
+    q.message += ` (Agent: ${esc(err.message)})`;
   }
   renderQueue();
 }
@@ -1168,6 +1194,7 @@ async function openAgents() {
 
 async function refreshAgentsDot() {
   if (store.kind !== 'device') return ($('#agentsBtn').hidden = true), 0;
+  chat?.refresh();
   try {
     const data = await (await fetch('api/agents')).json();
     const n = data.harnesses.filter((h) => h.connection || h.configured).length;
@@ -1177,6 +1204,19 @@ async function refreshAgentsDot() {
   } catch {
     return 0;
   }
+}
+
+// What the agent should know about where the user is in the app.
+function chatContext() {
+  const f = floorNow();
+  const s = viewer.sel;
+  let sel = '';
+  if (s?.type === 'item') {
+    const found = findPlaced(s.id);
+    sel = `selected furniture "${itemById(found?.p.itemId)?.name}" (placed id ${s.id})`;
+  } else if (s?.type === 'room') sel = `selected room "${f.rooms.find((r) => r.id === s.id)?.name}" (id ${s.id})`;
+  else if (s) sel = `selected ${s.type} ${s.id}`;
+  return [`design "${design.name}" (id ${design.id})`, `floor "${f.name}" (index ${viewer.activeFloor})`, `${viewer.view} view`, ui.editing && 'editing the structure', sel].filter(Boolean).join(', ');
 }
 
 // ---------- views & walking ----------
@@ -1249,6 +1289,7 @@ async function takePhoto() {
 
 // ---------- misc UI ----------
 
+let chat = null;
 let toastTimer;
 function toast(msg, { undo, action } = {}) {
   const t = $('#toast');
@@ -1352,6 +1393,7 @@ async function boot() {
 
   // Live updates from AI agents (or another window) editing the same files.
   store.subscribe(async (ev) => {
+    if (ev.type === 'agent') return chat.handle(ev);
     if (ev.type === 'design' && ev.id === design.id && ev.updatedAt !== lastSaved) {
       const d = await store.load(design.id);
       if (d.updatedAt === lastSaved) return;
@@ -1366,6 +1408,28 @@ async function boot() {
       renderAll();
     }
   });
+
+  chat = initChat({
+    local: store.kind === 'device',
+    context: chatContext,
+    openAgents,
+    onReady: (r) => {
+      $('#autoModelRow').hidden = !r;
+      $('#autoModelAgent').textContent = r?.name || 'my agent';
+    },
+    onJobDone: (ev) => {
+      if (ev.kind !== 'model') return;
+      const item = itemById(ev.itemId);
+      const q = ui.queue.find((x) => x.itemId && x.itemId === ev.itemId);
+      if (q) {
+        Object.assign(q, { status: ev.error ? 'warn' : 'ok', message: (ev.error ? 'Your agent couldn’t finish the model; the draft is kept. ' : `Modelled and checked by your agent · `) + `<a data-add="${esc(ev.itemId)}">Add to room</a>` });
+        renderQueue();
+      }
+      toast(ev.error ? 'Your agent couldn’t finish a model. See the Assistant panel.' : `Your agent finished the model${item ? ` for “${item.name}”` : ''}.`, { action: item && ['Add to room', () => addToRoom(item.id)] });
+    },
+  });
+  $('#autoModel').checked = pref.get('autoModel', true);
+  $('#autoModel').onchange = (e) => pref.set('autoModel', e.target.checked);
 
   const agents = await refreshAgentsDot();
   if (store.kind === 'device' && !agents && !pref.get('agentsDontAsk', false)) openAgents();
@@ -1567,6 +1631,7 @@ function wireUI() {
       s.rot = ((((s.rot || 0) + (e.shiftKey ? -90 : 90)) % 360) + 360) % 360;
       commit();
     } else if (k === 'e' && !mod) setEditing(!ui.editing);
+    else if (k === 'c' && !mod && !e.shiftKey) chat?.toggle();
     else if (ui.editing && !mod && !e.shiftKey && { v: 1, w: 1, d: 1, n: 1, o: 1, s: 1 }[k]) {
       const t = { v: null, w: 'wall', d: 'door', n: 'window', o: 'opening', s: 'stairs' }[k];
       setTool(t === ui.tool ? null : t);

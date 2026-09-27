@@ -64,18 +64,22 @@ function withLibrary(fn) {
 
 // ---------- links & models ----------
 
-export async function readLink(url) {
+export async function readLink(url, { maxImages = 6 } = {}) {
   const product = await scrapeProduct(url);
-  let image = null;
-  if (product.image) {
-    try {
-      const r = await fetch(product.image, { headers: { 'user-agent': 'Mozilla/5.0 roomcraft' } });
-      const type = r.headers.get('content-type') || '';
-      const buf = Buffer.from(await r.arrayBuffer());
-      if (r.ok && /^image\/(png|jpe?g|webp|gif)/.test(type) && buf.length < 4.5e6) image = { data: buf, mimeType: type.split(';')[0] };
-    } catch {}
-  }
-  return { product, image };
+  const urls = [...new Set([product.image, ...(product.images || [])].filter(Boolean))].slice(0, maxImages);
+  const fetched = await Promise.all(
+    urls.map(async (u) => {
+      try {
+        const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 roomcraft' }, signal: AbortSignal.timeout(15000) });
+        const type = r.headers.get('content-type') || '';
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (r.ok && /^image\/(png|jpe?g|webp|gif)/.test(type) && buf.length < 3.5e6) return { url: u, data: buf, mimeType: type.split(';')[0] };
+      } catch {}
+      return null;
+    })
+  );
+  const images = fetched.filter(Boolean);
+  return { product, image: images[0] || null, images };
 }
 
 export function listModels() {
@@ -97,7 +101,7 @@ export function listModels() {
 export async function addItem(args) {
   let base = {};
   if (args.from_url) {
-    const { product } = await readLink(args.from_url);
+    const { product } = await readLink(args.from_url, { maxImages: 0 });
     base = { name: product.name, category: product.category, url: product.url, image: product.image, modelUrl: product.modelUrl, dims: product.dims, colors: product.colors?.map((c) => ({ name: c.name, hex: c.hex })), price: product.price, currency: product.currency };
   }
   const name = String(args.name || base.name || 'New model').slice(0, 140);

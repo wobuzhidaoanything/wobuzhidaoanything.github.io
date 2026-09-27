@@ -288,6 +288,7 @@ function productFromJsonLd(nodes, base) {
   res.brand = decodeEntities(first(product.brand)?.name || (typeof product.brand === 'string' ? product.brand : '') || '') || null;
   const img = first(product.image);
   res.image = absolutize(typeof img === 'object' ? img?.url || img?.contentUrl : img, base);
+  res.images = [product.image].flat(2).map((x) => absolutize(typeof x === 'object' ? x?.url || x?.contentUrl : x, base)).filter(Boolean);
   res.description = decodeEntities(String(product.description || '')).slice(0, 4000);
   const offer = first(product.offers?.offers || product.offers);
   if (offer) {
@@ -420,6 +421,7 @@ async function shopifyProduct(pageUrl, fetchImpl) {
   res.brand = p.vendor;
   res.category = p.type;
   res.image = absolutize(p.featured_image || p.images?.[0], pageUrl);
+  res.images = (p.images || []).map((x) => absolutize(x, pageUrl)).filter(Boolean);
   res.price = p.price != null ? (p.price / 100).toFixed(2) : null;
   const descText = htmlToText(p.description || '');
   res.description = descText.slice(0, 4000);
@@ -517,8 +519,10 @@ export async function parseProductPage(html, pageUrl, { fetchImpl = null } = {})
   };
   const colors = [];
   const models = [];
+  const images = [];
   const take = (src) => {
     if (!src) return;
+    images.push(src.image, ...(src.images || []));
     for (const k of ['name', 'brand', 'image', 'price', 'currency', 'dimsText', 'description', 'breadcrumbs']) {
       if (result[k] == null && src[k] != null && src[k] !== '') result[k] = src[k];
     }
@@ -555,6 +559,7 @@ export async function parseProductPage(html, pageUrl, { fetchImpl = null } = {})
   take({
     name: meta(html, 'og:title') || meta(html, 'twitter:title') || decodeEntities(html.match(/<title[^>]*>([^<]*)</i)?.[1] || '').trim() || null,
     image: absolutize(meta(html, 'og:image') || meta(html, 'twitter:image') || meta(html, 'og:image:secure_url'), pageUrl),
+    images: [...html.matchAll(/<meta[^>]+(?:property|name)=["']og:image(?::secure_url)?["'][^>]*content=["']([^"']+)["']/gi)].map((m) => absolutize(decodeEntities(m[1]), pageUrl)),
     brand: meta(html, 'og:site_name') || meta(html, 'product:brand'),
     price: meta(html, 'product:price:amount') || meta(html, 'og:price:amount'),
     currency: meta(html, 'product:price:currency') || meta(html, 'og:price:currency'),
@@ -607,6 +612,9 @@ export async function parseProductPage(html, pageUrl, { fetchImpl = null } = {})
   const missing = ['w', 'd', 'h'].filter((k) => result.dims[k] == null);
   if (missing.length) result.notes.push(`Could not find: ${missing.map((k) => ({ w: 'width', d: 'depth', h: 'height' })[k]).join(', ')}.`);
   if (!result.colors.length) result.notes.push('No colour options found.');
+  // Every product photo we found (the agent looks at them to model the item), and the description text.
+  result.images = [...new Set(images.filter((u) => u && /^https?:/.test(u)))].slice(0, 12);
+  result.details = result.description ? String(result.description).replace(/\s+/g, ' ').trim().slice(0, 2500) : null;
   delete result.description;
   if (result.price != null) result.price = String(result.price);
   return result;

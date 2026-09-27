@@ -49,6 +49,20 @@ can read links, create furniture models (checking renders with its own vision), 
 house, place furniture and export. The open app updates live. Details: [docs/MCP.md](docs/MCP.md) and
 [AGENTS.md](AGENTS.md).
 
+**Assistant (no terminal needed).** If you have a terminal agent installed, `npm start` finds it, and the
+**Assistant** button (or `C`) opens a chat with it inside the app. Supported agents: Claude Code, Codex, Gemini CLI,
+OpenCode, Cursor CLI and Grok CLI. The app runs the agent in the background with your own login, limited to
+Roomcraft's tools where the agent allows it. It knows which design, floor and selection you're looking at.
+
+- Paste product links into the link box: a quick draft appears at once, then your agent reads every product photo
+  and the description, models the item, compares renders with the photos, and marks it checked. You can turn this
+  off with the checkbox under the link box.
+- You can chat while jobs run. They queue, and the panel shows each job's progress and the tools used.
+- Desktop-only apps (Claude Desktop, VS Code, Windsurf) can still use Roomcraft from their own window, but the app
+  can't drive them.
+- The conversation is kept on this computer in `.roomcraft/chat.json` (git ignores it). The **+** button starts a new
+  one.
+
 ## Structure
 
 ```
@@ -61,10 +75,11 @@ js/walk.js              walk-through with collisions and stairs
 js/tools.js             wall/door/window/stairs tools
 js/edit.js              structure edits (corners, push/pull, recess, split, door moves, cleanup)
 js/app.js               UI, designs, undo, import/export
+js/chat.js              Assistant panel (chat with your agent)
 js/models.js            parametric furniture models
 js/effects.js           ambient occlusion (quality setting)
 js/photo.js, export.js  photoreal render, GLB export
-tools/                  npm start server, MCP server, CLI, headless renderer
+tools/                  npm start server, MCP server, background agent runner, CLI, headless renderer
 data/                   the sample house and shipped furniture models
 worker/                 optional Cloudflare Worker link reader for hosted copies
 ```

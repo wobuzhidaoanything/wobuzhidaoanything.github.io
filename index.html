@@ -51,6 +51,7 @@
         <button data-act="png"><b>Screenshot</b><span>This view as .png</span></button>
       </div>
     </div>
+    <button class="btn chat-btn" id="chatBtn" title="Talk to your AI agent (C)" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span class="hide-narrow">Assistant</span><span class="busy-dot" id="chatBusy" hidden></span></button>
     <button class="btn agents-btn" id="agentsBtn" title="Connect AI agents"><span class="status-dot" id="agentsDot"></span><span class="hide-narrow">Agents</span></button>
     <div class="menu-wrap">
       <button class="icon-btn" id="menuBtn" aria-haspopup="menu" aria-label="More"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
@@ -78,6 +79,7 @@
           <div class="dropzone" id="dropzone">
             <textarea id="linkInput" rows="2" placeholder="Paste or drop product links (IKEA, Amazon, Wayfair, Shopify stores…)"></textarea>
             <div class="dz-row"><span class="hint">Drop links anywhere</span><button class="btn primary small" id="importBtn">Import</button></div>
+            <label class="check small-check auto-model" id="autoModelRow" hidden><input type="checkbox" id="autoModel" checked> <span>Let <b id="autoModelAgent">my agent</b> model each link from its photos</span></label>
           </div>
           <ul class="queue" id="queue"></ul>
         </section>
@@ -189,6 +191,21 @@
       <div class="actions"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Create</button></div>
     </form>
   </dialog>
+
+  <aside class="chat-panel" id="chatPanel" hidden aria-label="Assistant">
+    <div class="chat-head">
+      <b>Assistant</b>
+      <select id="chatRunner" title="Which agent answers"></select>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="chatClear" title="New conversation" aria-label="New conversation"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="icon-btn" id="chatClose" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="chat-log" id="chatLog" aria-live="polite"></div>
+    <form class="chat-compose" id="chatForm">
+      <textarea id="chatInput" rows="2" placeholder="Ask your agent… paste product links to have them modelled"></textarea>
+      <div class="row"><span class="hint" id="chatHint">Enter to send · Shift+Enter for a new line</span><span class="spacer"></span><button type="button" class="btn small danger ghost" id="chatStop" hidden>Stop</button><button class="btn primary small" id="chatSend">Send</button></div>
+    </form>
+  </aside>
 
   <dialog id="agentsDialog" class="dialog wide">
     <div class="dlg-head"><h3 id="agentsTitle">Connect your AI agent</h3></div>

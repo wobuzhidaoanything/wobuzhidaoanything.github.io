@@ -8,6 +8,7 @@ import { ROOT } from './paths.mjs';
 import { scrapeProduct } from '../../worker/src/scrape.js';
 import * as store from './store.mjs';
 import { agentStatus, autoSetup, removeAgent } from './agents.mjs';
+import * as runner from './runner.mjs';
 
 export { ROOT };
 
@@ -48,8 +49,12 @@ function trusted(req, port) {
   return !site || site === 'same-origin' || site === 'none';
 }
 
-// Live updates: tell open pages when a design changes on disk (e.g. an agent edited it).
+// Live updates: tell open pages when a design changes on disk (e.g. an agent edited it),
+// and stream what the background agent says.
 const clients = new Set();
+runner.onAgentEvent((ev) => {
+  for (const res of clients) res.write(`data: ${JSON.stringify(ev)}\n\n`);
+});
 let watcher = null;
 function watchDesigns() {
   if (watcher) return;
@@ -132,6 +137,21 @@ async function api(req, res, url) {
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => (clients.delete(res), clearInterval(ping)));
     return;
+  }
+  if (what === 'chat') {
+    if (method === 'GET') return send(res, 200, runner.chatState());
+    const b = JSON.parse((await body(req, 1e6)) || '{}');
+    if (method === 'POST' && id === 'send') {
+      if (!String(b.text || '').trim()) throw new Error('Empty message');
+      return send(res, 200, runner.enqueue('chat', { text: String(b.text).slice(0, 20000), context: b.context && String(b.context).slice(0, 2000), runner: b.runner }));
+    }
+    if (method === 'POST' && id === 'model') {
+      if (!/^https?:\/\//i.test(b.url || '')) throw new Error('Not a link');
+      return send(res, 200, runner.enqueue('model', { url: b.url, itemId: b.itemId, name: b.name, runner: b.runner }));
+    }
+    if (method === 'POST' && id === 'runner') return send(res, 200, runner.setRunner(b.runner));
+    if (method === 'POST' && id === 'stop') return send(res, 200, runner.stop());
+    if (method === 'POST' && id === 'clear') return send(res, 200, runner.clearChat());
   }
   if (what === 'dxf' && method === 'POST') return send(res, 200, { ok: true, ...(await parseDxf(await body(req))) });
   if (what === 'agents') {
