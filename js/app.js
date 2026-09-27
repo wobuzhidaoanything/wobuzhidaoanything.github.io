@@ -9,7 +9,7 @@ import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
 import { openStorage } from './storage.js';
 import { newHouse, newFloor, normalize, migrate, elevations, wallFrame, stairLayout, area, pointInPolygon, closestOnSegment, validate, DEFAULTS } from './design.js';
 import { footprint } from './plan.js';
-import { cleanFloor, syncRooms, splitWall, makeRecess, moveCorner, moveOpening, openingGaps } from './edit.js';
+import { cleanFloor, syncRooms, splitWall, makeRecess, moveCorner, moveOpening, openingGaps, insideSign } from './edit.js';
 import { colorFromName } from '../shared/colors.js';
 import { guessCategory } from '../worker/src/scrape.js';
 import { WORKER_URL } from './config.js';
@@ -149,6 +149,7 @@ function renderAll() {
   renderLevelBar();
   renderToolBar();
   refreshClearance();
+  if (viewer.view === 'elevation') viewer.buildElevationDims();
   if (ui.editing) renderBuildPanel();
   else renderInventory();
   renderInspector();
@@ -157,6 +158,7 @@ function renderAll() {
 
 function updateHint() {
   if (ui.hover) return ($('#hintbar').textContent = ui.hover);
+  if (viewer.view === 'elevation') return ($('#hintbar').textContent = 'Drag furniture along the wall or up and down (e.g. to hang a TV) · scroll to zoom · drag the background to pan · Esc to go back');
   const v = viewer.view;
   const t = ui.tool;
   if (t === 'measure' && !ui.hover)
@@ -189,13 +191,20 @@ function renderLevelBar() {
   const ys = elevations(design);
   const all = viewer.showAll;
   const el = $('#levelBar');
+  if (viewer.view === 'elevation') {
+    const e = viewer.elev;
+    el.innerHTML = `<button class="on" disabled>Elevation</button><span class="lvl-note">${esc(floorNow().name)} · wall ${e.len.toFixed(2)} m · drag furniture along the wall or up and down</span><span class="sep"></span><button data-eflip title="Look at the other side of this wall">⇄ Other side</button><button data-eclose title="Back (Esc)">Close</button>`;
+    $('[data-eflip]', el).onclick = () => openElevation(e.wallId, -e.side);
+    $('[data-eclose]', el).onclick = closeElevation;
+    return;
+  }
   el.innerHTML =
     design.floors
       .map((f, i) => `<button role="tab" class="${!all && i === viewer.activeFloor ? 'on' : ''}" data-floor="${i}" title="${esc(f.name)} · level ${cm(ys[i])} cm · double-click to rename"><span class="lv">${i === 0 ? 'G' : i}</span>${esc(f.name)}</button>`)
       .join('') +
     (design.floors.length > 1 && viewer.view !== 'walk' ? `<button role="tab" class="${all ? 'on' : ''}" data-all title="See the whole house">All floors</button>` : '') +
     (ui.editing ? '<span class="sep"></span><button class="add" data-addfloor title="Add a floor above the top one">+ Floor</button>' : '') +
-    (viewer.view === '3d' && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '') +
+    ((viewer.view === '3d' || viewer.split) && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '') +
     (viewer.view !== 'walk' ? `<span class="sep"></span><button data-measure class="${ui.tool === 'measure' ? 'on' : ''}" title="Measure distances, paths and along surfaces (M)">Measure</button>` : '') +
     (viewer.view !== 'walk' ? `<span class="sep"></span><button data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, areas and the grid">View ▾</button>` : '');
   $$('[data-floor]', el).forEach((b) => {
@@ -248,6 +257,25 @@ function setDisplay(k, on) {
   if (k === 'clear') refreshClearance();
   pref.set('display', viewer.display);
   if (!$('#viewMenu').hidden) renderViewMenu();
+}
+
+/** Straight-on view of one wall (from inside the room by default). */
+function openElevation(wallId, side) {
+  const f = floorNow();
+  const w = f.walls.find((x) => x.id === wallId);
+  if (!w) return;
+  if (ui.tool) setTool(null);
+  if (viewer.split) viewer.setSplit(false);
+  ui.beforeElevation ||= ui.view || viewer.view;
+  viewer.setElevation(wallId, side ?? insideSign(f, w));
+  $$('#viewSeg button').forEach((b) => b.classList.remove('on'));
+  renderAll();
+}
+
+function closeElevation() {
+  const back = ui.beforeElevation || '3d';
+  ui.beforeElevation = null;
+  setView(back === 'elevation' ? '3d' : back);
 }
 
 function setFloor(i) {
@@ -570,10 +598,12 @@ function wallInspector(el, id) {
     <div class="group"><div class="lbl">Recess or bay</div>
       <div class="num-row">${field('From start', `type="number" min="0" step="5" id="rStart" value="${cm((len - rw) / 2)}"`)}${field('Width', `type="number" min="20" step="5" id="rWidth" value="${cm(rw)}"`)}${field('Depth', `type="number" min="5" step="5" id="rDepth" value="60"`)}</div>
       <div class="row" style="margin-top:8px"><button class="btn small" id="rIn" title="Push part of the wall into the building">Make recess</button><button class="btn small" id="rOut" title="Push part of the wall outward">Make bay</button></div></div>` : ''}
+    <div class="group"><button class="btn small" id="wElev" title="Look straight at this wall, with heights">Elevation view</button></div>
     ${ops.length ? `<div class="group"><div class="lbl">On this wall</div>${ops.map((o) => `<button class="btn small ghost list-btn" data-op="${esc(o.id)}"><span>${o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening'} · ${cm(o.width)} cm</span><em>${cm(o.offset)} cm in</em></button>`).join('')}</div>` : ''}
     ${edit ? `<div class="group"><div class="row"><button class="btn small" id="wSplit" title="Adds a corner in the middle; drag it to angle the wall">Add corner</button><button class="btn small danger" id="wDel">Delete wall</button></div></div>
     <div class="tip">Drag the wall to push or pull it: square neighbours stretch, others get a step. Drag the dots to move corners (Shift for any angle). Double-click a wall to add a corner there.</div>` : '<div class="tip">Turn on <b>Edit house</b> (E) to change walls.</div>'}</div>`;
   $$('[data-op]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'opening', id: b.dataset.op })));
+  $('#wElev', el).onclick = () => openElevation(id);
   if (!edit) return;
   $('#wLen', el).onchange = (e) => {
     const L = parseFloat(e.target.value) / 100;
@@ -1429,7 +1459,11 @@ function setView(v) {
   if (v === 'walk' && ui.editing) setEditing(false);
   if (v === 'walk' && ui.tool) setTool(null);
   if (v === 'walk' && viewer.showAll) viewer.setShowAll(false);
-  viewer.setView(v);
+  // Split view = the plan and the 3D view side by side
+  if (v !== 'split') viewer.setSplit(false);
+  viewer.setView(v === 'split' ? 'plan' : v);
+  if (v === 'split') viewer.setSplit(true);
+  ui.view = v;
   $$('#viewSeg button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
   $('#walkUI').hidden = v !== 'walk';
   if (v === 'walk') {
@@ -1558,7 +1592,8 @@ async function boot() {
       ui.hover = t || '';
       updateHint();
     },
-    onPointer: (x, z) => {
+    onPointer: (x, z, kind) => {
+      if (kind === 'elevation') return ($('#coords').textContent = `along ${x.toFixed(2)} m · height ${z.toFixed(2)} m`);
       ui.pointer = [x, z];
       $('#coords').textContent = `x ${x.toFixed(2)} m · z ${z.toFixed(2)} m`;
     },
@@ -1839,6 +1874,7 @@ function wireUI() {
     if (mod && k === 'z') (e.preventDefault(), restore(history.index + (e.shiftKey ? 1 : -1)));
     else if (mod && k === 'y') (e.preventDefault(), restore(history.index + 1));
     else if (ui.tool === 'measure' && (k === 'escape' || k === 'enter') && measure.key(k)) e.preventDefault();
+    else if (k === 'escape' && viewer.view === 'elevation' && !viewer.sel) closeElevation();
     else if (k === 'escape') {
       if (viewer.view === 'walk' && !document.pointerLockElement) setView('3d');
       else if (ui.tool) setTool(null);
@@ -1882,7 +1918,7 @@ function wireUI() {
       clearTimeout(wireUI.nudge);
       wireUI.nudge = setTimeout(() => commit(), 400);
     }
-    else if (['1', '2', '3'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'walk' }[k]);
+    else if (['1', '2', '3', '4'].includes(k) && !mod) setView({ 1: '3d', 2: 'plan', 3: 'walk', 4: 'split' }[k]);
     else if (k === 'pageup') (e.preventDefault(), setFloor(viewer.activeFloor + 1));
     else if (k === 'pagedown') (e.preventDefault(), setFloor(viewer.activeFloor - 1));
     else if (k.startsWith('arrow') && (sel?.type === 'item' || sel?.type === 'items')) {

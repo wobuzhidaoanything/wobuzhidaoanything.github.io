@@ -128,6 +128,16 @@ export class Viewer {
     this.plan.minPolarAngle = this.plan.maxPolarAngle = 0.0001;
     this.plan.minAzimuthAngle = this.plan.maxAzimuthAngle = 0;
     this.plan.dollyToCursor = true;
+    // Wall elevation: straight-on orthographic view of one wall (see setElevation)
+    this.elevCam = new THREE.OrthographicCamera(-5, 5, 3, -3, 0.1, 100);
+    this.elevControls = new CameraControls(this.elevCam, r.domElement);
+    this.elevControls.enabled = false;
+    this.elevControls.mouseButtons.left = CameraControls.ACTION.TRUCK;
+    this.elevControls.mouseButtons.right = CameraControls.ACTION.TRUCK;
+    this.elevControls.mouseButtons.wheel = CameraControls.ACTION.ZOOM;
+    this.elevControls.dollyToCursor = true;
+    this.elevControls.minZoom = 0.3;
+    this.elevControls.maxZoom = 12;
     this.plan.minZoom = 0.2;
     this.plan.maxZoom = 12;
     this.controls = this.orbit;
@@ -194,10 +204,10 @@ export class Viewer {
     this.listeners = [
       // Capture phase on the container: runs before the camera controls see the press, so a drag
       // on a wall, door or item never also pans or orbits the view.
-      [container, 'pointerdown', (e) => e.target === el && this.onDown(e), true],
-      [el, 'pointermove', (e) => this.onMove(e)],
+      [container, 'pointerdown', (e) => (e.target === el || e.target.dataset?.pane) && this.onDown(e), true],
+      [container, 'pointermove', (e) => (e.target === el || e.target.dataset?.pane) && this.onMove(e)],
       [window, 'pointerup', (e) => this.onUp(e)],
-      [el, 'dblclick', (e) => this.onDblClick(e)],
+      [container, 'dblclick', (e) => (e.target === el || e.target.dataset?.pane) && this.onDblClick(e)],
       [el, 'contextmenu', (e) => e.preventDefault()],
     ];
     for (const [t, n, f, c] of this.listeners) t.addEventListener(n, f, !!c);
@@ -222,16 +232,19 @@ export class Viewer {
   }
 
   resize() {
-    const w = this.container.clientWidth || 1;
+    const W = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
-    this.renderer.setSize(w, h);
+    this.renderer.setSize(W, h);
+    // Split view: plan on the left half, 3D on the right half
+    const w = this.split ? Math.floor(W / 2) : W;
     this.labels.setSize(w, h);
-    this.persp.aspect = w / h;
+    this.persp.aspect = (this.split ? W - w : W) / h;
     this.persp.updateProjectionMatrix();
     const span = this.span || 12;
     const s = Math.max(span / w, span / h) * 1.15;
     Object.assign(this.ortho, { left: (-w * s) / 2, right: (w * s) / 2, top: (h * s) / 2, bottom: (-h * s) / 2 });
     this.ortho.updateProjectionMatrix();
+    if (this.view === 'elevation') this.fitElevation();
     this.composer?.setSize(w, h);
   }
 
@@ -334,7 +347,8 @@ export class Viewer {
     if (!box) return;
     const c = box.getCenter(new THREE.Vector3());
     const y = this.floorY;
-    const s = this.span;
+    // Narrow views (split view) step back so the whole house still fits
+    const s = this.span * Math.max(1, 1 / Math.sqrt(this.persp.aspect || 1));
     this.orbit.setLookAt(c.x + s * 0.55, y + s * 0.95 + 2, c.z + s * 1.2, c.x, y + 0.8, c.z, animate);
     this.plan.setLookAt(c.x, y + 50, c.z, c.x, y, c.z, animate);
     this.plan.zoomTo(1, animate);
@@ -372,7 +386,7 @@ export class Viewer {
     for (const f of this.house.floors) {
       const above = f.index > this.activeFloor;
       f.group.visible = walk || all || !above;
-      const cut = !walk && !all && f.index === this.activeFloor && (this.view === 'plan' || this.wallMode === 'cut');
+      const cut = !walk && !all && f.index === this.activeFloor && (this.view === 'plan' || (this.wallMode === 'cut' && this.view !== 'elevation'));
       for (const m of f.clipMaterials || []) m.clippingPlanes = cut ? [f.clipPlane] : [];
       if (f.cap) f.cap.visible = cut;
     }
@@ -426,7 +440,7 @@ export class Viewer {
     this.pickBoxes.clear();
     this.wallLabels.clear();
     const floor = this.activeFloorData;
-    if (!this.editMode || !floor || !this.house || this.view === 'walk' || this.showAll) return;
+    if (!this.editMode || !floor || !this.house || this.view === 'walk' || this.view === 'elevation' || this.showAll) return;
     const y0 = this.floorY;
     const top = y0 + (this.view === 'plan' || this.wallMode === 'cut' ? CUT_HEIGHT : floor.height) + 0.03;
     const seen = [];
@@ -637,7 +651,7 @@ export class Viewer {
       const a = rec.group.rotation.y;
       this.rotKnob.position.set(Math.sin(a) * r, 0, Math.cos(a) * r);
       this.rotGroup.position.set(rec.group.position.x, rec.group.position.y + 0.015, rec.group.position.z);
-      this.rotGroup.visible = this.view !== 'walk';
+      this.rotGroup.visible = this.view !== 'walk' && this.view !== 'elevation';
       this.selLabel.element.textContent = `${Math.round(d.w * 100)} × ${Math.round(d.d * 100)} × ${Math.round(d.h * 100)} cm`;
       this.selLabel.position.set(rec.group.position.x, box.max.y + 0.12, rec.group.position.z);
       this.selLabel.visible = true;
@@ -726,7 +740,7 @@ export class Viewer {
   /** Grid and dimension lines for the active floor. */
   refreshAnnotations() {
     this.dimGroup.clear();
-    const show = !!this.design && !!this.house && this.view !== 'walk' && !this.showAll;
+    const show = !!this.design && !!this.house && this.view !== 'walk' && this.view !== 'elevation' && !this.showAll;
     this.annot.visible = show;
     if (!show) return;
     const y = this.floorY;
@@ -768,7 +782,7 @@ export class Viewer {
   refreshRoomLabels() {
     this.roomLabels.clear();
     this.refreshAnnotations();
-    if (!this.design || this.view === 'walk' || this.showAll) return;
+    if (!this.design || this.view === 'walk' || this.view === 'elevation' || this.showAll) return;
     const floor = this.design.floors[this.activeFloor];
     for (const r of floor?.rooms || []) {
       if (!r.name) continue;
@@ -784,13 +798,120 @@ export class Viewer {
 
   // ---------- views ----------
 
+  /**
+   * Look straight at one wall of the active floor from `side` (+1 = its normal side, -1 = the other),
+   * flat (no perspective). Only what's within `depth` metres in front of the wall is drawn, so the
+   * walls behind the camera don't get in the way.
+   */
+  setElevation(wallId, side = 1, depth = 3.2) {
+    const f = this.activeFloorData;
+    const w = f?.walls.find((x) => x.id === wallId);
+    if (!w) return false;
+    const { dir, normal, len } = wallFrame(w);
+    const n = [normal[0] * side, normal[1] * side];
+    const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+    const y0 = this.floorY, H = f.height;
+    const D = 40;
+    this.elev = { wallId, side, n, dir, len, a: w.a, t: w.thickness, y0, H, depth };
+    const cam = this.elevCam;
+    cam.near = D - depth;
+    cam.far = D - w.thickness / 2 + 0.03; // stop at the wall's face
+    this.setView('elevation');
+    this.fitElevation();
+    const cy = y0 + H / 2;
+    this.elevControls.setLookAt(mid[0] + n[0] * D, cy, mid[1] + n[1] * D, mid[0], cy, mid[1], false);
+    this.elevControls.zoomTo(1, false);
+    const az = this.elevControls.azimuthAngle, po = this.elevControls.polarAngle;
+    Object.assign(this.elevControls, { minAzimuthAngle: az, maxAzimuthAngle: az, minPolarAngle: po, maxPolarAngle: po });
+    this.buildElevationDims();
+    return true;
+  }
+
+  fitElevation() {
+    if (!this.elev) return;
+    const W = this.container.clientWidth || 1, Hpx = this.container.clientHeight || 1;
+    const halfW = this.elev.len / 2 + 0.9, halfH = this.elev.H / 2 + 0.7;
+    const s = Math.max(halfW / (W / 2), halfH / (Hpx / 2));
+    Object.assign(this.elevCam, { left: (-W / 2) * s, right: (W / 2) * s, top: (Hpx / 2) * s, bottom: (-Hpx / 2) * s });
+    this.elevCam.updateProjectionMatrix();
+  }
+
+  /** Point on the wall face at (u along the wall, v above the floor), nudged towards the viewer. */
+  elevPoint(u, v, out = 0.02) {
+    const e = this.elev;
+    return new THREE.Vector3(e.a[0] + e.dir[0] * u + e.n[0] * (e.t / 2 + out), e.y0 + v, e.a[1] + e.dir[1] * u + e.n[1] * (e.t / 2 + out));
+  }
+
+  /** Height dimensions for the elevation: ceiling, each door/window (sill and head), wall length, item heights. */
+  buildElevationDims() {
+    this.elevGroup ||= new THREE.Group();
+    if (!this.elevGroup.parent) this.scene.add(this.elevGroup);
+    this.elevGroup.clear();
+    const e = this.elev;
+    if (!e) return;
+    const f = this.activeFloorData;
+    const pts = [];
+    const line = (u0, v0, u1, v1) => {
+      const A = this.elevPoint(u0, v0), B = this.elevPoint(u1, v1);
+      pts.push(A.x, A.y, A.z, B.x, B.y, B.z);
+    };
+    const text = (str, u, v, cls = 'dim-text') => {
+      const el = document.createElement('div');
+      el.className = cls;
+      el.textContent = str;
+      const o = new CSS2DObject(el);
+      o.position.copy(this.elevPoint(u, v));
+      this.elevGroup.add(o);
+    };
+    // Along the wall the camera's right is +dir when looking from +normal… or −dir from the other side;
+    // dimension positions are in u (wall coordinates), so they're right either way.
+    const uL = -0.45;
+    // Ceiling height, on the left
+    line(uL, 0, uL, e.H);
+    line(uL - 0.08, 0, uL + 0.08, 0);
+    line(uL - 0.08, e.H, uL + 0.08, e.H);
+    text(`${(e.H * 100).toFixed(0)} cm`, uL, e.H / 2);
+    // Wall length, under the floor line
+    line(0, -0.3, e.len, -0.3);
+    line(0, -0.38, 0, -0.22);
+    line(e.len, -0.38, e.len, -0.22);
+    text(`${e.len.toFixed(2)} m`, e.len / 2, -0.3);
+    // Openings: position along the wall, sill and head heights
+    for (const o of f.openings.filter((x) => x.wall === e.wallId)) {
+      const v0 = o.type === 'window' ? o.sill : 0, v1 = v0 + o.height;
+      const u = o.offset + o.width + 0.12;
+      line(u, 0, u, v1);
+      if (v0 > 0.01) text(`sill ${(v0 * 100).toFixed(0)}`, u, v0 / 2);
+      text(`${o.type === 'window' ? 'top' : 'head'} ${(v1 * 100).toFixed(0)}`, u, v1 + 0.08);
+      text(`${(o.offset * 100).toFixed(0)} · ${(o.width * 100).toFixed(0)} wide`, o.offset + o.width / 2, -0.12);
+    }
+    // Furniture near the wall: its top height
+    for (const [, rec] of this.items) {
+      if (rec.floorIndex !== this.activeFloor) continue;
+      const p = rec.placed;
+      const rel = [p.x - e.a[0], p.z - e.a[1]];
+      const dist = rel[0] * e.n[0] + rel[1] * e.n[1];
+      const u = rel[0] * e.dir[0] + rel[1] * e.dir[1];
+      if (dist < 0 || dist > e.depth || u < -0.2 || u > e.len + 0.2) continue;
+      const top = (p.y || 0) + rec.dims.h;
+      text(`${(top * 100).toFixed(0)} cm${p.y > 0.01 ? ` (from ${(p.y * 100).toFixed(0)})` : ''}`, u, top + 0.1, 'dim-text elev-item');
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    const l = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x4a4f57, depthTest: false }));
+    l.renderOrder = 12;
+    this.elevGroup.add(l);
+  }
+
   setView(view) {
     const prev = this.view;
     this.view = view;
     this.orbit.enabled = view === '3d';
     this.plan.enabled = view === 'plan';
-    this.controls = view === 'plan' ? this.plan : this.orbit;
-    this.camera = view === 'plan' ? this.ortho : this.persp;
+    this.elevControls.enabled = view === 'elevation';
+    this.controls = view === 'plan' ? this.plan : view === 'elevation' ? this.elevControls : this.orbit;
+    this.camera = view === 'plan' ? this.ortho : view === 'elevation' ? this.elevCam : this.persp;
+    if (view !== 'elevation') this.elevGroup?.clear();
     if (view === 'walk') this.cb.onWalk?.(true);
     else if (prev === 'walk') this.cb.onWalk?.(false);
     if (view === '3d' && prev === 'walk') this.frameHouse(true);
@@ -805,9 +926,20 @@ export class Viewer {
   // ---------- pointer ----------
 
   setPointer(e) {
-    const rect = this.renderer.domElement.getBoundingClientRect();
+    const rect = this.paneRect();
     this.pointer.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, this.camera);
+    // Orthographic rays start behind the camera's near plane: only pick what's actually drawn
+    // (matters for the wall elevation, whose near plane cuts away the rest of the house).
+    if (this.camera.isOrthographicCamera) {
+      const dir = this.camera.getWorldDirection(new THREE.Vector3());
+      const d0 = this.raycaster.ray.origin.clone().sub(this.camera.position).dot(dir);
+      this.raycaster.near = Math.max(0, this.camera.near - d0);
+      this.raycaster.far = this.camera.far - d0;
+    } else {
+      this.raycaster.near = 0;
+      this.raycaster.far = Infinity;
+    }
   }
 
   /** Point on the horizontal plane at height y under the pointer. */
@@ -881,6 +1013,16 @@ export class Viewer {
   snapshotFloor() {
     const f = this.activeFloorData;
     return JSON.parse(JSON.stringify({ walls: f.walls, openings: f.openings }));
+  }
+
+  /** Pointer position on the elevation wall as [u along the wall, v above the floor]. */
+  elevAt() {
+    const e = this.elev;
+    if (!e) return null;
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(e.n[0], 0, e.n[1]), this.elevPoint(0, 0, 0));
+    const P = this.raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+    if (!P) return null;
+    return [(P.x - e.a[0]) * e.dir[0] + (P.z - e.a[1]) * e.dir[1], P.y - e.y0];
   }
 
   /** If the live edit moved a locked wall, undo it (back to the snapshot) and say why. */
@@ -960,6 +1102,9 @@ export class Viewer {
     const at = planOf(hit.point);
     if (hit.type === 'item' && this.items.get(hit.id)?.placed.locked) {
       this.cb.onLocked?.('item');
+    } else if (hit.type === 'item' && this.view === 'elevation') {
+      const rec = this.items.get(hit.id);
+      this.drag = { type: 'elev', id: hit.id, start: this.elevAt(), orig: { x: rec.placed.x, z: rec.placed.z, y: rec.placed.y || 0 } };
     } else if (hit.type === 'item') {
       const rec = this.items.get(hit.id);
       const fp = this.planePoint(rec.group.position.y) || hit.point;
@@ -991,8 +1136,12 @@ export class Viewer {
   onMove(e) {
     if (this.view === 'walk') return;
     this.setPointer(e);
-    const pp = this.planePoint();
+    const pp = this.view === 'elevation' ? null : this.planePoint();
     if (pp) this.cb.onPointer?.(pp.x, pp.z);
+    else if (this.view === 'elevation') {
+      const q = this.elevAt();
+      if (q) this.cb.onPointer?.(q[0], q[1], 'elevation');
+    }
     if (this.tool?.onMove?.(e)) return;
     const d = this.drag;
     if (!d) {
@@ -1024,6 +1173,22 @@ export class Viewer {
       Object.assign(this.boxEl.style, { display: 'block', left: `${Math.min(d.x0, e.clientX) - r.left}px`, top: `${Math.min(d.y0, e.clientY) - r.top}px`, width: `${Math.abs(e.clientX - d.x0)}px`, height: `${Math.abs(e.clientY - d.y0)}px` });
       d.x1 = e.clientX;
       d.y1 = e.clientY;
+      return;
+    }
+    if (d.type === 'elev') {
+      const q = this.elevAt();
+      const rec = this.items.get(d.id);
+      if (!q || !d.start || !rec) return;
+      let du = q[0] - d.start[0], dv = q[1] - d.start[1];
+      const st = this.snapStep(e) ? 0.01 : 0;
+      if (st) (du = Math.round(du / st) * st), (dv = Math.round(dv / st) * st);
+      const ed = this.elev.dir;
+      Object.assign(rec.placed, { x: +(d.orig.x + ed[0] * du).toFixed(3), z: +(d.orig.z + ed[1] * du).toFixed(3), y: +Math.max(0, d.orig.y + dv).toFixed(3) });
+      rec.group.position.set(rec.placed.x, this.house.floors[rec.floorIndex].y0 + rec.placed.y, rec.placed.z);
+      d.changed = true;
+      this.updateSelection();
+      this.showDragLabel(`${Math.round(rec.placed.y * 100)} cm off the floor`, [rec.placed.x, rec.placed.z]);
+      this.cb.onLive?.();
       return;
     }
     if (d.type === 'group') {
@@ -1133,7 +1298,7 @@ export class Viewer {
     if (d?.type === 'box') {
       this.boxEl.style.display = 'none';
       if (d.x1 == null || Math.hypot(d.x1 - d.x0, d.y1 - d.y0) < 5) return;
-      const r = this.renderer.domElement.getBoundingClientRect();
+      const r = this.paneRect();
       const [x0, x1] = [Math.min(d.x0, d.x1), Math.max(d.x0, d.x1)], [y0, y1] = [Math.min(d.y0, d.y1), Math.max(d.y0, d.y1)];
       const ids = [];
       for (const [id, rec] of this.items) {
@@ -1147,7 +1312,8 @@ export class Viewer {
       return;
     }
     if (d?.changed) {
-      if (d.type === 'item' || d.type === 'rotate' || d.type === 'group') this.cb.onCommit?.();
+      if (d.type === 'item' || d.type === 'rotate' || d.type === 'group' || d.type === 'elev') this.cb.onCommit?.();
+      if (d.type === 'elev') this.buildElevationDims();
       else this.cb.onStructureCommit?.({ type: d.type, id: d.id, corner: d.to });
       this.updateSelection();
       return;
@@ -1216,10 +1382,96 @@ export class Viewer {
     this.timer.update();
     const dt = Math.min(this.timer.getDelta(), 0.05);
     for (const f of this.frameHooks) f(dt);
+    if (this.split) return this.frameSplit(dt);
     if (this.view !== 'walk') this.controls.update(dt);
     if (this.composer && this.view !== 'plan') this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
+  }
+
+  /**
+   * Split view: the plan (left) and the 3D view (right) of the same floor, both live.
+   * Each half has its own camera controls; whichever half the pointer is over is "active" for
+   * picking and dragging, so edits in either show in both.
+   */
+  setSplit(on) {
+    if (on === !!this.split) return;
+    this.split = on;
+    const el = this.renderer.domElement;
+    if (on) {
+      this.panes = ['plan', '3d'].map((view) => {
+        const d = document.createElement('div');
+        d.className = `split-pane ${view}`;
+        d.dataset.pane = view;
+        this.container.appendChild(d);
+        d.addEventListener('pointerenter', () => this.setPane(view));
+        d.addEventListener('pointerdown', () => this.setPane(view), true);
+        return d;
+      });
+      this.plan.disconnect();
+      this.orbit.disconnect();
+      this.plan.connect(this.panes[0]);
+      this.orbit.connect(this.panes[1]);
+      this.plan.enabled = this.orbit.enabled = true;
+      this.labels.domElement.classList.add('split-labels');
+      this.setPane('plan');
+    } else {
+      for (const d of this.panes || []) d.remove();
+      this.panes = null;
+      this.plan.disconnect();
+      this.orbit.disconnect();
+      this.plan.connect(el);
+      this.orbit.connect(el);
+      this.labels.domElement.classList.remove('split-labels');
+      this.setView(this.view === 'walk' ? '3d' : this.view);
+    }
+    this.resize();
+    this.frameHouse(false);
+    this.applyFloorVisibility();
+    this.refreshRoomLabels();
+    this.refreshEditOverlay();
+  }
+
+  /** Which half of the split view the pointer works in. */
+  setPane(view) {
+    if (!this.split || (this.view === view && this.camera === (view === 'plan' ? this.ortho : this.persp))) return;
+    if (this.drag) return; // never switch in the middle of a drag
+    this.view = view;
+    this.camera = view === 'plan' ? this.ortho : this.persp;
+    this.controls = view === 'plan' ? this.plan : this.orbit;
+    this.refreshEditOverlay();
+    this.updateSelection();
+  }
+
+  /** Pixel rectangle of the active half (split view) or of the whole view. */
+  paneRect() {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    if (!this.split) return r;
+    const w = Math.floor(r.width / 2);
+    return this.view === 'plan' ? { left: r.left, top: r.top, width: w, height: r.height } : { left: r.left + w, top: r.top, width: r.width - w, height: r.height };
+  }
+
+  frameSplit(dt) {
+    this.plan.update(dt);
+    this.orbit.update(dt);
+    const r = this.renderer;
+    const W = r.domElement.clientWidth, H = r.domElement.clientHeight, w = Math.floor(W / 2);
+    const active = this.view;
+    r.setScissorTest(true);
+    for (const [view, x, width, cam] of [['plan', 0, w, this.ortho], ['3d', w, W - w, this.persp]]) {
+      // Each half gets its own cut / plan-only symbols
+      this.view = view;
+      this.applyFloorVisibility();
+      r.setViewport(x, 0, width, H);
+      r.setScissor(x, 0, width, H);
+      r.render(this.scene, cam);
+    }
+    r.setScissorTest(false);
+    r.setViewport(0, 0, W, H);
+    this.view = active;
+    this.applyFloorVisibility();
+    // Labels (room names, dimensions, lengths) belong to the plan half
+    this.labels.render(this.scene, this.ortho);
   }
 
   /** Hide overlays for clean output (screenshots, exports). */
