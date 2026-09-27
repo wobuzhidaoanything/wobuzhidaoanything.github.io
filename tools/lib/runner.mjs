@@ -7,12 +7,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { ROOT } from './paths.mjs';
+import { ROOT, STATE as STATE_DIR } from './paths.mjs';
 import { HARNESSES, SERVER, NODE, agentStatus } from './agents.mjs';
 
 const win = process.platform === 'win32';
-const STATE = path.join(ROOT, '.roomcraft', 'chat.json');
-const MCP_JSON = path.join(ROOT, '.roomcraft', 'mcp.json');
+const STATE = path.join(STATE_DIR, 'chat.json');
+const MCP_JSON = path.join(STATE_DIR, 'mcp.json');
 
 const SYSTEM = [
   'You are the AI assistant inside Roomcraft, a 3D house planner running on this computer. The user talks to you from a chat panel in the app.',
@@ -52,10 +52,14 @@ const RUNNERS = {
     bin: 'cursor-agent',
     args: ({ prompt, session }) => ['-p', withSystem(prompt, session), '--output-format', 'stream-json', '--approve-mcps', ...(session ? ['--resume', session] : [])],
   },
+  // Grok Build: `grok -p "…"` by default; ROOMCRAFT_GROK_CMD overrides it (e.g. "grok --prompt")
   grok: {
-    bin: 'grok',
+    bin: (process.env.ROOMCRAFT_GROK_CMD || 'grok').trim().split(/\s+/)[0],
     noResume: true,
-    args: ({ prompt }) => ['-p', withSystem(prompt, null)],
+    args: ({ prompt }) => {
+      const custom = (process.env.ROOMCRAFT_GROK_CMD || '').trim().split(/\s+/).slice(1);
+      return [...(custom.length ? custom : ['-p']), withSystem(prompt, null)];
+    },
   },
 };
 

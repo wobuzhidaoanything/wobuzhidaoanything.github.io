@@ -1,23 +1,23 @@
 // Operations shared by the MCP server and the CLI. They work on this device's design store
-// (designs/ folder, see store.mjs): house designs and the furniture model library.
+// (userdata/ folder, see paths.mjs): house designs and the furniture model library.
 //
 // Vision rule: every model an agent adds or changes is saved as `verified: false`, and
 // can only be verified after its current version has been rendered (tracked in
-// .roomcraft/renders.json) — so the agent must look at it first. Layout changes return
+// userdata/.state/renders.json) — so the agent must look at it first. Layout changes return
 // renders of every floor for the same reason.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { ROOT } from './paths.mjs';
+import { MODELS, STATE, EXPORTS as EXPORT_DIR } from './paths.mjs';
 import * as store from './store.mjs';
 import { scrapeProduct, guessCategory } from '../../worker/src/scrape.js';
 import { colorFromName } from '../../shared/colors.js';
 import { migrate, normalize, validate, elevations, stairLayout, wallFrame } from '../../js/design.js';
 import { detectRooms } from '../../js/plan.js';
 
-const STATE_DIR = path.join(ROOT, '.roomcraft');
+const STATE_DIR = STATE;
 const RENDERS = path.join(STATE_DIR, 'renders.json');
-export const EXPORTS = path.join(ROOT, 'exports');
+export const EXPORTS = EXPORT_DIR;
 
 export const CATEGORIES = ['sofa', 'armchair', 'chair', 'stool', 'ottoman', 'bed', 'wardrobe', 'bookshelf', 'dresser', 'nightstand', 'sideboard', 'tvstand', 'desk', 'table', 'coffeetable', 'sidetable', 'floorlamp', 'lamp', 'rug', 'plant', 'tv', 'mirror', 'curtain', 'box'];
 
@@ -151,16 +151,16 @@ export function updateItem(args) {
   });
 }
 
-/** Download a .glb into models/ so the model has a permanent local copy. */
+/** Download a .glb into userdata/models/ (served at /models/…) so the model has a permanent local copy. */
 export async function saveModelFile({ id, url }) {
   const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 roomcraft' } });
   if (!r.ok) throw new Error(`Download failed: HTTP ${r.status}`);
   const buf = Buffer.from(await r.arrayBuffer());
   if (buf.length > 40e6) throw new Error('Model is larger than 40 MB; keep it as a URL instead.');
   if (buf.subarray(0, 4).toString() !== 'glTF') throw new Error('That file is not a binary glTF (.glb).');
-  fs.mkdirSync(path.join(ROOT, 'models'), { recursive: true });
+  fs.mkdirSync(MODELS, { recursive: true });
   const rel = `models/${slug(id)}.glb`;
-  fs.writeFileSync(path.join(ROOT, rel), buf);
+  fs.writeFileSync(path.join(MODELS, `${slug(id)}.glb`), buf);
   return withLibrary((lib) => {
     const item = lib.items.find((i) => i.id === id);
     if (!item) throw new Error(`No model "${id}".`);

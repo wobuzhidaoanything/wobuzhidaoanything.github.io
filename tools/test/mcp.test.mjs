@@ -1,5 +1,5 @@
 // End-to-end test: spawns the MCP server over stdio and drives it like an agent would.
-// Uses a local product page, so it needs no internet. Restores data/project.json afterwards.
+// Uses a local product page, so it needs no internet, and a temporary userdata folder.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -7,8 +7,10 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const USERDATA = fs.mkdtempSync(path.join(os.tmpdir(), 'roomcraft-test-'));
 
 // 1x1 PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -26,7 +28,7 @@ function productServer() {
 }
 
 function client() {
-  const proc = spawn(process.execPath, [path.join(ROOT, 'tools', 'mcp-server.mjs')], { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'] });
+  const proc = spawn(process.execPath, [path.join(ROOT, 'tools', 'mcp-server.mjs')], { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, ROOMCRAFT_USERDATA: USERDATA } });
   let buf = '';
   const waiting = new Map();
   proc.stdout.on('data', (d) => {
@@ -48,13 +50,30 @@ function client() {
   return { call, tool: async (name, args) => (await call('tools/call', { name, arguments: args })).result, close: () => proc.stdin.end() };
 }
 
+test('old layout (designs/, models/, .roomcraft/) moves into userdata/ without losing anything', async () => {
+  const { migrateLayout } = await import('../lib/paths.mjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'roomcraft-old-'));
+  const ud = path.join(root, 'userdata');
+  fs.mkdirSync(path.join(root, 'designs'));
+  fs.writeFileSync(path.join(root, 'designs', 'house.json'), '{"id":"house"}');
+  fs.writeFileSync(path.join(root, 'designs', 'library.json'), '{"items":[]}');
+  fs.writeFileSync(path.join(root, 'designs', '.active'), 'house');
+  fs.mkdirSync(path.join(root, 'models'));
+  fs.writeFileSync(path.join(root, 'models', 'a.glb'), 'glTF');
+  fs.mkdirSync(path.join(root, '.roomcraft'));
+  fs.writeFileSync(path.join(root, '.roomcraft', 'renders.json'), '{}');
+  const moved = migrateLayout(root, ud);
+  assert.ok(moved.length >= 5, moved.join('\n'));
+  assert.equal(fs.readFileSync(path.join(ud, 'designs', 'house.json'), 'utf8'), '{"id":"house"}');
+  assert.ok(fs.existsSync(path.join(ud, 'library.json')) && fs.existsSync(path.join(ud, '.state', 'active')) && fs.existsSync(path.join(ud, 'models', 'a.glb')) && fs.existsSync(path.join(ud, '.state', 'renders.json')));
+  assert.ok(!fs.existsSync(path.join(root, 'designs')));
+  // Running again is harmless
+  assert.equal(migrateLayout(root, ud).length, 0);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('MCP server: link → model with renders, enforced vision check, floor plan → design, export', { timeout: 300000 }, async () => {
-  const DESIGNS = path.join(ROOT, 'designs');
-  const backup = path.join(ROOT, '.roomcraft', 'test-backup');
-  fs.rmSync(backup, { recursive: true, force: true });
-  if (fs.existsSync(DESIGNS)) fs.cpSync(DESIGNS, backup, { recursive: true });
-  const conns = path.join(ROOT, '.roomcraft', 'connections.json');
-  const connsBackup = fs.existsSync(conns) ? fs.readFileSync(conns) : null;
+  const conns = path.join(USERDATA, '.state', 'connections.json');
   const shop = await productServer();
   const c = client();
   try {
@@ -76,7 +95,7 @@ test('MCP server: link → model with renders, enforced vision check, floor plan
     assert.equal(added.content.filter((x) => x.type === 'image').length, 2, 'two renders returned');
 
     // Change the model behind the agent's back: verification is refused until it looks again.
-    const libFile = path.join(DESIGNS, 'library.json');
+    const libFile = path.join(USERDATA, 'library.json');
     const lib = JSON.parse(fs.readFileSync(libFile));
     lib.items.find((i) => i.id === 'i-test-marlow').dims.w = 3;
     fs.writeFileSync(libFile, JSON.stringify(lib));
@@ -108,20 +127,15 @@ test('MCP server: link → model with renders, enforced vision check, floor plan
     const placed = await c.tool('place_item', { design: 'test-traced', floor: 0, item: 'i-test-marlow', x_cm: 250, z_cm: 60, rot: 0 });
     assert.ok(!placed.isError, placed.content[0].text);
 
-    const exported = await c.tool('export_glb', { id: 'test-traced', file: path.join(ROOT, '.roomcraft', 'test.glb') });
+    const exported = await c.tool('export_glb', { id: 'test-traced', file: path.join(USERDATA, 'test.glb') });
     assert.ok(!exported.isError, exported.content[0].text);
-    const glb = fs.readFileSync(path.join(ROOT, '.roomcraft', 'test.glb'));
+    const glb = fs.readFileSync(path.join(USERDATA, 'test.glb'));
     assert.equal(glb.subarray(0, 4).toString(), 'glTF');
     const json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString());
     assert.ok(json.nodes.some((n) => n.name === 'First floor') && json.nodes.some((n) => n.name?.startsWith('MARLOW 3-seat sofa')));
   } finally {
     c.close();
     shop.close();
-    fs.rmSync(DESIGNS, { recursive: true, force: true });
-    if (fs.existsSync(backup)) fs.cpSync(backup, DESIGNS, { recursive: true });
-    fs.rmSync(backup, { recursive: true, force: true });
-    fs.rmSync(path.join(ROOT, '.roomcraft', 'test.glb'), { force: true });
-    if (connsBackup) fs.writeFileSync(conns, connsBackup);
-    else fs.rmSync(conns, { force: true });
+    fs.rmSync(USERDATA, { recursive: true, force: true });
   }
 });

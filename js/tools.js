@@ -58,11 +58,9 @@ export class Tools {
   point(e) {
     const p = this.v.planePoint();
     if (!p) return null;
-    let at = [p.x, p.z];
-    if (!e.shiftKey) {
-      at = snapPoint(at, this.v.activeFloorData);
-      if (this.chain?.last) at = orthoSnap(at, this.chain.last);
-    }
+    // Snap to corners and the grid (Alt: free); lock to 0/45/90° from the last corner (Shift: any angle)
+    let at = snapPoint([p.x, p.z], this.v.activeFloorData, null, this.v.snapStep(e));
+    if (!e.shiftKey && this.chain?.last) at = orthoSnap(at, this.chain.last);
     return at;
   }
 

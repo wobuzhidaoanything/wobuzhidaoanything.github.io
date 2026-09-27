@@ -67,7 +67,7 @@ async function browserStore() {
       designs[d.id] = d;
     } else {
       try {
-        const d = normalize(await (await fetch('data/sample-house.json')).json());
+        const d = normalize(await (await fetch('assets/sample-house.json')).json());
         designs[d.id] = d;
       } catch {}
     }
@@ -78,7 +78,7 @@ async function browserStore() {
     const v1 = ls.get(LS.v1);
     let shipped = [];
     try {
-      shipped = (await (await fetch('data/library.json')).json()).items || [];
+      shipped = (await (await fetch('assets/library.json')).json()).items || [];
     } catch {}
     const ids = new Set(shipped.map((i) => i.id));
     lib = { items: [...shipped, ...(v1?.inventory || []).filter((i) => !ids.has(i.id))] };

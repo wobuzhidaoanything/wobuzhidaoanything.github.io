@@ -2,6 +2,7 @@ import { Viewer, webglSupport } from './viewer.js';
 import { Walker } from './walk.js';
 import { Tools } from './tools.js';
 import { initChat } from './chat.js';
+import { Measure } from './measure.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
 import { openStorage } from './storage.js';
@@ -156,6 +157,12 @@ function updateHint() {
   if (ui.hover) return ($('#hintbar').textContent = ui.hover);
   const v = viewer.view;
   const t = ui.tool;
+  if (t === 'measure' && !ui.hover)
+    return ($('#hintbar').textContent = {
+      distance: 'Click two points to measure between them · Shift locks to one direction · Alt ignores corners · Esc cancels',
+      path: 'Click points along a line or curve · double-click or Enter to finish · Esc cancels',
+      surface: 'Click two points: the length is measured along the surface between them (follows curves) · Esc cancels',
+    }[measure.mode]);
   $('#hintbar').textContent =
     v === 'walk'
       ? ''
@@ -186,7 +193,9 @@ function renderLevelBar() {
       .join('') +
     (design.floors.length > 1 && viewer.view !== 'walk' ? `<button role="tab" class="${all ? 'on' : ''}" data-all title="See the whole house">All floors</button>` : '') +
     (ui.editing ? '<span class="sep"></span><button class="add" data-addfloor title="Add a floor above the top one">+ Floor</button>' : '') +
-    (viewer.view === '3d' && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '');
+    (viewer.view === '3d' && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '') +
+    (viewer.view !== 'walk' ? `<span class="sep"></span><button data-measure class="${ui.tool === 'measure' ? 'on' : ''}" title="Measure distances, paths and along surfaces (M)">Measure</button>` : '') +
+    (viewer.view !== 'walk' ? `<span class="sep"></span><button data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, areas and the grid">View ▾</button>` : '');
   $$('[data-floor]', el).forEach((b) => {
     b.onclick = () => setFloor(+b.dataset.floor);
     b.ondblclick = () => {
@@ -201,11 +210,40 @@ function renderLevelBar() {
     renderAll();
   });
   $('[data-addfloor]', el)?.addEventListener('click', addFloorAbove);
+  $('[data-measure]', el)?.addEventListener('click', () => setTool(ui.tool === 'measure' ? null : 'measure'));
+  $('[data-viewmenu]', el)?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const m = $('#viewMenu');
+    if (!m.hidden) return (m.hidden = true);
+    renderViewMenu();
+    const r = e.currentTarget.getBoundingClientRect(), s = $('#stage').getBoundingClientRect();
+    Object.assign(m.style, { left: `${r.right - s.left - 230}px`, top: `${r.bottom - s.top + 6}px` });
+    m.hidden = false;
+  });
   $('[data-walls]', el)?.addEventListener('click', () => {
     viewer.setWallMode(viewer.wallMode === 'cut' ? 'up' : 'cut');
     pref.set('wallMode', viewer.wallMode);
     renderLevelBar();
   });
+}
+
+const DISPLAY = [
+  ['dims', 'Dimensions', 'Lengths of every outside wall and room sizes, drawn on the floor'],
+  ['areas', 'Room areas', 'Floor area of each room (m²)'],
+  ['grid', 'Grid', '1 m squares, with 10 cm squares when you zoom in'],
+  ['snap', 'Snap to grid', 'Walls, corners and furniture move in 5 cm steps (hold Alt to move freely)'],
+];
+
+function renderViewMenu() {
+  const m = $('#viewMenu');
+  m.innerHTML = DISPLAY.map(([k, name, tip]) => `<label title="${esc(tip)}"><input type="checkbox" data-disp="${k}" ${viewer.display[k] ? 'checked' : ''}><span><b>${name}</b><em>${esc(tip)}</em></span></label>`).join('');
+  $$('[data-disp]', m).forEach((c) => (c.onchange = () => setDisplay(c.dataset.disp, c.checked)));
+}
+
+function setDisplay(k, on) {
+  viewer.setDisplay(k, on);
+  pref.set('display', viewer.display);
+  if (!$('#viewMenu').hidden) renderViewMenu();
 }
 
 function setFloor(i) {
@@ -225,7 +263,8 @@ function renderToolBar() {
   const seg = (attr, opts, cur) => `<div class="small-seg">${opts.map(([k, n]) => `<button data-${attr}="${k}" class="${cur === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
   const widthKey = { door: 'doorWidth', window: 'windowWidth', opening: 'openingWidth' }[t];
   el.innerHTML =
-    `<b>${{ wall: 'Wall', door: 'Door', window: 'Window', opening: 'Opening', stairs: 'Stairs' }[t]}</b>` +
+    `<b>${{ wall: 'Wall', door: 'Door', window: 'Window', opening: 'Opening', stairs: 'Stairs', measure: 'Measure' }[t]}</b>` +
+    (t === 'measure' ? seg('mmode', [['distance', 'Distance'], ['path', 'Path'], ['surface', 'Along surface']], measure.mode) + `<button class="tb-btn" id="tbClearMeasure" ${measure.results.length ? '' : 'disabled'}>Clear all</button>` : '') +
     (t === 'wall' ? seg('ext', [['0', 'Interior'], ['1', 'Exterior']], ui.wallExterior ? '1' : '0') + `<label>Thickness <input type="number" id="tbThick" min="5" max="60" step="1" value="${cm(ui.wallThickness)}"> cm</label>` : '') +
     (widthKey ? `<label>Width <input type="number" id="tbWidth" min="30" max="400" step="5" value="${cm(ui[widthKey])}"> cm</label>` : '') +
     (t === 'stairs' ? seg('sshape', [['straight', 'Straight'], ['L', 'L-turn'], ['U', 'U-turn']], ui.stairShape) + (ui.stairShape !== 'straight' ? seg('sturn', [['left', 'Turn left'], ['right', 'Turn right']], ui.stairTurn) : '') : '') +
@@ -237,6 +276,8 @@ function renderToolBar() {
   }));
   $('#tbThick', el)?.addEventListener('change', (e) => (ui.wallThickness = Math.max(0.05, parseFloat(e.target.value) / 100 || ui.wallThickness)));
   $('#tbWidth', el)?.addEventListener('change', (e) => (ui[widthKey] = Math.max(0.3, parseFloat(e.target.value) / 100 || ui[widthKey])));
+  $$('[data-mmode]', el).forEach((b) => (b.onclick = () => (measure.setMode(b.dataset.mmode), renderToolBar(), updateHint())));
+  $('#tbClearMeasure', el)?.addEventListener('click', () => (measure.clear(), renderToolBar()));
   $$('[data-sshape]', el).forEach((b) => (b.onclick = () => ((ui.stairShape = b.dataset.sshape), renderToolBar())));
   $$('[data-sturn]', el).forEach((b) => (b.onclick = () => ((ui.stairTurn = b.dataset.sturn), renderToolBar())));
   $('#tbClose', el).onclick = () => setTool(null);
@@ -624,8 +665,9 @@ function renderBuildPanel() {
 }
 
 function setTool(name) {
+  tools.set(name === 'measure' ? null : name);
   ui.tool = name;
-  tools.set(name);
+  measure.set(name === 'measure');
   if (name && viewer.view === 'walk') setView('3d');
   renderAll();
 }
@@ -1011,7 +1053,7 @@ async function openDesign(id) {
 
 async function renderDesignList() {
   const list = await store.list();
-  $('#storageNote').textContent = store.kind === 'device' ? 'Saved on this computer (designs/ folder)' : 'Saved in this browser. Run npm start to save to your computer.';
+  $('#storageNote').textContent = store.kind === 'device' ? 'Saved on this computer (userdata/ folder)' : 'Saved in this browser. Run npm start to save to your computer.';
   $('#designList').innerHTML = list
     .map((d) => `<div class="design-row ${d.id === design.id ? 'on' : ''}" data-id="${esc(d.id)}">
       <div class="dr-main"><b>${esc(d.name || 'Untitled')}</b><span>${d.floors} floor${d.floors === 1 ? '' : 's'} · ${d.updatedAt ? new Date(d.updatedAt).toLocaleString() : ''}${d.updatedBy === 'agent' ? ' · edited by agent' : ''}</span></div>
@@ -1290,6 +1332,7 @@ async function takePhoto() {
 // ---------- misc UI ----------
 
 let chat = null;
+let measure = null;
 let toastTimer;
 function toast(msg, { undo, action } = {}) {
   const t = $('#toast');
@@ -1356,6 +1399,7 @@ async function boot() {
   });
   viewer.library = library.items;
   viewer.wallMode = pref.get('wallMode', 'cut');
+  Object.assign(viewer.display, pref.get('display', {}));
   viewer.setAssetProxy((u) => {
     const base = workerUrl();
     if (!base || !/^https?:/i.test(u) || u.startsWith(location.origin)) return u;
@@ -1370,6 +1414,12 @@ async function boot() {
       walkHelp(!!document.pointerLockElement);
       renderInspector();
       if ($('#leaveWalk')) $('#leaveWalk').onclick = () => setView('3d');
+    },
+  });
+  measure = new Measure(viewer, {
+    onResult: (r) => {
+      $('#hintbar').textContent = `${r.mode === 'surface' ? 'Along the surface' : r.mode === 'path' ? 'Path length' : 'Distance'}: ${r.length.toFixed(3)} m${r.mode !== 'distance' ? ` (straight line ${r.straight.toFixed(3)} m)` : ''}`;
+      renderToolBar();
     },
   });
   tools = new Tools(viewer, {
@@ -1470,7 +1520,7 @@ function wireUI() {
       for (const [, o] of menus) if (o !== m) $(o).hidden = true;
       $(m).hidden = !$(m).hidden;
     };
-  document.addEventListener('click', (e) => menus.forEach(([, m]) => !$(m).contains(e.target) && ($(m).hidden = true)));
+  document.addEventListener('click', (e) => [...menus.map(([, m]) => m), '#viewMenu'].forEach((m) => !$(m).contains(e.target) && ($(m).hidden = true)));
   $('#exportMenu').onclick = (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     $('#exportMenu').hidden = true;
@@ -1618,6 +1668,7 @@ function wireUI() {
     const sel = viewer.sel;
     if (mod && k === 'z') (e.preventDefault(), restore(history.index + (e.shiftKey ? 1 : -1)));
     else if (mod && k === 'y') (e.preventDefault(), restore(history.index + 1));
+    else if (ui.tool === 'measure' && (k === 'escape' || k === 'enter') && measure.key(k)) e.preventDefault();
     else if (k === 'escape') {
       if (viewer.view === 'walk' && !document.pointerLockElement) setView('3d');
       else if (ui.tool) setTool(null);
@@ -1632,6 +1683,8 @@ function wireUI() {
       commit();
     } else if (k === 'e' && !mod) setEditing(!ui.editing);
     else if (k === 'c' && !mod && !e.shiftKey) chat?.toggle();
+    else if (k === 'g' && !mod) setDisplay('grid', !viewer.display.grid);
+    else if (k === 'm' && !mod) setTool(ui.tool === 'measure' ? null : 'measure');
     else if (ui.editing && !mod && !e.shiftKey && { v: 1, w: 1, d: 1, n: 1, o: 1, s: 1 }[k]) {
       const t = { v: null, w: 'wall', d: 'door', n: 'window', o: 'opening', s: 'stairs' }[k];
       setTool(t === ui.tool ? null : t);

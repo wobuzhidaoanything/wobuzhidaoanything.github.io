@@ -14,6 +14,7 @@ import { buildParametric, tintModel, DEFAULT_DIMS } from './models.js';
 import { buildHouse, wallUnion } from './house.js';
 import { elevations, wallFrame, wallRect, pointInPolygon, closestOnSegment, area } from './design.js';
 import { pushWall, moveCorner, moveOpening, openingGaps, wallsAt } from './edit.js';
+import { buildDimensions, buildGrid, roomSize, fmtM } from './annotate.js';
 
 // Fast raycasting everywhere (picking, walking) via bounding volume hierarchies.
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -166,6 +167,14 @@ export class Viewer {
     scene.add(this.selLabel);
     this.roomLabels = new THREE.Group();
     scene.add(this.roomLabels);
+    // Display options (the View menu): dimension lines, room areas, grid, snapping
+    this.display = { dims: false, areas: true, grid: true, snap: true };
+    this.annot = new THREE.Group();
+    this.annot.userData.helper = true;
+    this.gridMesh = buildGrid();
+    this.dimGroup = new THREE.Group();
+    this.annot.add(this.gridMesh, this.dimGroup);
+    scene.add(this.annot);
 
     this.raycaster = new THREE.Raycaster();
     this.raycaster.firstHitOnly = false;
@@ -420,7 +429,7 @@ export class Viewer {
       }
       const { len, normal } = wallFrame(w);
       const l = label('wall-label');
-      l.element.textContent = `${Math.round(len * 100)}`;
+      l.element.textContent = fmtM(len);
       const mx = (w.a[0] + w.b[0]) / 2, mz = (w.a[1] + w.b[1]) / 2;
       l.position.set(mx + normal[0] * (w.thickness / 2 + 0.22), top, mz + normal[1] * (w.thickness / 2 + 0.22));
       this.wallLabels.add(l);
@@ -646,16 +655,43 @@ export class Viewer {
     return g;
   }
 
+  /** Snap step for dragging and drawing (0 = free). Alt always drags freely. */
+  snapStep(e) {
+    return this.display.snap && !e?.altKey ? 0.05 : 0;
+  }
+
+  setDisplay(key, on) {
+    this.display[key] = on;
+    this.refreshRoomLabels();
+  }
+
+  /** Grid and dimension lines for the active floor. */
+  refreshAnnotations() {
+    this.dimGroup.clear();
+    const show = !!this.design && !!this.house && this.view !== 'walk' && !this.showAll;
+    this.annot.visible = show;
+    if (!show) return;
+    const y = this.floorY;
+    const c = this.bounds ? this.bounds.getCenter(new THREE.Vector3()) : new THREE.Vector3();
+    const size = (this.span || 12) + 40;
+    this.gridMesh.visible = this.display.grid;
+    this.gridMesh.position.set(c.x, y + 0.006, c.z);
+    this.gridMesh.scale.set(size, size, 1);
+    if (this.display.dims) this.dimGroup.add(buildDimensions(this.activeFloorData, y + 0.012));
+  }
+
   refreshRoomLabels() {
     this.roomLabels.clear();
+    this.refreshAnnotations();
     if (!this.design || this.view === 'walk' || this.showAll) return;
     const floor = this.design.floors[this.activeFloor];
     for (const r of floor?.rooms || []) {
       if (!r.name) continue;
       const a = Math.abs(area(r.points));
-      const [cx, cz] = r.points.reduce((s, p) => [s[0] + p[0] / r.points.length, s[1] + p[1] / r.points.length], [0, 0]);
+      const [cx, cz] = labelPoint(r.points);
       const l = label('room-label');
-      l.element.innerHTML = `<b>${escapeHtml(r.name)}</b><span>${a.toFixed(1)} m²</span>`;
+      const size = this.display.dims && roomSize(r.points);
+      l.element.innerHTML = `<b>${escapeHtml(r.name)}</b>${this.display.areas ? `<span>${a.toFixed(1)} m²</span>` : ''}${size ? `<span>${size[0].toFixed(2)} × ${size[1].toFixed(2)} m</span>` : ''}`;
       l.position.set(cx, this.floorY + 0.05, cz);
       this.roomLabels.add(l);
     }
@@ -774,7 +810,8 @@ export class Viewer {
     if (this.view === 'walk' || e.button !== 0) return;
     this.setPointer(e);
     this.downAt = { x: e.clientX, y: e.clientY };
-    if (this.tool?.onDown?.(e)) return;
+    // An active tool (drawing, measuring) gets the press; nothing is picked or dragged
+    if (this.tool) return void this.tool.onDown?.(e);
 
     // Rotation knob of the selected item
     if (this.rotGroup.visible && this.raycaster.intersectObjects([this.rotKnob, this.rotRing], false).length) {
@@ -861,7 +898,8 @@ export class Viewer {
       if (!p) return;
       let x = p.x + d.offset[0];
       let z = p.z + d.offset[1];
-      if (!e.shiftKey) (x = Math.round(x * 100) / 100), (z = Math.round(z * 100) / 100);
+      const st = this.snapStep(e);
+      if (st) (x = Math.round(x / st) * st), (z = Math.round(z / st) * st);
       const res = this.constrain(rec, x, z, !e.altKey);
       if (!res) return;
       Object.assign(rec.placed, { x: res.x, z: res.z, y: res.y });
@@ -876,7 +914,8 @@ export class Viewer {
     if (d.type === 'corner') {
       const f = this.restoreFloor(d.snap);
       // Snap to other corners / 5 cm grid, then square up with the walls meeting here.
-      let at = e.shiftKey ? [p.x, p.z] : snapPoint([p.x, p.z], { walls: f.walls.filter((w) => !wallsAt({ walls: [w] }, d.from).length) });
+      // Snap to other corners and the grid (Alt: free); Shift: don't square up with neighbours
+      let at = snapPoint([p.x, p.z], { walls: f.walls.filter((w) => !wallsAt({ walls: [w] }, d.from).length) }, null, this.snapStep(e));
       if (!e.shiftKey) {
         for (const { wall, end } of wallsAt(f, d.from)) {
           const other = end === 'a' ? wall.b : wall.a;
@@ -894,21 +933,23 @@ export class Viewer {
       const w = f.walls.find((x) => x.id === d.id);
       const { normal } = wallFrame(w);
       let dn = (p.x - d.start[0]) * normal[0] + (p.z - d.start[1]) * normal[1];
-      if (!e.shiftKey) dn = Math.round(dn / 0.05) * 0.05;
+      const st = this.snapStep(e);
+      if (st) dn = Math.round(dn / st) * st;
       pushWall(f, d.id, dn);
       d.changed = Math.abs(dn) > 0.001;
       this.cb.onStructureLive?.();
       const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
       this.showDragLabel(`${dn > 0 ? '+' : ''}${Math.round(dn * 100)} cm`, mid);
     } else if (d.type === 'opening') {
-      if (moveOpening(floor, d.id, [p.x, p.z], { snap: e.shiftKey ? 0 : 0.05 })) {
+      if (moveOpening(floor, d.id, [p.x, p.z], { snap: this.snapStep(e) })) {
         d.changed = true;
         this.cb.onStructureLive?.();
       }
     } else if (d.type === 'stairs') {
       const s = floor.stairs.find((x) => x.id === d.id);
       let x = p.x + d.offset[0], z = p.z + d.offset[1];
-      if (!e.shiftKey) (x = Math.round(x / 0.05) * 0.05), (z = Math.round(z / 0.05) * 0.05);
+      const st = this.snapStep(e);
+      if (st) (x = Math.round(x / st) * st), (z = Math.round(z / st) * st);
       Object.assign(s, { x: +x.toFixed(3), z: +z.toFixed(3) });
       d.changed = true;
       this.cb.onStructureLive?.();
@@ -1047,12 +1088,38 @@ function isVisible(o) {
   return true;
 }
 
+/** A point well inside a room for its label (centroid, or the best inside point for L/U shapes). */
+function labelPoint(pts) {
+  let A = 0, cx = 0, cz = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x0, z0] = pts[i], [x1, z1] = pts[(i + 1) % pts.length];
+    const k = x0 * z1 - x1 * z0;
+    A += k;
+    cx += (x0 + x1) * k;
+    cz += (z0 + z1) * k;
+  }
+  if (Math.abs(A) > 1e-9) (cx /= 3 * A), (cz /= 3 * A);
+  if (pointInPolygon(cx, cz, pts)) return [cx, cz];
+  // Centroid falls outside (L/U-shaped room): scan for the inside point furthest from the edges
+  const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
+  let best = pts[0], bestD = -1;
+  for (let i = 1; i < 20; i++)
+    for (let j = 1; j < 20; j++) {
+      const x = Math.min(...xs) + ((Math.max(...xs) - Math.min(...xs)) * i) / 20, z = Math.min(...zs) + ((Math.max(...zs) - Math.min(...zs)) * j) / 20;
+      if (!pointInPolygon(x, z, pts)) continue;
+      let d = Infinity;
+      for (let k = 0; k < pts.length; k++) d = Math.min(d, closestOnSegment([x, z], pts[k], pts[(k + 1) % pts.length]).dist);
+      if (d > bestD) (bestD = d), (best = [x, z]);
+    }
+  return best;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
 /** Snap a plan point to wall ends (15 cm) or a 5 cm grid. `skip` = wall id being edited. */
-export function snapPoint(p, floor, skip) {
+export function snapPoint(p, floor, skip, step = 0.05) {
   let best = null;
   for (const w of floor?.walls || []) {
     if (w.id === skip) continue;
@@ -1062,7 +1129,8 @@ export function snapPoint(p, floor, skip) {
     }
   }
   if (best) return best.q.slice();
-  return [Math.round(p[0] / 0.05) * 0.05, Math.round(p[1] / 0.05) * 0.05].map((v) => +v.toFixed(3));
+  if (!step) return [+p[0].toFixed(3), +p[1].toFixed(3)];
+  return [Math.round(p[0] / step) * step, Math.round(p[1] / step) * step].map((v) => +v.toFixed(3));
 }
 
 /** Snap to horizontal/vertical (or 45°) relative to an anchor, like drafting tools. */

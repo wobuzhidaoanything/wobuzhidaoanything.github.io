@@ -4,7 +4,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT } from './paths.mjs';
+import { ROOT, USERDATA, MODELS, TEXTURES, LIBRARY } from './paths.mjs';
 import { scrapeProduct } from '../../worker/src/scrape.js';
 import * as store from './store.mjs';
 import { agentStatus, autoSetup, removeAgent } from './agents.mjs';
@@ -60,23 +60,27 @@ function watchDesigns() {
   if (watcher) return;
   fs.mkdirSync(store.DIR, { recursive: true });
   const pending = new Map();
-  watcher = fs.watch(store.DIR, (_, name) => {
-    if (!name || !name.endsWith('.json')) return;
+  const onChange = (dir) => (_, name) => {
+    if (!name || !name.endsWith('.json') || (dir === USERDATA && name !== 'library.json')) return;
     clearTimeout(pending.get(name));
     pending.set(
       name,
       setTimeout(() => {
         let info = { file: name };
         try {
-          const d = JSON.parse(fs.readFileSync(path.join(store.DIR, name), 'utf8'));
-          info = name === 'library.json' ? { type: 'library', updatedAt: d.updatedAt } : { type: 'design', id: d.id, updatedAt: d.updatedAt, updatedBy: d.updatedBy };
+          const d = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+          info = dir === USERDATA ? { type: 'library', updatedAt: d.updatedAt } : { type: 'design', id: d.id, updatedAt: d.updatedAt, updatedBy: d.updatedBy };
         } catch {
           info = { type: 'removed', file: name };
         }
         for (const res of clients) res.write(`data: ${JSON.stringify(info)}\n\n`);
       }, 120)
     );
-  });
+  };
+  const w1 = fs.watch(store.DIR, onChange(store.DIR));
+  const w2 = fs.watch(USERDATA, onChange(USERDATA));
+  watcher = { close: () => (w1.close(), w2.close()) };
+  void LIBRARY;
 }
 
 async function parseDxf(text) {
@@ -201,10 +205,17 @@ export function startServer({ port = 5173, host = '127.0.0.1', quiet = false } =
         if (!f.startsWith(base + path.sep) || !fs.existsSync(f)) return send(res, 404, 'Not found', 'text/plain');
         return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)] || 'application/octet-stream', 'public, max-age=3600');
       }
+      // Your downloaded models and finish textures (userdata/models, userdata/textures)
+      const own = url.pathname.match(/^\/(models|textures)\/([\w.-]+)$/);
+      if (own) {
+        const f = path.join(own[1] === 'models' ? MODELS : TEXTURES, own[2]);
+        if (!fs.existsSync(f)) return send(res, 404, 'Not found', 'text/plain');
+        return send(res, 200, fs.readFileSync(f), MIME[path.extname(f).toLowerCase()] || 'application/octet-stream', 'no-cache');
+      }
       // Static files (never outside the repo, never private folders)
       let file = path.normalize(path.join(ROOT, decodeURIComponent(url.pathname)));
       const rel = file.slice(ROOT.length);
-      if (!file.startsWith(ROOT) || /[\\/](\.git|node_modules|designs|\.roomcraft|tools|exports)([\\/]|$)/.test(rel) || /[\\/]\./.test(rel))
+      if (!file.startsWith(ROOT) || /[\\/](\.git|node_modules|userdata|designs|\.roomcraft|tools|exports|models)([\\/]|$)/.test(rel) || /[\\/]\./.test(rel))
         return send(res, 403, 'Forbidden', 'text/plain');
       if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
       if (!fs.existsSync(file)) return send(res, 404, 'Not found', 'text/plain');

@@ -1,12 +1,12 @@
-// Regenerates data/sample-house.json (the house new devices start with) and
-// data/library.json (shipped furniture models). Run: node tools/dev/make-sample.mjs
+// Regenerates assets/sample-house.json (the house new devices start with) and
+// assets/library.json (shipped furniture models). Run: node tools/dev/make-sample.mjs
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../lib/paths.mjs';
 import { newHouse, normalize, validate, elevations } from '../../js/design.js';
 import { detectRooms } from '../../js/plan.js';
 
-const old = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'library.json'), 'utf8'));
+const old = JSON.parse(fs.readFileSync(path.join(ROOT, 'assets', 'library.json'), 'utf8'));
 const items = old.items;
 
 const d = newHouse({ name: 'Sample house', width: 10, depth: 8, floors: 2, floorHeight: 2.7 });
@@ -95,5 +95,5 @@ const ids = new Set(items.map((i) => i.id));
 for (const f of out.floors) for (const p of f.placed) if (!ids.has(p.itemId)) throw new Error('missing ' + p.itemId);
 const problems = validate({ ...out, inventory: items });
 if (problems.length) throw new Error(problems.join('\n'));
-fs.writeFileSync(path.join(ROOT, 'data', 'sample-house.json'), JSON.stringify(out, null, 2) + '\n');
+fs.writeFileSync(path.join(ROOT, 'assets', 'sample-house.json'), JSON.stringify(out, null, 2) + '\n');
 console.log('sample-house.json:', out.floors.map((f) => `${f.name}: ${f.walls.length} walls, ${f.rooms.map((r) => r.name).join('/')}, ${f.placed.length} items`).join(' | '), 'elev', elevations(out));

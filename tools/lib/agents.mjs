@@ -1,12 +1,12 @@
 // AI agent ("harness") connections for the Roomcraft MCP server.
 // The app shows a setup prompt per harness; the agent installs the server into its own
 // user-level config. We detect setup two ways: the harness's config mentions "roomcraft",
-// and the MCP server records every client that connects (.roomcraft/connections.json).
+// and the MCP server records every client that connects (userdata/.state/connections.json).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ROOT } from './paths.mjs';
+import { ROOT, STATE } from './paths.mjs';
 
 const HOME = os.homedir();
 const APPDATA = process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming');
@@ -14,13 +14,24 @@ const XDG = process.env.XDG_CONFIG_HOME || path.join(HOME, '.config');
 const mac = process.platform === 'darwin', win = process.platform === 'win32';
 export const SERVER = path.join(ROOT, 'tools', 'mcp-server.mjs');
 export const NODE = process.execPath;
-const CONNECTIONS = path.join(ROOT, '.roomcraft', 'connections.json');
+const CONNECTIONS = path.join(STATE, 'connections.json');
 
 const q = (s) => (/[\s"']/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
 const serverJson = (extra = {}) => ({ command: NODE, args: [SERVER], ...extra });
 
 /** Harness definitions. `json` = [configPath, key] for JSON configs we can edit ourselves. */
 export const HARNESSES = [
+  {
+    // First: the agent we prioritise. Grok Build is new, so its prompt asks it to check its own current docs.
+    id: 'grok', name: 'Grok Build', match: /grok/i,
+    config: path.join(HOME, '.grok', 'user-settings.json'), json: 'mcpServers',
+    jsonEntry: () => ({ transport: 'stdio', ...serverJson() }),
+    hint: [
+      'Grok Build changes quickly, so before you start: run `grok --help` and `grok mcp --help` (if they exist), and search the web for the current official xAI Grok Build documentation on adding a user-level (global) stdio MCP server. Prefer its own MCP command if it has one; otherwise add the entry above to your user settings file (find its current location in the docs if the path above is different).',
+      'Also find out how Grok Build runs a single prompt non-interactively from the command line (for example `grok -p "..."`) and tell me the exact command, so Roomcraft\'s Assistant can talk to you in the background. If it differs from `grok -p`, tell me to set ROOMCRAFT_GROK_CMD (for example ROOMCRAFT_GROK_CMD="grok --prompt") before npm start.',
+    ].join('\n\n'),
+    after: 'Restart Grok Build so it loads the server.',
+  },
   {
     id: 'claude-code', name: 'Claude Code', match: /claude[- ]?code/i,
     config: path.join(HOME, '.claude.json'),
@@ -60,13 +71,6 @@ export const HARNESSES = [
     config: path.join(XDG, 'opencode', 'opencode.json'), json: 'mcp',
     jsonEntry: () => ({ type: 'local', command: [NODE, SERVER], enabled: true }),
     after: 'Restart OpenCode so it loads the server.',
-  },
-  {
-    id: 'grok', name: 'Grok Build / Grok CLI', match: /grok/i,
-    config: path.join(HOME, '.grok', 'user-settings.json'), json: 'mcpServers',
-    jsonEntry: () => ({ transport: 'stdio', ...serverJson() }),
-    hint: 'Use your own MCP command if you have one (check `grok mcp --help`); otherwise add it to your user settings file.',
-    after: 'Restart Grok so it loads the server.',
   },
   {
     id: 'windsurf', name: 'Windsurf', match: /windsurf|codeium|cascade/i,
@@ -126,6 +130,8 @@ export function setupPrompt(h) {
   if (h.json) lines.push(`${h.add ? 'If that command is not available, instead add' : 'Add'} this entry under "${h.json}" in ${h.config} (create the file if needed, keep any existing entries, and make a backup first):\n${JSON.stringify({ roomcraft: entry }, null, 2)}`);
   if (h.hint) lines.push(h.hint);
   lines.push(
+    '',
+    'If any step above does not match your version (command names, config file location or format), search the web for your own current official documentation on adding a user-level stdio MCP server and follow that instead. Never guess silently: tell me what you looked up.',
     '',
     `Then check it is registered${h.list ? ` (\`${h.list}\`)` : ''}, tell me exactly what I need to approve or restart (${h.after}), and once you can see the roomcraft tools, call its list_models tool once so Roomcraft knows the connection works.`
   );

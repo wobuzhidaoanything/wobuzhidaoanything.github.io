@@ -2,7 +2,9 @@
 node_modules/
 worker/node_modules/
 worker/.wrangler/
-# Your designs, models and local state stay on this device (never committed)
+# Your designs, models, exports and local state stay on this device (never committed)
+userdata/
+# Old layout (moved into userdata/ automatically on npm start)
 designs/
 models/
 exports/

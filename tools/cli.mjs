@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as A from './lib/agent.mjs';
-import { ROOT } from './lib/paths.mjs';
+import { ROOT, STATE } from './lib/paths.mjs';
 
 const [cmd, ...rest] = process.argv.slice(2);
 const FLAGS_WITH_VALUE = new Set(['--color', '--views', '--out', '--notes', '--floors', '--floor', '--shape']);
@@ -38,7 +38,7 @@ async function readStdin() {
 }
 
 function writeShots(shots, prefix) {
-  const dir = path.resolve(flag('out', path.join(ROOT, '.roomcraft', 'renders')));
+  const dir = path.resolve(flag('out', path.join(STATE, 'renders')));
   fs.mkdirSync(dir, { recursive: true });
   return shots.map((s) => {
     const f = path.join(dir, `${prefix}-${s.view.replace(/[^\w-]+/g, '_')}.png`);

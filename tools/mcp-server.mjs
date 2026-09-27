@@ -83,7 +83,7 @@ const TOOLS = [
   },
   {
     name: 'save_model_file',
-    description: "Download a .glb 3D model into the repo's models/ folder and use it for a model (keeps a permanent copy). Returns renders to check.",
+    description: "Download a .glb 3D model into userdata/models/ on this computer and use it for a model (keeps a permanent copy). Returns renders to check.",
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, url: { type: 'string' } }, required: ['id', 'url'] },
   },
   { name: 'list_designs', description: 'List the house designs saved on this device, and which one is open in the app (active).', inputSchema: { type: 'object', properties: {} } },
@@ -125,7 +125,7 @@ const TOOLS = [
   },
   {
     name: 'export_glb',
-    description: 'Export a design (default: active) as one .glb for Blender (File → Import → glTF 2.0), organised by floor, room, walls, openings, stairs and furniture. Saves into exports/ and returns the path.',
+    description: 'Export a design (default: active) as one .glb for Blender (File → Import → glTF 2.0), organised by floor, room, walls, openings, stairs and furniture. Saves into userdata/exports/ and returns the path.',
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, file: { type: 'string', description: 'Optional output path' } } },
   },
 ];
@@ -236,7 +236,7 @@ async function handle(msg) {
         protocolVersion: params?.protocolVersion || '2025-06-18',
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER,
-        instructions: `Roomcraft: a 3D house planner running on this computer. Designs (multi-floor houses) and the furniture model library live in the repo's designs/ folder; the open app updates live when you change them. Read AGENTS.md in the repo for the format and workflows. ${VISION_RULE} After layout changes, look at the floor renders and compare them with what was asked (or the floor plan given).`,
+        instructions: `Roomcraft: a 3D house planner running on this computer. Designs (multi-floor houses) and the furniture model library live in the repo's userdata/ folder; the open app updates live when you change them. Read AGENTS.md in the repo for the format and workflows. ${VISION_RULE} After layout changes, look at the floor renders and compare them with what was asked (or the floor plan given).`,
       });
     case 'notifications/initialized':
     case 'notifications/cancelled':
