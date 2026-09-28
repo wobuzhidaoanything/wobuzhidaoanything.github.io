@@ -4,10 +4,11 @@ import { useBridge, set, Keys } from './store.js';
 
 export const STEPS = [
   { sel: '#designBtn', title: 'Your houses', text: 'Switch between designs, start a new house or open earlier versions. Everything saves by itself, on this computer.' },
+  { sel: '#modeSeg', title: 'Furnish or Build', text: 'Furnish is for furniture, colours and finishes. Build is for walls, doors, windows, stairs and floors.', keys: 'E' },
   { sel: '#viewSeg', title: 'Look at it your way', text: '3D dollhouse, flat floor plan, both side by side, or walk through it like a game.', keys: '1 or 2 or 4 or 3' },
-  { sel: '#editBtn', title: 'Change the house', text: 'Draw walls, add doors, windows and stairs, and add floors. Press it again when you’re done.', keys: 'E' },
+  { sel: '#toolDock', title: 'Your tools', text: 'What a click does: select, measure, paint, and in Build mode draw walls, doors, windows and stairs. Esc always goes back to Select.' },
   { sel: '#linkBox', title: 'Add real furniture', text: 'Paste a product link from any shop. Roomcraft reads its size and colours, and your AI agent can build a realistic 3D model from the photos.' },
-  { sel: '#levelBar', title: 'Floors and tools', text: 'Pick a floor, measure, paint walls and floors, see the sun, and choose what’s drawn on the plan.' },
+  { sel: '#viewDock', title: 'What you see', text: 'Cut or full walls, real sun and shadows, dimensions and the grid, and zoom to fit.', keys: 'F' },
   { sel: '#cmdBtn', title: 'Can’t find something?', text: 'Search every action by name. Right-click anything in the 3D view for what you can do with it.', keys: 'Ctrl+K' },
 ];
 

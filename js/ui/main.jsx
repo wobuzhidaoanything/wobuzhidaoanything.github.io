@@ -5,7 +5,7 @@ import { bridge, set, bump } from './store.js';
 import TopBar from './TopBar.js';
 import LeftPanel from './LeftPanel.js';
 import Inspector from './Inspector.js';
-import { LevelBar, ToolBar, StatusBar, WalkHelp, Photo, Toast, SaveBanner } from './Stage.js';
+import { LevelBar, ToolDock, ViewDock, ToolBar, StatusBar, WalkHelp, Photo, Toast, SaveBanner } from './Stage.js';
 import Dialogs from './Dialogs.js';
 import Help from './Help.js';
 import Chat from './Chat.js';
@@ -24,7 +24,7 @@ function App() {
       {createPortal(<TopBar />, $('.topbar'))}
       {createPortal(<LeftPanel />, $('#leftPanel'))}
       {createPortal(<Inspector />, $('#inspector'))}
-      {createPortal(<><LevelBar /><ToolBar /><StatusBar /><Photo /></>, $('#stageUI'))}
+      {createPortal(<><LevelBar /><ToolDock /><ViewDock /><ToolBar /><StatusBar /><Photo /></>, $('#stageUI'))}
       {createPortal(<WalkHelp />, $('#walkHelp'))}
       <Chat />
       <Dialogs />

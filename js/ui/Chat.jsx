@@ -2,6 +2,7 @@
 // changes it makes to the house.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTopic } from './store.js';
+import { Icon } from './controls.js';
 import { dimsFromText } from '../shared/scrape.js';
 
 const MAX_IMAGES = 6;
@@ -157,8 +158,9 @@ export default function Chat() {
           </select>
         )}
         <span className="spacer"></span>
-        <button className="icon-btn" id="chatClear" title="New conversation" aria-label="New conversation" onClick={() => chat.clear()}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg></button>
-        <button className="icon-btn" id="chatClose" title="Close (Esc)" aria-label="Close" onClick={() => chat.toggle(false)}><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+        {chat.local && <button className="btn small ghost" title="Connect or change AI agents" onClick={() => app.openAgents()}>Agents</button>}
+        <button className="icon-btn" id="chatClear" title="New conversation" aria-label="New conversation" onClick={() => chat.clear()}><Icon n="plus" /></button>
+        <button className="icon-btn" id="chatClose" title="Close (Esc)" aria-label="Close" onClick={() => chat.toggle(false)}><Icon n="close" /></button>
       </div>
       <div className="chat-log" id="chatLog" aria-live="polite" ref={log}>
         {(!st.messages.length || !r) && !chat.changes.length ? <div className="chat-empty">{empty}</div> : (
@@ -205,7 +207,7 @@ export default function Chat() {
           {st.busy && <button type="button" className="btn small danger ghost" id="chatStop" onClick={() => chat.stop()}>Stop</button>}
           <input ref={file} type="file" accept="image/*" multiple hidden onChange={(e) => (attach(imagesIn(e.target.files)), (e.target.value = ''))} />
           <button type="button" className="icon-btn" id="chatAttach" disabled={!r} title="Attach pictures (or paste / drop them here)" aria-label="Attach pictures" onClick={() => file.current.click()}>
-            <svg viewBox="0 0 24 24"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L16 6.6" /></svg>
+            <Icon n="attach" />
           </button>
           <button className="btn primary small" id="chatSend" disabled={!r || (!text.trim() && !pics.length)}>Send</button>
         </div>

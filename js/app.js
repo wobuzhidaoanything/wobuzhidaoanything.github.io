@@ -893,7 +893,7 @@ async function createHouse(opts) {
   const d = newHouse(opts);
   await store.save(d);
   await openDesign(d.id);
-  toast(`“${d.name}” created. Use Edit house to draw rooms, or give your agent a floor plan.`);
+  toast(`“${d.name}” created. Switch to Build to draw rooms, or give your agent a floor plan.`);
 }
 
 async function importDesignFile(file) {
@@ -1034,7 +1034,7 @@ async function importDxf(file) {
     const rooms = f.rooms;
     commit();
     viewer.frameHouse(true);
-    toast(`Imported ${j.lines.length} wall lines (${j.spanMetres} m across${j.unitsKnown ? '' : ', units guessed'}) and found ${rooms.length} rooms. Mark exterior walls and set thickness in Edit house.`);
+    toast(`Imported ${j.lines.length} wall lines (${j.spanMetres} m across${j.unitsKnown ? '' : ', units guessed'}) and found ${rooms.length} rooms. Mark exterior walls and set thickness in Build mode.`);
   } catch (err) {
     toast(`Couldn't import the DXF: ${err.message}`);
   }
@@ -1271,9 +1271,9 @@ function commands() {
   add('Floors', 'addfloor', 'Add a floor on top', () => (ui.editing || setEditing(true), addFloorAbove()));
   if (design.floors.length > 1) add('Floors', 'delfloor', `Delete ${floorNow().name}`, deleteFloor);
 
-  add('House', 'edit', ui.editing ? 'Stop editing the house' : 'Edit the house (walls, rooms, doors…)', () => setEditing(!ui.editing), { keys: 'E' });
+  add('House', 'edit', ui.editing ? 'Furnish mode (furniture and finishes)' : 'Build mode (walls, rooms, doors, stairs…)', () => setEditing(!ui.editing), { keys: 'E' });
   for (const [t, label, keys] of [['wall', 'Draw walls', 'W'], ['door', 'Add doors', 'D'], ['window', 'Add windows', 'N'], ['opening', 'Add openings (no door)', 'O'], ['stairs', 'Add stairs', 'S']])
-    add('House', `tool-${t}`, label, () => (ui.editing || setEditing(true), setTool(t)), { keys: ui.editing ? keys : null, note: ui.editing ? '' : 'turns on Edit house' });
+    add('House', `tool-${t}`, label, () => (ui.editing || setEditing(true), setTool(t)), { keys: ui.editing ? keys : null, note: ui.editing ? '' : 'switches to Build' });
   add('House', 'measure', 'Measure', () => setTool(ui.tool === 'measure' ? null : 'measure'), { keys: 'M', keywords: 'distance length tape ruler' });
   add('House', 'paint', 'Paint walls and floors', () => setTool(ui.tool === 'paint' ? null : 'paint'), { keys: 'P', keywords: 'wallpaper tiles colour color finish' });
   add('House', 'rename', 'Rename this house', () => {
@@ -1391,7 +1391,7 @@ function contextMenu(e) {
       add(w.locked ? 'Unlock' : 'Lock', () => (w.locked ? delete w.locked : (w.locked = true), commit({ rebuild: false })));
       sep();
       add('Delete wall', deleteSelection, { keys: 'Delete', danger: true, disabled: !!w.locked });
-    } else add('Edit the house to change it', () => setEditing(true), { keys: 'E' });
+    } else add('Switch to Build to change it', () => setEditing(true), { keys: 'E' });
   } else if (hit?.type === 'opening' || hit?.type === 'stairs') {
     title = hit.type === 'stairs' ? 'Stairs' : { door: 'Door', window: 'Window', opening: 'Opening' }[f.openings.find((o) => o.id === hit.id)?.type] || 'Opening';
     if (ui.editing && hit.type === 'stairs') add('Turn 90°', () => {
@@ -1401,7 +1401,7 @@ function contextMenu(e) {
     }, { keys: 'R' });
     add('Zoom to it', () => viewer.frameSelection(), { keys: 'F' });
     if (ui.editing) (sep(), add('Delete', deleteSelection, { keys: 'Delete', danger: true }));
-    else add('Edit the house to change it', () => (setEditing(true), viewer.select({ type: hit.type, id: hit.id })), { keys: 'E' });
+    else add('Switch to Build to change it', () => (setEditing(true), viewer.select({ type: hit.type, id: hit.id })), { keys: 'E' });
   } else {
     const room = hit?.type === 'room' ? f.rooms.find((r) => r.id === hit.id) : null;
     title = room ? `${room.name || 'Room'} · ${Math.abs(area(room.points)).toFixed(1)} m²` : f.name;
@@ -1422,7 +1422,7 @@ function contextMenu(e) {
     add('Measure', () => setTool('measure'), { keys: 'M' });
     add('Zoom to the whole house', () => (viewer.select(null), viewer.frameHouse(true)), { keys: 'F' });
     sep();
-    add(ui.editing ? 'Stop editing the house' : 'Edit the house', () => setEditing(!ui.editing), { keys: 'E' });
+    add(ui.editing ? 'Back to Furnish' : 'Build mode', () => setEditing(!ui.editing), { keys: 'E' });
   }
   if (items.at(-1)?.sep) items.pop();
   reactUI.set({ menu: { x: e.clientX, y: e.clientY, title, items } });

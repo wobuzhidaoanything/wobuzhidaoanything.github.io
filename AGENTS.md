@@ -128,7 +128,8 @@ tvstand, desk, table, coffeetable, sidetable, floorlamp, lamp, rug, plant, tv, m
     Help, Assistant, command palette, right-click menu, settings, tour, hover tips. Compiled on request by the local
     server and served at `/ui/<name>.js`. `js/app.js` passes its API once (`appApi()`); `js/ui/store.jsx` is the
     bridge, where each screen area redraws on its own topic (`bump('inspector')`, `bump('status')`…). Number
-    fields use `Num` from `js/ui/controls.jsx` (units and sums). React is for the software's UI; R3F is only for
+    fields use `Num` from `js/ui/controls.jsx` (units and sums). Icons are Lucide (`<Icon n="…" />` in
+    `controls.jsx`; the bundled icon names are listed in `tools/lib/r3f.mjs`). React is for the software's UI; R3F is only for
     furniture models.
   - `js/units.js` (number fields with units and sums), `js/diff.js` (what an agent changed): pure, tested in Node
   - `docs/user-guide.md`: the in-app Help. **Update it when you change a feature.**

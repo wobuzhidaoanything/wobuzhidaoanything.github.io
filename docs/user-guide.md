@@ -23,17 +23,22 @@ Open a terminal in the Roomcraft folder and run `npm start`. Nothing else is nee
 
 ### The screen
 
-- **Top bar**, from left to right:
-  - your design's name (click it to see all your designs), and whether it's **Saved**;
-  - the **view** buttons (3D, Plan, Split, Walk) and **Edit house**;
-  - **Search actions** (**Ctrl+K**), **Undo / Redo**;
-  - **Share**: photos, pictures, plans, costs and files;
-  - **Assistant** and **Agents** (your AI agent);
-  - **?** (this guide), the **gear** (Settings) and the **⋮** menu (history, imports, the tour).
-- **Floor tabs** (over the picture): pick the floor you're working on, see **All floors** at once, and open the
-  **Paint**, **Measure**, **Sun** and **View** options.
-- **Left panel:** add furniture from shop links, and browse your furniture models. In Edit house mode it becomes the
-  **Build** panel, with the drawing tools.
+- **Top bar**, three groups:
+  - **left:** your design's name (click it to see all your designs), and whether it's **Saved**;
+  - **middle:** what you're doing, **Furnish** or **Build** (**E** switches), and how you look at it: **3D**,
+    **Plan**, **Split** or **Walk**;
+  - **right:** **Search** (**Ctrl+K**), **Undo / Redo**, **Share** (photos, pictures, plans, costs and files),
+    **Assistant** (your AI agent; the dot is green when one is connected), **?** (this guide), the **gear** (Settings)
+    and the **⋮** menu (AI agents, history, imports, the tour).
+- **Over the picture:**
+  - **Floor tabs** at the top: pick the floor you're working on, or **All** to see the whole house.
+  - **Tools** on the left: **Select**, **Measure** and **Paint**; in Build mode also **Wall**, **Door**, **Window**,
+    **Opening** and **Stairs**. The chosen tool is blue; **Esc** always goes back to Select.
+  - **View controls** at the bottom right: **Walls cut / full**, **Sun**, **Show** (dimensions, room areas, grid,
+    snapping, clearances) and **zoom to fit** (**F**).
+- **Left panel:** in Furnish mode, **Add from a shop** (paste a link) and **Your furniture** (hover a card for
+  **+** to add it, the pencil to edit it and ☆ to favourite it). In Build mode it shows short instructions, your
+  **Floors** and **Start over**.
 - **Right panel (the Inspector):** details of whatever you selected, with every setting you can change. With
   nothing selected, it shows the current floor, its rooms, its furniture and a **Check** list of problems.
 - **Status bar** (bottom): what a click will do right now, and the pointer's position in metres.
@@ -58,7 +63,7 @@ Every action has a name you can search for. Press **Ctrl+K**, type a few letters
 
 **Right-click** anything in the 3D view or plan for a short menu of what you can do with it:
 - **Furniture:** duplicate, turn, push against the wall, lock, copy, edit the model, zoom to it, delete.
-- **A wall** (in Edit house): add a door, window, opening or corner **right where you clicked**, open its elevation,
+- **A wall** (in Build mode): add a door, window, opening or corner **right where you clicked**, open its elevation,
   paint it, lock or delete it.
 - **A room:** rename it, select everything in it, paint the floor, zoom to it, paste.
 - **Empty space:** paste, select all, measure, zoom to the house.
@@ -91,7 +96,7 @@ A bird's-eye 3D view of the floor you're on, like looking into a dollhouse.
 - Drag with the right button to slide the view.
 - Scroll to zoom.
 
-**Walls: cut / full** (in the floor tabs) chooses between two looks:
+**Walls cut / full** (view controls, bottom right) chooses between two looks:
 - **Cut** is the default. Walls are sliced at 1.25 m, as on an architect's plan, so you can see into every room.
 - **Full** shows walls at their real height.
 
@@ -125,7 +130,7 @@ hanging a TV, shelves or art, or checking a window's height.
 
 ### All floors, Zoom to fit, north arrow
 
-- **All floors** (floor tabs) shows the whole house, roof included.
+- **All** (floor tabs) shows the whole house, roof included.
 - **Zoom to fit** (**F**) brings the whole house back into view if you get lost.
 - The **north arrow** (bottom left) appears once you set where the house is (see *Sun study*). It shows which way
   north is.
@@ -165,11 +170,12 @@ anything:
 - it keeps yours in **History**;
 - a message tells you what happened.
 
-## Building the house (Edit house)
+## Building the house (Build mode)
 
-Click **Edit house** (or press **E**) to change the building itself. Furniture fades out, so walls and doors are
-easy to grab. The **Build** panel appears on the left, and a **tool options bar** appears over the picture for
-whichever tool you pick. Press **E** again or click **Done editing** when you're finished.
+Click **Build** at the top (or press **E**) to change the building itself. Furniture fades out, so walls and doors
+are easy to grab. The drawing tools (**Wall**, **Door**, **Window**, **Opening**, **Stairs**) appear in the tools on
+the left of the picture, and a **tool options bar** appears at the top for whichever tool you pick. Click
+**Furnish** (or press **E** again) when you're finished.
 
 ### New house
 
@@ -220,7 +226,7 @@ To trace a floor plan picture or PDF, give it to your AI agent (see *AI agents*)
 
 ## Reshaping walls
 
-In Edit house mode:
+In Build mode:
 
 - **Move a corner:** drag a dot at the end of a wall. Walls meeting there follow. Walls that join the side of a moved
   wall stay attached.
@@ -331,7 +337,7 @@ The left panel lists every furniture model you have. Every design can use them.
 
 ## Finishes (Paint tool)
 
-**Paint** (floor tabs, or **P**) puts a finish on walls and floors: **Paint, Wallpaper, Tiles, Wood, Brick, Stone,
+**Paint** (tools on the left, or **P**) puts a finish on walls and floors: **Paint, Wallpaper, Tiles, Wood, Brick, Stone,
 Concrete** or **Carpet**, in any colour.
 
 - **One side:** click a wall to finish that side of it, between the walls that meet it. One long wall can be
@@ -349,9 +355,9 @@ A wall's panel shows the finish on each side, with **Reset** to go back to the h
 
 ## Display, grid and measuring
 
-### View menu
+### Show menu
 
-**View ▾** in the floor tabs turns these on or off:
+**Show** in the view controls (bottom right) turns these on or off:
 
 - **Dimensions:** the length of every outside wall, drawn on the floor like on an architect's plan. Also each
   rectangular room's width × depth. Odd-shaped houses get an overall width and depth too.
@@ -363,7 +369,7 @@ A wall's panel shows the finish on each side, with **Reset** to go back to the h
 
 ### Measure tool (M)
 
-Click **Measure** (or press **M**) and choose a mode:
+Click **Measure** in the tools on the left (or press **M**) and choose a mode:
 
 - **Distance:** click two points to get the straight distance between them. It works on floors, walls and furniture,
   and the label also shows the horizontal (↔) and vertical (↕) parts. Hold **Shift** to measure along one direction
@@ -398,7 +404,7 @@ nightstands beside a bed.
 
 See where the sunlight falls in each room at any date and time.
 
-1. Click **Sun** in the floor tabs.
+1. Click **Sun** in the view controls (bottom right).
 2. Enter the house's **latitude** and **longitude**, or click **Use my location**. To find them, search the address
    on an online map; the coordinates are usually shown there.
 3. Turn **North** until the arrow matches the real direction of the house.
@@ -489,8 +495,8 @@ OpenCode and Cursor. Desktop-only apps can still use Roomcraft from their own wi
 | Keys | Does |
 | --- | --- |
 | **1** / **2** / **3** / **4** | 3D / Plan / Walk / Split view |
-| **E** | Edit house on/off |
-| **V W D N O S** | Edit house tools: select, wall, door, window, opening, stairs |
+| **E** | Switch between Furnish and Build |
+| **V W D N O S** | Build mode tools: select, wall, door, window, opening, stairs |
 | **P** | Paint tool |
 | **M** | Measure tool |
 | **C** | Assistant |

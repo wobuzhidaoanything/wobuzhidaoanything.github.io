@@ -1,18 +1,11 @@
-// Left panel: add furniture from links and browse your models; in Edit house it becomes the
+// Left panel: add furniture from links and browse your models; in Build mode it becomes the
 // Build panel with the drawing tools and floors.
 import { useState } from 'react';
 import { useTopic, openDialog } from './store.js';
 import { CATEGORY_LABELS } from '../js/models.js';
+import { Icon, categoryIcon } from './controls.js';
 
-const ICONS = {
-  default: <><rect x="5" y="11" width="22" height="12" rx="3" /><path d="M8 23v3M24 23v3" /></>,
-  sofa: <><rect x="4" y="13" width="24" height="9" rx="3" /><rect x="7" y="8" width="18" height="7" rx="2" /><path d="M7 22v3M25 22v3" /></>,
-  bed: <><rect x="4" y="15" width="24" height="7" rx="2" /><path d="M5 22v3M27 22v3M5 15V8M9 13h6" /></>,
-  plant: <><path d="M11 20h10l-1.5 7h-7z" /><path d="M16 20c0-6-5-9-8-9 0 5 4 8 8 9zM16 20c0-7 4-11 8-11 0 6-4 10-8 11z" /></>,
-  lamp: <><path d="M11 5h10l3 8H8z" /><path d="M16 13v14M11 27h10" /></>,
-  rug: <><rect x="5" y="9" width="22" height="14" rx="1" /><rect x="9" y="12" width="14" height="8" /></>,
-};
-const iconFor = (cat) => <svg viewBox="0 0 32 32">{ICONS[cat] || ICONS[{ armchair: 'sofa', floorlamp: 'lamp' }[cat]] || ICONS.default}</svg>;
+const iconFor = (cat) => <Icon n={categoryIcon(cat)} />;
 
 function LinkBox({ app }) {
   const [text, setText] = useState('');
@@ -25,16 +18,16 @@ function LinkBox({ app }) {
   const ready = app.chat?.ready;
   return (
     <section className="import" id="linkBox">
-      <h2>Add furniture from a link</h2>
+      <h2><Icon n="link" />Add from a shop</h2>
       <div className={`dropzone${over ? ' over' : ''}`} onDragEnter={() => setOver(true)} onDragLeave={() => setOver(false)} onDrop={() => setOver(false)}>
-        <textarea id="linkInput" rows="2" value={text} placeholder="Paste or drop product links (IKEA, Amazon, Wayfair, Shopify stores…)"
+        <textarea id="linkInput" rows="2" value={text} placeholder="Paste a product link (IKEA, Amazon, Wayfair, any shop)…"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), go())}
           onPaste={(e) => {
             const t = e.clipboardData.getData('text');
             if (app.extractUrls(t).length) (e.preventDefault(), go(`${text} ${t}`));
           }} />
-        <div className="dz-row"><span className="hint">Drop links anywhere</span><button className="btn primary small" id="importBtn" onClick={() => go()}>Import</button></div>
+        <div className="dz-row"><span className="hint">or drop links anywhere</span><button className="btn primary small" id="importBtn" disabled={!text.trim()} onClick={() => go()}>Add</button></div>
         {ready && (
           <label className="check small-check auto-model" id="autoModelRow">
             <input type="checkbox" id="autoModel" checked={app.pref.get('autoModel', true)} onChange={(e) => app.setSetting('autoModel', e.target.checked)} />
@@ -93,10 +86,10 @@ function Library({ app }) {
   return (
     <section className="inv">
       <div className="inv-head">
-        <h2>Models <span className="count" id="invCount">{library.items.length}</span></h2>
-        <button className="btn small" id="newItemBtn" title="Make a model of any size, e.g. a built-in cupboard" onClick={() => app.newItem()}>+ Custom</button>
+        <h2><Icon n="sofa" />Your furniture <span className="count" id="invCount">{library.items.length}</span></h2>
+        <button className="btn small ghost" id="newItemBtn" title="Make a model of any size, e.g. a built-in cupboard" onClick={() => app.newItem()}><Icon n="plus" />Custom</button>
       </div>
-      <input className="search" id="invSearch" type="search" placeholder="Search models" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="search-wrap"><Icon n="search" /><input className="search" id="invSearch" type="search" placeholder="Search your furniture" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       {library.items.length > 3 && (
         <div className="chips" id="invFilters">
           {chips.map(([k, n]) => <button key={k} className={`chip${k === f ? ' on' : ''}`} data-filter={k} onClick={() => ((ui.invFilter = k), app.bump('main'))}>{n}</button>)}
@@ -121,7 +114,13 @@ function Library({ app }) {
                   setDragging(i.id);
                 }}
                 onDragEnd={() => setDragging(null)}>
-                <div className="thumb" style={i.image ? { backgroundImage: `url("${i.image}")` } : undefined}>{i.image ? null : iconFor(i.category)}</div>
+                <div className="thumb" style={i.image ? { backgroundImage: `url("${i.image}")` } : undefined}>
+                  {i.image ? null : iconFor(i.category)}
+                  <button className={`fav${i.favorite ? ' on' : ''}`} data-act="fav" title={i.favorite ? 'Remove from favourites' : 'Favourite: keep it at the top'} aria-label="Favourite"
+                    onClick={() => (i.favorite ? delete i.favorite : (i.favorite = true), app.commit({ lib: true, rebuild: false }))}>
+                    {i.favorite ? '★' : '☆'}
+                  </button>
+                </div>
                 <div>
                   <div className="nm">{i.name}</div>
                   {ready ? <div className="badge-ready" title="Your AI agent finished this model">✓ Ready to place</div> : i.verified === false ? (
@@ -140,12 +139,8 @@ function Library({ app }) {
                   </div>
                 </div>
                 <div className="card-actions">
-                  <button className="btn small primary" data-act="add" title="Put it in the room" onClick={() => (ui.ready?.delete(i.id), app.addToRoom(i.id))}>Add</button>
-                  <button className="btn small ghost" data-act="edit" title="Size, colours and 3D model" onClick={() => app.openItemDialog(i)}>Edit</button>
-                  <button className={`fav${i.favorite ? ' on' : ''}`} data-act="fav" title={i.favorite ? 'Remove from favourites' : 'Favourite: keep it at the top'} aria-label="Favourite"
-                    onClick={() => (i.favorite ? delete i.favorite : (i.favorite = true), app.commit({ lib: true, rebuild: false }))}>
-                    {i.favorite ? '★' : '☆'}
-                  </button>
+                  <button className="add-btn" data-act="add" title="Add to the room (or drag the card into the view)" aria-label={`Add ${i.name} to the room`} onClick={() => (ui.ready?.delete(i.id), app.addToRoom(i.id))}><Icon n="plus" /></button>
+                  <button className="icon-btn small" data-act="edit" title="Edit size, colours and 3D model" aria-label="Edit" onClick={() => app.openItemDialog(i)}><Icon n="pencil" /></button>
                 </div>
               </div>
             );
@@ -156,15 +151,6 @@ function Library({ app }) {
   );
 }
 
-const TOOLS = [
-  ['select', 'Select', 'V', <path d="M5 3l14 8-6 2-2 6z" />],
-  ['wall', 'Wall', 'W', <path d="M3 17h18M3 17V7h18v10M8 7v10M14 7v10" />],
-  ['door', 'Door', 'D', <><path d="M6 21V4h10v17M4 21h16" /><circle cx="13" cy="13" r="1" /></>],
-  ['window', 'Window', 'N', <><rect x="4" y="5" width="16" height="14" /><path d="M12 5v14M4 12h16" /></>],
-  ['opening', 'Opening', 'O', <path d="M5 21V8a7 7 0 0 1 14 0v13" />],
-  ['stairs', 'Stairs', 'S', <path d="M4 20h4v-4h4v-4h4V8h4" />],
-];
-
 function BuildPanel({ app }) {
   const { design, ui, viewer } = app;
   const t = ui.tool || 'select';
@@ -172,18 +158,16 @@ function BuildPanel({ app }) {
   return (
     <div id="buildPanel">
       <section>
-        <h2>Build · {app.floorNow().name}</h2>
-        <div className="tool-grid">
-          {TOOLS.map(([k, name, key, svg]) => (
-            <button key={k} className={`tool${t === k ? ' on' : ''}`} data-tool={k} title={`${name} (${key})`} onClick={() => app.setTool(k === 'select' ? null : k)}>
-              <svg viewBox="0 0 24 24">{svg}</svg>{name}
-            </button>
-          ))}
-        </div>
-        <p className="hint" style={{ margin: '10px 0 0' }}>Rooms follow the walls automatically. Drag a corner or a wall to reshape; double-click a wall to add a corner.</p>
+        <h2><Icon n="build" />Building {app.floorNow().name}</h2>
+        <ol className="how">
+          <li>Pick a tool on the left of the view: <b>Wall</b>, <b>Door</b>, <b>Window</b>, <b>Stairs</b>…</li>
+          <li>Click in the view to place it. Rooms appear by themselves when walls close a space.</li>
+          <li>Drag corners and walls to reshape; double-click a wall to add a corner.</li>
+        </ol>
+        <p className="hint">Current tool: <b>{{ wall: 'Wall', door: 'Door', window: 'Window', opening: 'Opening', stairs: 'Stairs', measure: 'Measure', paint: 'Paint' }[t] || 'Select'}</b> · <kbd>Esc</kbd> goes back to Select</p>
       </section>
       <section>
-        <h2>Floors</h2>
+        <h2><Icon n="floors" />Floors</h2>
         <div className="floor-list">
           {design.floors.map((f, i) => ({ f, i })).reverse().map(({ f, i }) => (
             <button key={f.id} className={`floor-row${i === fi ? ' on' : ''}`} data-f={i} onClick={() => app.setFloor(i)}>
@@ -197,7 +181,7 @@ function BuildPanel({ app }) {
         </div>
       </section>
       <section>
-        <h2>Start over</h2>
+        <h2><Icon n="plus" />Start over</h2>
         <div className="row">
           <button className="btn small" id="newHouse2" onClick={() => openDialog('newHouse')}>New house…</button>
           <button className="btn small" id="dxf2" onClick={() => app.pickFile('dxf')}>Import DXF…</button>

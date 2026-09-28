@@ -152,7 +152,7 @@ function NewHouse({ app, close }) {
       app.createHouse({ name: v.name.trim() || 'My house', width: v.width, depth: v.depth, floors: Math.round(v.floors), floorHeight: v.height });
     }}>
       <h3>New house</h3>
-      <p className="muted">Start with an empty shell. Draw interior walls with Edit house, give an AI agent a floor plan, or import a DXF.</p>
+      <p className="muted">Start with an empty shell. Draw interior walls in Build mode, give an AI agent a floor plan, or import a DXF.</p>
       <label>Name<input name="name" required value={v.name} onChange={(e) => put('name')(e.target.value)} /></label>
       <div className="grid2">
         <label>Width (m)<Num unit="m" min={3} max={60} step={0.1} value={v.width} onCommit={put('width')} /></label>

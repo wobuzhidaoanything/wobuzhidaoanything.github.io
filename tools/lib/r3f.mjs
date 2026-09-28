@@ -33,6 +33,8 @@ const ENTRIES = {
   fiber: `export * from '@react-three/fiber';\n`,
   drei: `export * from '@react-three/drei';\n`,
   'react-dom': `export { createRoot } from 'react-dom/client';\nexport { createPortal, flushSync } from 'react-dom';\n`,
+  // Lucide icons for the UI: only the ones listed here are bundled (add names as needed)
+  icons: `export { MousePointer2, BrickWall, DoorOpen, Grid2x2, Ruler, PaintRoller, Sun, Eye, Scan, House, Box, LayoutDashboard, Columns2, Footprints, Sofa, Hammer, Link, Plus, Pencil, Search, Layers3, ChevronDown, ChevronUp, Share, MessageCircle, CircleHelp, Settings, EllipsisVertical, Undo2, Redo2, Paperclip, X, Star, Trash2, Copy, Lock, RotateCw, Armchair, BedDouble, LampFloor, LampDesk, Tv, Sprout, Library, Table2, Frame, Archive, Package, Blinds, RectangleHorizontal } from 'lucide-react';\n`,
 };
 
 function versionKey() {
@@ -43,14 +45,14 @@ function versionKey() {
       return '?';
     }
   };
-  return crypto.createHash('sha1').update(['react', 'react-dom', '@react-three/fiber', '@react-three/drei', 'three'].map(v).join('|') + JSON.stringify(ENTRIES)).digest('hex').slice(0, 10);
+  return crypto.createHash('sha1').update(['react', 'react-dom', 'lucide-react', '@react-three/fiber', '@react-three/drei', 'three'].map(v).join('|') + JSON.stringify(ENTRIES)).digest('hex').slice(0, 10);
 }
 
 let building = null;
 /** Build (once per package versions) and return the folder with the runtime files. */
 export function runtime() {
   const dir = path.join(CACHE, versionKey());
-  if (fs.existsSync(path.join(dir, 'react-dom.js'))) return Promise.resolve(dir);
+  if (fs.existsSync(path.join(dir, 'icons.js'))) return Promise.resolve(dir);
   building ||= (async () => {
     const esbuild = await import('esbuild');
     const src = path.join(CACHE, 'src');

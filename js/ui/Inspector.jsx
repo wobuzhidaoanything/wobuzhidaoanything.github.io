@@ -19,7 +19,7 @@ const Group = ({ label, right, children, className = '' }) => (
   </div>
 );
 const Tip = ({ children }) => <div className="tip">{children}</div>;
-const EditTip = ({ what }) => <Tip>Turn on <b>Edit house</b> (E) to change {what}.</Tip>;
+const EditTip = ({ what }) => <Tip>Switch to <b>Build</b> (E) to change {what}.</Tip>;
 const Check = ({ checked, onChange, children, title, id }) => (
   <label className="row" style={{ gap: 8, marginTop: 8, cursor: 'pointer' }} title={title}>
     <input type="checkbox" id={id} checked={!!checked} onChange={(e) => onChange(e.target.checked)} /> {children}

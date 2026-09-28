@@ -1,7 +1,7 @@
 // In-app user guide: docs/user-guide.md with a chapter list (jump to any chapter; the one being
 // read is highlighted) and a search box that shows only matching sections.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Dialog } from './controls.js';
+import { Dialog, Icon } from './controls.js';
 import { renderGuide } from '../js/help.js';
 
 let cache = null;
@@ -84,7 +84,7 @@ function Guide({ chapter, close }) {
         </nav>
         <article id="helpBody" className="help-body" ref={body} onScroll={onScroll} dangerouslySetInnerHTML={html} />
       </div>
-      <button className="icon-btn help-close" aria-label="Close" title="Close (Esc)" onClick={close}><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+      <button className="icon-btn help-close" aria-label="Close" title="Close (Esc)" onClick={close}><Icon n="close" /></button>
     </>
   );
 }

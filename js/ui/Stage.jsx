@@ -2,7 +2,7 @@
 // options bar, the status bar, walk-through help and the photo renderer.
 import { useRef, useState } from 'react';
 import { useTopic, useBridge, set } from './store.js';
-import { Num, Seg, Color, useOutside } from './controls.js';
+import { Num, Seg, Color, useOutside, Icon } from './controls.js';
 import { elevations } from '../js/design.js';
 import { FINISHES } from '../js/materials.js';
 import { sunTimes } from '../js/sun.js';
@@ -77,18 +77,11 @@ function SunPanel({ app }) {
   );
 }
 
+/** Floor tabs, top centre: which floor you're on (and the elevation bar when looking at a wall). */
 export function LevelBar() {
   const app = useTopic('main');
-  const [pop, setPop] = useState(null); // { kind: 'view'|'sun', left, top }
-  const popRef = useRef(null);
-  useOutside(popRef, !!pop, () => setPop(null), '[data-sun], [data-viewmenu]');
   if (!app?.design) return null;
   const { viewer, design, ui } = app;
-  const toggle = (kind, e, dx) => {
-    if (pop?.kind === kind) return setPop(null);
-    const r = e.currentTarget.getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect();
-    setPop({ kind, left: Math.max(8, r.left - s.left + dx), top: r.bottom - s.top + 6 });
-  };
   if (viewer.view === 'elevation') {
     const e = viewer.elev;
     return (
@@ -103,37 +96,89 @@ export function LevelBar() {
   }
   const ys = elevations(design);
   const all = viewer.showAll;
-  const walk = viewer.view === 'walk';
   return (
-    <>
-      <div className="level-bar" id="levelBar" role="tablist" aria-label="Floors">
-        {design.floors.map((f, i) => (
-          <button key={f.id} role="tab" data-floor={i} className={!all && i === viewer.activeFloor ? 'on' : ''} title={`${f.name} · level ${app.cm(ys[i])} cm · double-click to rename`}
-            onClick={() => app.setFloor(i)}
-            onDoubleClick={() => {
-              const name = prompt('Floor name', f.name);
-              if (name?.trim()) (f.name = name.trim()), app.commit({ rebuild: false });
-            }}>
-            <span className="lv">{i === 0 ? 'G' : i}</span>{f.name}
-          </button>
-        ))}
-        {design.floors.length > 1 && !walk && <button role="tab" className={all ? 'on' : ''} data-all title="See the whole house" onClick={() => app.showAllFloors()}>All floors</button>}
-        {ui.editing && (<><span className="sep"></span><button className="add" data-addfloor title="Add a floor above the top one" onClick={() => app.addFloorAbove()}>+ Floor</button></>)}
-        {(viewer.view === '3d' || viewer.split) && !all && (
-          <><span className="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan" onClick={() => app.toggleWallMode()}>{viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button></>
-        )}
-        <span className="sep"></span>
-        {!walk && <button data-measure className={ui.tool === 'measure' ? 'on' : ''} title="Measure distances, paths and along surfaces (M)" onClick={() => app.setTool(ui.tool === 'measure' ? null : 'measure')}>Measure</button>}
-        {!walk && <button data-paint className={ui.tool === 'paint' ? 'on' : ''} title="Paint walls and floors: paint, wallpaper, tiles, wood… (P)" onClick={() => app.setTool(ui.tool === 'paint' ? null : 'paint')}>Paint</button>}
-        <button data-sun className={ui.sunOn ? 'on' : ''} title="Sun and shadows for a place, date and time" onClick={(e) => toggle('sun', e, -120)}>{ui.sunOn ? `☀ ${ui.sunTime}` : 'Sun'}</button>
-        {!walk && (<><span className="sep"></span><button data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, areas and the grid" onClick={(e) => toggle('view', e, -180)}>View ▾</button></>)}
-      </div>
-      {pop && (
-        <div ref={popRef} className="popover-anchor" style={{ position: 'absolute', left: pop.left, top: pop.top, zIndex: 8 }}>
-          {pop.kind === 'view' ? <ViewMenu app={app} /> : <SunPanel app={app} />}
-        </div>
+    <div className="level-bar" id="levelBar" role="tablist" aria-label="Floors">
+      <span className="lvl-icon" title="Floors (PgUp / PgDn)"><Icon n="floors" /></span>
+      {design.floors.map((f, i) => (
+        <button key={f.id} role="tab" data-floor={i} className={!all && i === viewer.activeFloor ? 'on' : ''} title={`${f.name} · level ${app.cm(ys[i])} cm · double-click to rename`}
+          onClick={() => app.setFloor(i)}
+          onDoubleClick={() => {
+            const name = prompt('Floor name', f.name);
+            if (name?.trim()) (f.name = name.trim()), app.commit({ rebuild: false });
+          }}>
+          <span className="lv">{i === 0 ? 'G' : i}</span>{f.name}
+        </button>
+      ))}
+      {design.floors.length > 1 && viewer.view !== 'walk' && <button role="tab" className={all ? 'on' : ''} data-all title="See the whole house" onClick={() => app.showAllFloors()}>All</button>}
+      {ui.editing && <button className="add" data-addfloor title="Add a floor above the top one" onClick={() => app.addFloorAbove()}>+ Floor</button>}
+    </div>
+  );
+}
+
+const BUILD_TOOLS = [['wall', 'Wall', 'W', 'Draw walls'], ['door', 'Door', 'D', 'Add doors to walls'], ['window', 'Window', 'N', 'Add windows to walls'], ['opening', 'Opening', 'O', 'A gap in a wall, no door'], ['stairs', 'Stairs', 'S', 'Stairs up to the next floor']];
+
+/** The tools, on the left of the view: what you can do with the mouse right now. */
+export function ToolDock() {
+  const app = useTopic('main');
+  if (!app?.design) return null;
+  const { ui, viewer } = app;
+  if (viewer.view === 'walk') return null;
+  const t = ui.tool;
+  const B = ({ id, label, icon, keys, tip, on, onClick }) => (
+    <button className={`dock-btn${on ? ' on' : ''}`} data-tool={id} title={`${tip} (${keys})`} aria-pressed={!!on} onClick={onClick}>
+      <Icon n={icon} /><span>{label}</span>
+    </button>
+  );
+  const pick = (name) => app.setTool(t === name ? null : name);
+  return (
+    <div className="tool-dock" id="toolDock" role="toolbar" aria-label="Tools">
+      <B id="select" label="Select" icon="select" keys={ui.editing ? 'V or Esc' : 'Esc'} tip="Select and move things" on={!t} onClick={() => app.setTool(null)} />
+      {ui.editing && viewer.view !== 'elevation' && (
+        <>
+          <span className="dock-sep"></span>
+          {BUILD_TOOLS.map(([id, label, keys, tip]) => <B key={id} id={id} label={label} icon={id} keys={keys} tip={tip} on={t === id} onClick={() => pick(id)} />)}
+        </>
       )}
-    </>
+      <span className="dock-sep"></span>
+      <B id="measure" label="Measure" icon="measure" keys="M" tip="Measure distances, paths and along surfaces" on={t === 'measure'} onClick={() => pick('measure')} />
+      {viewer.view !== 'elevation' && <B id="paint" label="Paint" icon="paint" keys="P" tip="Paint walls and floors: paint, wallpaper, tiles, wood…" on={t === 'paint'} onClick={() => pick('paint')} />}
+    </div>
+  );
+}
+
+/** How the view looks, bottom right: walls cut or full, sun, what's drawn, zoom to fit. */
+export function ViewDock() {
+  const app = useTopic('main');
+  const [pop, setPop] = useState(null);
+  const popRef = useRef(null);
+  useOutside(popRef, !!pop, () => setPop(null), '[data-sun], [data-viewmenu]');
+  if (!app?.design) return null;
+  const { viewer, ui } = app;
+  if (viewer.view === 'elevation') return null;
+  const walk = viewer.view === 'walk';
+  const toggle = (kind) => setPop(pop === kind ? null : kind);
+  return (
+    <div className="view-dock" id="viewDock">
+      {pop && <div ref={popRef} className="dock-pop">{pop === 'view' ? <ViewMenu app={app} /> : <SunPanel app={app} />}</div>}
+      {(viewer.view === '3d' || viewer.split) && !viewer.showAll && (
+        <button className="dock-chip" data-walls title="Walls cut at 1.25 m like a plan, or full height" onClick={() => app.toggleWallMode()}>
+          <Icon n="walls" />{viewer.wallMode === 'cut' ? 'Walls cut' : 'Walls full'}
+        </button>
+      )}
+      <button className={`dock-chip${ui.sunOn ? ' on sun' : ''}`} data-sun title="Sun and shadows for a place, date and time" onClick={() => toggle('sun')}>
+        <Icon n="sun" />{ui.sunOn ? ui.sunTime : 'Sun'}
+      </button>
+      {!walk && (
+        <button className={`dock-chip${pop === 'view' ? ' on' : ''}`} data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, room areas, the grid and clearances" onClick={() => toggle('view')}>
+          <Icon n="layers" />Show
+        </button>
+      )}
+      {!walk && (
+        <button className="dock-chip icon" title="Zoom to the selection, or the whole house (F)" aria-label="Zoom to fit" onClick={() => (viewer.sel ? viewer.frameSelection() : viewer.frameHouse(true))}>
+          <Icon n="fit" />
+        </button>
+      )}
+    </div>
   );
 }
 

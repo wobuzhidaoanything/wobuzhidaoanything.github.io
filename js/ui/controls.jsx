@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { evalNumber } from '../js/units.js';
 import { bridge, useBridge, closeDialog } from './store.js';
+import * as L from 'lucide-react';
 
 const fmt = (v) => (v == null || Number.isNaN(v) ? '' : String(Math.round(v * 1000) / 1000));
 
@@ -129,3 +130,31 @@ export function useOutside(ref, open, close, ignore) {
 }
 
 export const Svg = ({ d, children, viewBox = '0 0 24 24' }) => <svg viewBox={viewBox}>{d ? <path d={d} /> : children}</svg>;
+
+// Icons: Lucide (lucide-react, bundled with React; see tools/lib/r3f.mjs for the list), plus two
+// drawn here that Lucide doesn't have (a doorless opening and stairs).
+
+const LUCIDE = {
+  select: L.MousePointer2, wall: L.BrickWall, door: L.DoorOpen, window: L.Grid2x2, measure: L.Ruler, paint: L.PaintRoller,
+  sun: L.Sun, layers: L.Eye, fit: L.Scan, walls: L.House, cube: L.Box, plan: L.LayoutDashboard, split: L.Columns2,
+  walk: L.Footprints, sofa: L.Sofa, build: L.Hammer, link: L.Link, plus: L.Plus, pencil: L.Pencil, search: L.Search,
+  floors: L.Layers3, chevron: L.ChevronDown, up: L.ChevronUp, share: L.Share, chat: L.MessageCircle, help: L.CircleHelp,
+  settings: L.Settings, more: L.EllipsisVertical, undo: L.Undo2, redo: L.Redo2, attach: L.Paperclip, close: L.X,
+  star: L.Star, trash: L.Trash2, copy: L.Copy, lock: L.Lock, rotate: L.RotateCw,
+  // furniture types (cards without a photo)
+  sofa2: L.Sofa, armchair: L.Armchair, bed: L.BedDouble, floorlamp: L.LampFloor, lamp: L.LampDesk, tv: L.Tv, plant: L.Sprout,
+  bookshelf: L.Library, table: L.Table2, mirror: L.Frame, dresser: L.Archive, box: L.Package, curtain: L.Blinds, rug: L.RectangleHorizontal,
+};
+/** Icon for a furniture category. */
+export const categoryIcon = (cat) =>
+  ({ sofa: 'sofa2', armchair: 'armchair', chair: 'armchair', stool: 'armchair', ottoman: 'armchair', bed: 'bed', floorlamp: 'floorlamp', lamp: 'lamp', tv: 'tv', plant: 'plant', bookshelf: 'bookshelf',
+     wardrobe: 'dresser', dresser: 'dresser', nightstand: 'dresser', sideboard: 'dresser', tvstand: 'dresser', table: 'table', desk: 'table', coffeetable: 'table', sidetable: 'table', mirror: 'mirror', curtain: 'curtain', rug: 'rug' })[cat] || 'box';
+const DRAWN = {
+  opening: <path d="M5 21V8a7 7 0 0 1 14 0v13" />,
+  stairs: <path d="M4 20h4v-4h4v-4h4V8h4" />,
+};
+export function Icon({ n }) {
+  const C = LUCIDE[n];
+  if (C) return <C className="ic" strokeWidth={1.8} aria-hidden="true" />;
+  return <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">{DRAWN[n]}</svg>;
+}
