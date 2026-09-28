@@ -677,3 +677,11 @@ input[data-num] { font-variant-numeric: tabular-nums; }
 .chat-pics { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .chat-pics img { width: 88px; height: 88px; object-fit: cover; border-radius: 8px; display: block; border: 1px solid rgba(255,255,255,.4); }
 #chatAttach svg { width: 17px; height: 17px; }
+.chat-job .jt { flex: 1; min-width: 0; }
+.chat-job .jt em { display: block; font-style: normal; font-size: 12px; margin-top: 2px; color: var(--text-2); }
+.chat-job.unverified .st { color: var(--warn); }
+.chat-job .btn { flex: none; }
+.chat-msg.error .btn { margin-top: 8px; }
+button.badge-unverified { border: 0; cursor: pointer; font-family: inherit; }
+button.badge-unverified:hover { text-decoration: underline; }
+.queue-clear { float: right; margin-top: 6px; }

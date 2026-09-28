@@ -10,6 +10,8 @@ import { spawn } from 'node:child_process';
 import { ROOT, STATE as STATE_DIR } from './paths.mjs';
 import { HARNESSES, SERVER, NODE, agentStatus } from './agents.mjs';
 import { dimsFromText } from '../../shared/scrape.js';
+import { readUpload } from './uploads.mjs';
+import * as store from './store.mjs';
 
 const win = process.platform === 'win32';
 const STATE = path.join(STATE_DIR, 'chat.json');
@@ -190,7 +192,7 @@ export function enqueue(kind, data) {
   } else if (kind === 'model') {
     job.title = `Model ${data.name || data.url}`;
     job.prompt = modelPrompt(data);
-    message({ role: 'job', text: `Modelling ${data.name || 'a product'} from its link…`, job: job.id, url: data.url, status: 'queued' });
+    message({ role: 'job', text: `Modelling ${data.name || 'a product'} from its link…`, job: job.id, url: data.url, itemId: data.itemId, name: data.name, status: 'queued' });
   } else throw new Error('Unknown job');
   queue.push(job);
   pump();
@@ -202,6 +204,9 @@ export function enqueue(kind, data) {
  * agent looks at them with view_images; with pictures (or a size typed in) it gets the same
  * modelling rules as a product link, using the size the user gave.
  */
+/** Pictures from an earlier message that still exist (to send a message again). */
+export const existingUploads = (names = []) => names.filter((n) => readUpload(n));
+
 export function chatPrompt({ text = '', images = [], context }) {
   const parts = [];
   if (context) parts.push(`[App context: ${context}]`);
@@ -251,6 +256,7 @@ export function modelPrompt({ url, itemId, name }) {
     '4. Look at the renders and compare with every photo: silhouette, proportions, colours, materials. Fix and render again until it matches.',
     '5. verify_item with notes on what you compared and anything you could not match.',
     '',
+    'If you cannot make the model at all (the page cannot be read and there are no photos, the link is not a product…), do not guess: reply with one line starting "FAILED:" and the reason.',
     'Finish with one short line: what the model looks like now, its size and file weight, and anything you could not match.',
   ].join('\n');
 }
@@ -287,6 +293,13 @@ function pump() {
 
 function run(job) {
   current = job;
+  if (job.kind === 'model') {
+    // To tell afterwards whether the model was really made and checked (see modelOutcome)
+    const items = store.getLibrary().items || [];
+    job.startedAt = Date.now();
+    job.before = JSON.stringify(items.find((i) => i.id === job.itemId) || null);
+    job.idsBefore = items.map((i) => i.id);
+  }
   const def = RUNNERS[job.runner];
   const bin = findBin(def.bin);
   const jobMsg = state.messages.find((m) => m.job === job.id);
@@ -336,12 +349,39 @@ const tail = (s) => s.trim().split('\n').slice(-4).join('\n');
 
 function finish(job, reply, text, error, parsed = { tools: [] }) {
   if (current !== job) return;
-  patchMessage(reply.id, { text, tools: parsed.tools.slice(-30), streaming: false, error: error || undefined });
+  // A model job only counts as done if the model was changed and checked, whatever the agent says
+  const out = job.kind !== 'model' ? { outcome: error ? 'failed' : 'done' }
+    : job.stopped ? { outcome: 'stopped' }
+    : error ? { outcome: 'failed', reason: firstLine(text) }
+    : modelOutcome(job, store.getLibrary(), text);
+  const failed = out.outcome === 'failed';
+  patchMessage(reply.id, { text, tools: parsed.tools.slice(-30), streaming: false, error: (error || (job.kind === 'model' && failed)) || undefined });
   const jobMsg = state.messages.find((m) => m.job === job.id && m.role === 'job');
-  if (jobMsg) patchMessage(jobMsg.id, { status: error ? 'error' : job.stopped ? 'stopped' : 'done' });
+  if (jobMsg) patchMessage(jobMsg.id, { status: { done: 'done', unverified: 'unverified', stopped: 'stopped', failed: 'error' }[out.outcome], note: out.reason || undefined, itemId: out.itemId || jobMsg.itemId });
   current = null;
-  emit({ event: 'done', job: job.id, kind: job.kind, error: !!error, itemId: job.itemId });
+  emit({ event: 'done', job: job.id, kind: job.kind, error: failed, outcome: out.outcome, reason: out.reason, itemId: out.itemId || job.itemId, url: job.url });
   pump();
+}
+
+const firstLine = (t) => String(t || '').replace(/^\s*FAILED:\s*/i, '').split(/\n|(?<=[.!?])\s/)[0].trim().slice(0, 200);
+
+/**
+ * What a model job really achieved, from the library after the run:
+ *  done       the draft (or a model the agent added) was changed and verified during the run
+ *  unverified it was changed but not checked against the photos (or the check found a mismatch)
+ *  failed     nothing was changed, or the agent said "FAILED: …"
+ */
+export function modelOutcome({ itemId, startedAt = 0, before = 'null', idsBefore = [] }, lib, text = '') {
+  const said = /^\s*FAILED:/im.test(text);
+  const touched = (lib.items || []).filter((i) => (i.id === itemId && JSON.stringify(i) !== before) || (!idsBefore.includes(i.id) && i.addedBy === 'agent'));
+  if (said) return { outcome: 'failed', reason: firstLine(text.slice(text.search(/FAILED:/i))) };
+  const ok = touched.find((i) => i.verified === true && Date.parse(i.verifiedAt || 0) >= startedAt - 1000);
+  if (ok) return { outcome: 'done', itemId: ok.id };
+  if (touched.length) {
+    const mismatch = touched.find((i) => /^Mismatch:/.test(i.verifiedNotes || ''));
+    return { outcome: 'unverified', itemId: touched[0].id, reason: mismatch ? mismatch.verifiedNotes.replace(/^Mismatch:\s*/, '').slice(0, 200) : 'It wasn’t checked against the photos.' };
+  }
+  return { outcome: 'failed', reason: firstLine(text) || 'The agent stopped without changing the model.' };
 }
 
 /**

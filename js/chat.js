@@ -1,7 +1,7 @@
 // Assistant: talk to the user's own AI agent, which the local server runs in the background
 // (see tools/lib/runner.mjs). Also hands it "model this product link" jobs. This is the state
 // and the server calls; js/ui/Chat.jsx draws the panel.
-export function createChat({ context, onJobDone, onReady, local, onLinks, onChange }) {
+export function createChat({ context, onJobDone, onReady, local, onLinks, onChange, onRetryModel }) {
   let st = { runners: [], runner: null, busy: false, messages: [] };
   // Changes the agent made to the house, shown as cards with Undo (kept in this window only)
   const changes = [];
@@ -74,19 +74,19 @@ export function createChat({ context, onJobDone, onReady, local, onLinks, onChan
       hintTimer = setTimeout(() => ((hint = ''), changed()), 5000);
     },
     /** Send a message (with pictures as data: URLs). Returns false if it couldn't be sent. */
-    async send(text, images = []) {
+    async send(text, images = [], reuse = []) {
       text = text.trim();
-      if (!text && !images.length) return true;
+      if (!text && !images.length && !reuse.length) return true;
       // Every link is treated as a product: it goes through the same modelling job as the link box
       const urls = [...new Set(text.match(/https?:\/\/[^\s<>"']+/g) || [])].map((u) => u.replace(/[).,;!?]+$/, ''));
       if (urls.length && onLinks) {
         await onLinks(urls);
         const rest = urls.reduce((t, u) => t.split(u).join(''), text).trim();
-        if (!rest && !images.length) return true; // just links: nothing else to say
+        if (!rest && !images.length && !reuse.length) return true; // just links: nothing else to say
         text = `${text}\n\n(Roomcraft has already queued a separate modelling job for each link above; don't model them again here.)`;
       }
       try {
-        const r = await api('/send', { text, images, context: context(), runner: st.runner });
+        const r = await api('/send', { text, images, reuse, context: context(), runner: st.runner });
         st.busy = r.busy;
         changed();
         return true;
@@ -109,6 +109,13 @@ export function createChat({ context, onJobDone, onReady, local, onLinks, onChan
       st = await api('/runner', { runner: id });
       changed();
       onReady?.(ready());
+    },
+    /** Try a failed job again: a model job re-runs, a chat message is sent again. */
+    retry(m) {
+      if (m.role === 'job') return onRetryModel?.(m.url, m.itemId, m.name);
+      const i = st.messages.indexOf(m);
+      const q = st.messages.slice(0, i).reverse().find((x) => x.role === 'user');
+      if (q) chat.send(q.text || '', [], q.images || []);
     },
     /** Ask the agent to model a product from its link (improving the draft item `itemId`). */
     async modelLink(url, item) {

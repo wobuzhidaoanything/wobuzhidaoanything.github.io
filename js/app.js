@@ -529,6 +529,7 @@ function addToRoom(itemId, at) {
   if (!at && ['curtain', 'mirror', 'wardrobe', 'bookshelf', 'tvstand', 'sideboard', 'dresser'].includes(item.category)) againstWall(p, floor);
   commit({ rebuild: false });
   viewer.select({ type: 'item', id: p.id });
+  toast(`Added “${item.name}” to ${floor.name}. Drag it to move it.`, { undo: true });
 }
 
 function againstWall(p, floor) {
@@ -775,8 +776,57 @@ async function handToAgent(q, url, item) {
   renderPanels();
 }
 
+/**
+ * A modelling job finished. It only counts as done when the model was changed and checked
+ * (the server looks at the library, not at what the agent says): see modelOutcome in runner.mjs.
+ */
+async function modelJobDone(ev) {
+  if (ev.kind !== 'model') return;
+  // The agent saved the library on disk; make sure we show its version
+  if (Date.now() - lastLibSave > 1500) {
+    library = await store.loadLibrary();
+    viewer.library = library.items;
+    viewer.syncFurniture();
+  }
+  const item = itemById(ev.itemId);
+  const name = item ? `“${item.name}”` : 'the model';
+  const q = ui.queue.find((x) => x.url === ev.url || (x.itemId && x.itemId === ev.itemId));
+  const retry = ['Try again', 'retry', q?.id];
+  if (ev.outcome === 'done') {
+    if (item) (ui.ready ||= new Set()).add(item.id);
+    if (q) Object.assign(q, { status: 'ok', itemId: ev.itemId, message: 'Modelled and checked by your agent', actions: [['Add to room', 'add', ev.itemId]] });
+    toast(`Your agent finished ${name}. It’s at the top of your models.`, { action: item && ['Add to room', () => (ui.ready?.delete(item.id), addToRoom(item.id))] });
+    setTimeout(() => $(`#inventory .card[data-id="${CSS.escape(ev.itemId || '')}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
+  } else if (ev.outcome === 'unverified') {
+    if (q) Object.assign(q, { status: 'warn', itemId: ev.itemId, message: `Modelled, but not checked: ${ev.reason}`, actions: [['Add to room', 'add', ev.itemId], retry] });
+    toast(`Your agent changed ${name} but didn’t confirm it matches the photos.`, { action: ['Try again', () => retryModel(ev.url, ev.itemId)] });
+  } else if (ev.outcome === 'failed') {
+    if (q) Object.assign(q, { status: 'error', message: `Your agent couldn’t model it: ${ev.reason} The draft is kept.`, actions: [retry, ['See why', 'chat'], ...(item ? [['Edit size', 'edit', item.id]] : [])] });
+    toast(`Your agent couldn’t model ${name}: ${ev.reason}`, { action: ['See why', () => chat.toggle(true)] });
+  } else if (q) Object.assign(q, { status: 'warn', message: 'Stopped. The draft is kept.', actions: [retry] });
+  renderPanels();
+}
+
+/** Hand a link to the agent again. */
+async function retryModel(url, itemId, name) {
+  if (!chat?.ready) return toast('No agent is ready. Open Agents to set one up.');
+  const item = itemById(itemId) || (name ? { id: itemId, name } : null);
+  let q = ui.queue.find((x) => x.url === url);
+  if (!q) ui.queue.push((q = { id: uid('q'), url, title: item?.name || url, itemId }));
+  try {
+    await chat.modelLink(url, item);
+    Object.assign(q, { status: 'busy', message: 'Your agent is trying again…', actions: [['watch', 'chat']] });
+  } catch (err) {
+    Object.assign(q, { status: 'error', message: `Agent: ${err.message}`, actions: [] });
+  }
+  renderPanels();
+}
+
 function queueAction(kind, arg) {
-  if (kind === 'add') (ui.ready?.delete(arg), addToRoom(arg));
+  if (kind === 'retry') {
+    const q = ui.queue.find((x) => x.id === arg);
+    if (q) retryModel(q.url, q.itemId);
+  } else if (kind === 'add') (ui.ready?.delete(arg), addToRoom(arg));
   else if (kind === 'edit') openItemDialog(itemById(arg));
   else if (kind === 'chat') chat?.toggle(true);
   else if (kind === 'manual') {
@@ -786,8 +836,15 @@ function queueAction(kind, arg) {
 }
 
 function dismissQueue(id) {
-  ui.queue.splice(ui.queue.findIndex((q) => q.id === id), 1);
+  ui.queue = id === 'finished' ? ui.queue.filter((q) => q.status === 'pending' || q.status === 'busy') : ui.queue.filter((q) => q.id !== id);
   renderPanels();
+}
+
+/** Ask the agent to check an unverified model against its photos (and fix it). */
+function checkWithAgent(item) {
+  if (!chat?.ready) return toast('No agent is ready. Open Agents to set one up.');
+  chat.toggle(true);
+  chat.send(`Please check the model "${item.name}" (id ${item.id}): render it, compare it with ${item.url ? `its product photos (read_link ${item.url})` : 'what it should look like'}, fix anything that doesn't match, then verify_item.`);
 }
 
 function focusLinkBox() {
@@ -1539,18 +1596,8 @@ async function boot() {
     context: chatContext,
     onLinks: (urls) => importUrls(urls),
     onChange: () => reactUI.bump('chat'),
-    onJobDone: (ev) => {
-      if (ev.kind !== 'model') return;
-      const item = itemById(ev.itemId);
-      const q = ui.queue.find((x) => x.itemId && x.itemId === ev.itemId);
-      if (q) {
-        Object.assign(q, { status: ev.error ? 'warn' : 'ok', message: ev.error ? 'Your agent couldn’t finish the model; the draft is kept.' : 'Modelled and checked by your agent', actions: [['Add to room', 'add', ev.itemId]] });
-      }
-      if (item && !ev.error) (ui.ready ||= new Set()).add(item.id);
-      renderPanels();
-      setTimeout(() => $(`#inventory .card[data-id="${CSS.escape(ev.itemId || '')}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
-      toast(ev.error ? 'Your agent couldn’t finish a model. See the Assistant panel.' : `Your agent finished the model${item ? ` for “${item.name}”` : ''}. It’s at the top of your models.`, { action: item && ['Add to room', () => (ui.ready?.delete(item.id), addToRoom(item.id))] });
-    },
+    onJobDone: modelJobDone,
+    onRetryModel: (url, itemId, name) => retryModel(url, itemId, name),
   });
 
   const agents = await refreshAgentsDot();
@@ -1715,7 +1762,7 @@ function appApi() {
     applySun, setSunOn, useMyLocation,
     addToRoom, rotateItem, rotateGroup, againstWall, duplicate, deleteSelection, toggleLock, copyItems, pasteItems, alignItems, addOpening, moveToFloor, pickColor,
     // furniture from links and the model editor
-    extractUrls, importUrls, queueAction, dismissQueue, newItem, openItemDialog, saveItem, deleteItem,
+    extractUrls, importUrls, queueAction, dismissQueue, checkWithAgent, newItem, openItemDialog, saveItem, deleteItem,
     // designs and files
     openDesign, duplicateDesign, renameDesign, deleteDesign, createHouse, openHistory, restoreVersion, openVersionCopy, pickFile,
     exportAs, shareAction, takePhoto, cancelPhoto, savePhoto, copyPicture, download, fileName,

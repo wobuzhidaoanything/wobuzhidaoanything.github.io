@@ -55,7 +55,10 @@ function Queue({ app }) {
       <a onClick={() => app.queueAction(kind, arg)}>{label}</a>
     </span>
   );
+  const finished = ui.queue.filter((q) => q.status !== 'pending' && q.status !== 'busy').length;
   return (
+    <>
+    {finished > 1 && <button className="btn small ghost queue-clear" onClick={() => app.dismissQueue('finished')}>Clear finished</button>}
     <ul className="queue" id="queue">
       {ui.queue.slice(-6).reverse().map((q) => (
         <li key={q.id} className={q.status === 'error' ? 'err' : q.status === 'warn' ? 'warn' : ''} data-q={q.id}>
@@ -68,6 +71,7 @@ function Queue({ app }) {
         </li>
       ))}
     </ul>
+    </>
   );
 }
 
@@ -120,7 +124,11 @@ function Library({ app }) {
                 <div className="thumb" style={i.image ? { backgroundImage: `url("${i.image}")` } : undefined}>{i.image ? null : iconFor(i.category)}</div>
                 <div>
                   <div className="nm">{i.name}</div>
-                  {ready ? <div className="badge-ready" title="Your AI agent finished this model">✓ Ready to place</div> : i.verified === false ? <div className="badge-unverified" title="Added by an AI agent and not yet checked against a render">Unverified</div> : null}
+                  {ready ? <div className="badge-ready" title="Your AI agent finished this model">✓ Ready to place</div> : i.verified === false ? (
+                    app.chat?.ready
+                      ? <button className="badge-unverified" title="Not yet checked against its photos. Click to ask your agent to check and fix it" onClick={() => app.checkWithAgent(i)}>Unverified · check</button>
+                      : <div className="badge-unverified" title="Added by an AI agent and not yet checked against a render">Unverified</div>
+                  ) : null}
                   <div className={`sz${i.needsDims ? ' missing' : ''}`}>
                     {i.needsDims ? '⚠ Check size · ' : ''}{app.cm(d.w)} × {app.cm(d.d)} × {app.cm(d.h)} cm{n ? ` · ${n} placed` : ''}{i.price ? ` · ${i.currency || cur} ${i.price}` : ''}
                   </div>

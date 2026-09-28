@@ -20,10 +20,17 @@ async function toDataUrl(file) {
 const imagesIn = (list) => [...(list || [])].filter((f) => f.kind === 'file' ? f.type.startsWith('image/') : f.type?.startsWith('image/')).map((f) => (f.getAsFile ? f.getAsFile() : f)).filter(Boolean);
 const cm = (m) => Math.round(m * 1000) / 10;
 
-function Message({ m, st }) {
+function Message({ m, st, chat, last }) {
   if (m.role === 'job') {
-    const label = { queued: 'Waiting', running: 'Working…', done: 'Done', error: 'Failed', stopped: 'Stopped' }[m.status] || m.status;
-    return <div className={`chat-job ${m.status}`} data-id={m.id}><span className="st">{label}</span><span>{m.text.replace(/…$/, '')}</span></div>;
+    const label = { queued: 'Waiting', running: 'Working…', done: 'Done', unverified: 'Needs a check', error: 'Failed', stopped: 'Stopped' }[m.status] || m.status;
+    const again = (m.status === 'error' || m.status === 'unverified' || m.status === 'stopped') && m.url;
+    return (
+      <div className={`chat-job ${m.status}`} data-id={m.id}>
+        <span className="st">{label}</span>
+        <span className="jt">{m.text.replace(/…$/, '')}{m.note && <em>{m.note}</em>}</span>
+        {again && <button className="btn small" data-retry onClick={() => chat.retry(m)} disabled={!chat.ready}>Try again</button>}
+      </div>
+    );
   }
   const name = m.role === 'agent' ? st.runners.find((r) => r.id === m.runner)?.name || 'Agent' : '';
   return (
@@ -34,6 +41,7 @@ function Message({ m, st }) {
         <div className="chat-pics">{m.images.map((n) => <a key={n} href={`api/uploads/${n}`} target="_blank" rel="noopener"><img src={`api/uploads/${n}`} alt="Attached picture" /></a>)}</div>
       )}
       {m.tools?.length > 0 && <div className="tools">{[...new Set(m.tools)].map((t) => <span key={t}>{t.replace(/_/g, ' ')}</span>)}</div>}
+      {m.role === 'agent' && m.error && !m.job && last && <div><button className="btn small" data-retry onClick={() => chat.retry(m)} disabled={!chat.ready || st.busy}>Try again</button></div>}
     </div>
   );
 }
@@ -114,7 +122,7 @@ export default function Chat() {
   const cards = (after) => chat.changes.filter((c) => c.after === after).forEach((c) => items.push(<Change key={c.id} c={c} chat={chat} />));
   cards(null);
   for (const m of st.messages) {
-    items.push(<Message key={m.id} m={m} st={st} />);
+    items.push(<Message key={m.id} m={m} st={st} chat={chat} last={m === st.messages.at(-1)} />);
     cards(m.id);
   }
   // Cards whose message was cleared go at the end

@@ -184,9 +184,9 @@ async function api(req, res, url) {
     const b = JSON.parse((await body(req, 60e6)) || '{}');
     if (method === 'POST' && id === 'send') {
       const pics = Array.isArray(b.images) ? b.images : [];
-      if (!String(b.text || '').trim() && !pics.length) throw new Error('Empty message');
+      if (!String(b.text || '').trim() && !pics.length && !b.reuse?.length) throw new Error('Empty message');
       if (pics.length > MAX_IMAGES) throw new Error(`Attach at most ${MAX_IMAGES} pictures per message.`);
-      const images = pics.map(saveUpload);
+      const images = [...pics.map(saveUpload), ...runner.existingUploads([].concat(b.reuse || []).slice(0, MAX_IMAGES))].slice(0, MAX_IMAGES);
       return send(res, 200, runner.enqueue('chat', { text: String(b.text || '').slice(0, 20000), images, context: b.context && String(b.context).slice(0, 2000), runner: b.runner }));
     }
     if (method === 'POST' && id === 'model') {

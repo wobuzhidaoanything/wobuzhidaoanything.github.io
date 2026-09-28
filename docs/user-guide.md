@@ -283,12 +283,20 @@ most others work.
   instructions to make the model **realistic**. A shop's own 3D file is kept exactly as the shop provides it.
 - When the model is done, it moves to the top of your models with a green **Ready to place** badge, and a message
   offers **Add to room**.
+- A model only counts as done when your agent really changed it **and** checked it against the photos. Otherwise
+  the list under the link box says so:
+  - **Failed** (red): the agent couldn't make it (for example, the page doesn't exist). It shows why, and the draft
+    is kept. **Try again**, **See why** (opens the Assistant) or **Edit size** yourself.
+  - **Not checked** (amber): the model changed but wasn't confirmed against the photos. **Try again**, or check it
+    yourself.
+- **Clear finished** tidies the list.
 
 ### Your models (the library)
 
 The left panel lists every furniture model you have. Every design can use them.
 
-- **Add** puts a model in the room. You can also drag its card into the picture.
+- **Add** puts a model in the room. You can also drag its card into the picture. A message offers **Undo**.
+- **Unverified · check** on a card asks your agent to check that model against its photos and fix it.
 - **Edit** changes its size, colours or type.
 - **+ Custom** makes a model from scratch (for example, a built-in cupboard of any size).
 - **Search** by name or type, or use the **filters** under the search box: **Favourites**, **In this house**, or a
@@ -460,6 +468,8 @@ agent in the background and tells it which design, floor and item you're looking
   link and put it under the window"*.
 - The panel shows what the agent is doing and which tools it used.
 - **Stop** ends a job. **+** starts a new conversation.
+- A modelling job that failed shows **Failed** with the reason, and **Try again**. If the agent itself stopped with an
+  error, **Try again** under its reply sends your last message again (with its pictures).
 - Paste a product link and it's modelled like one from the link box.
 - **No link? Paste pictures.** Paste (**Ctrl+V**), drop or attach (📎) up to 6 pictures of a piece, such as shop
   photos, your own photos or a screenshot, and type its size, for example *200 x 90 x 80 cm* or
