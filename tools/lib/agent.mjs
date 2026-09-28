@@ -51,6 +51,11 @@ function normColors(list) {
     .map((c) => (typeof c === 'string' ? { name: c, hex: colorFromName(c) } : { name: String(c.name || c.hex || ''), hex: hexOk(c.hex) ? c.hex.toLowerCase() : colorFromName(c.name) }))
     .filter((c) => c.name && c.hex);
 }
+/** A picture pasted into the chat, as the app loads it. */
+const uploadUrl = (name) => {
+  if (!/^[\w-]{1,80}\.(png|jpg|webp|gif)$/.test(String(name))) throw new Error(`"${name}" is not a picture from the chat.`);
+  return `api/uploads/${name}`;
+};
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'item';
 
 function withLibrary(fn) {
@@ -118,7 +123,7 @@ export async function addItem(args) {
       colors: colors.length ? colors : [{ name: 'Default', hex: '#b8b2a7' }],
       ...(args.accent && hexOk(args.accent.hex) ? { accent: { name: args.accent.name || 'Accent', hex: args.accent.hex } } : {}),
       ...(args.url || base.url ? { url: args.url || base.url } : {}),
-      ...(args.image || base.image ? { image: args.image || base.image } : {}),
+      ...(args.photo_upload ? { image: uploadUrl(args.photo_upload) } : args.image || base.image ? { image: args.image || base.image } : {}),
       ...(args.model_url || base.modelUrl ? { modelUrl: args.model_url || base.modelUrl } : {}),
       ...(base.price ? { price: String(base.price), currency: base.currency || null } : {}),
       verified: false,
@@ -144,7 +149,8 @@ export function updateItem(args) {
     if (args.accent === null) delete item.accent;
     else if (args.accent && hexOk(args.accent.hex)) item.accent = { name: args.accent.name || 'Accent', hex: args.accent.hex };
     if (args.model_url !== undefined) args.model_url ? (item.modelUrl = args.model_url) : delete item.modelUrl;
-    if (args.image) item.image = args.image;
+    if (args.photo_upload) item.image = uploadUrl(args.photo_upload);
+    else if (args.image) item.image = args.image;
     if (args.url) item.url = args.url;
     item.verified = false;
     return { item };

@@ -1,7 +1,13 @@
 # How to model furniture for Roomcraft
 
-This guide is for AI agents that turn a product link into a furniture model. Every product link a person gives
-Roomcraft (through the link box or in chat) is sent to their agent with a short version of these rules.
+This guide is for AI agents that turn a product link, or pictures pasted into the chat, into a furniture model.
+Every product link a person gives Roomcraft (through the link box or in chat) is sent to their agent with a short
+version of these rules.
+
+**From pictures:** the message names the pictures; look at them with `view_images`. Use the size the person typed
+exactly (Roomcraft reads it for you: width side to side facing the front, depth front to back). Without one, look
+for a size in the pictures, or estimate it and say so. Pass `photo_upload` to `add_item` so the library shows the
+picture, then build and check the model as below, comparing the renders with every picture.
 
 **The goal: it should look like the real product at a glance, at the right size.**
 

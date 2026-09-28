@@ -70,6 +70,7 @@ Use absolute paths. `node` is your Node.js; `<repo>` is where you cloned Roomcra
 | Tool | What it does |
 | --- | --- |
 | `read_link` | Product page → name, size (cm), colours, category, 3D model URL, **product photo (image)** |
+| `view_images` | Look at pictures the user pasted into the app's chat (product photos, sketches, size charts) |
 | `list_models` / `add_item` / `update_item` | The furniture model library; add and update **return renders** |
 | `render_item` / `verify_item` | Look at a model, then record the visual check. **Refused unless the current version was rendered** |
 | `save_model_file` | Download a store `.glb` into `userdata/models/` for a permanent copy |

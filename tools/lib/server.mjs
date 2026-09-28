@@ -10,6 +10,7 @@ import * as store from './store.mjs';
 import { agentStatus, autoSetup, removeAgent } from './agents.mjs';
 import * as runner from './runner.mjs';
 import * as r3f from './r3f.mjs';
+import { saveUpload, readUpload, MAX_IMAGES } from './uploads.mjs';
 
 export { ROOT };
 
@@ -173,12 +174,20 @@ async function api(req, res, url) {
     req.on('close', () => (clients.delete(res), clearInterval(ping)));
     return;
   }
+  // Pictures pasted into the chat
+  if (what === 'uploads' && id && method === 'GET') {
+    const u = readUpload(id);
+    return u ? send(res, 200, u.data, u.mimeType, 'private, max-age=86400') : send(res, 404, { ok: false, error: 'No such picture' });
+  }
   if (what === 'chat') {
     if (method === 'GET') return send(res, 200, runner.chatState());
-    const b = JSON.parse((await body(req, 1e6)) || '{}');
+    const b = JSON.parse((await body(req, 60e6)) || '{}');
     if (method === 'POST' && id === 'send') {
-      if (!String(b.text || '').trim()) throw new Error('Empty message');
-      return send(res, 200, runner.enqueue('chat', { text: String(b.text).slice(0, 20000), context: b.context && String(b.context).slice(0, 2000), runner: b.runner }));
+      const pics = Array.isArray(b.images) ? b.images : [];
+      if (!String(b.text || '').trim() && !pics.length) throw new Error('Empty message');
+      if (pics.length > MAX_IMAGES) throw new Error(`Attach at most ${MAX_IMAGES} pictures per message.`);
+      const images = pics.map(saveUpload);
+      return send(res, 200, runner.enqueue('chat', { text: String(b.text || '').slice(0, 20000), images, context: b.context && String(b.context).slice(0, 2000), runner: b.runner }));
     }
     if (method === 'POST' && id === 'model') {
       if (!/^https?:\/\//i.test(b.url || '')) throw new Error('Not a link');

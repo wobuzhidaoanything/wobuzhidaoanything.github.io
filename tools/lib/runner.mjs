@@ -9,6 +9,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ROOT, STATE as STATE_DIR } from './paths.mjs';
 import { HARNESSES, SERVER, NODE, agentStatus } from './agents.mjs';
+import { dimsFromText } from '../../shared/scrape.js';
 
 const win = process.platform === 'win32';
 const STATE = path.join(STATE_DIR, 'chat.json');
@@ -16,7 +17,7 @@ const MCP_JSON = path.join(STATE_DIR, 'mcp.json');
 
 const SYSTEM = [
   'You are the AI assistant inside Roomcraft, a 3D house planner running on this computer. The user talks to you from a chat panel in the app.',
-  'Work only through the roomcraft MCP tools (read_link, add_item, update_item, write_model_component, get_model_component, render_item, verify_item, save_model_file, list_models, get_design, write_design, render_design, place_item, stair_info, export_glb). Do not edit files in the repository.',
+  'Work only through the roomcraft MCP tools (read_link, view_images, add_item, update_item, write_model_component, get_model_component, render_item, verify_item, save_model_file, list_models, get_design, write_design, render_design, place_item, stair_info, export_glb). Do not edit files in the repository.',
   'Always look at renders with your own vision before saying something is done, and compare them with product photos or floor plans.',
   'The app updates live when you save. Keep replies short and plain (a few sentences, no headings); the user sees them in a small panel.',
 ].join(' ');
@@ -63,7 +64,7 @@ const RUNNERS = {
   },
 };
 
-const TOOL_NAMES = new Set(['read_link', 'list_models', 'add_item', 'update_item', 'write_model_component', 'get_model_component', 'render_item', 'verify_item', 'save_model_file', 'list_designs', 'get_design', 'write_design', 'render_design', 'stair_info', 'place_item', 'export_glb']);
+const TOOL_NAMES = new Set(['read_link', 'view_images', 'list_models', 'add_item', 'update_item', 'write_model_component', 'get_model_component', 'render_item', 'verify_item', 'save_model_file', 'list_designs', 'get_design', 'write_design', 'render_design', 'stair_info', 'place_item', 'export_glb']);
 
 const withSystem = (prompt, session) => (session ? prompt : `${SYSTEM}\n\n${prompt}`);
 
@@ -178,14 +179,14 @@ export function enqueue(kind, data) {
   if (!r?.ready) throw new Error('No agent is ready. Open Agents to set one up (a terminal agent such as Claude Code, Codex or Gemini CLI).');
   const job = { id: id(), kind, runner: runnerId, ...data };
   if (kind === 'chat') {
-    job.title = data.text.slice(0, 80);
-    job.prompt = (data.context ? `[App context: ${data.context}]\n\n` : '') + data.text;
+    job.title = (data.text || 'Pictures').slice(0, 80);
+    job.prompt = chatPrompt(data);
     job.session = state.sessions[runnerId] || null;
     if (RUNNERS[runnerId].noResume) {
       const recent = state.messages.filter((m) => m.role === 'user' || (m.role === 'agent' && !m.job)).slice(-8);
       if (recent.length) job.prompt = `Conversation so far:\n${recent.map((m) => `${m.role === 'user' ? 'User' : 'You'}: ${m.text}`).join('\n')}\n\nNew message:\n${job.prompt}`;
     }
-    message({ role: 'user', text: data.text });
+    message({ role: 'user', text: data.text || '', ...(data.images?.length ? { images: data.images } : {}) });
   } else if (kind === 'model') {
     job.title = `Model ${data.name || data.url}`;
     job.prompt = modelPrompt(data);
@@ -194,6 +195,41 @@ export function enqueue(kind, data) {
   queue.push(job);
   pump();
   return { ok: true, job: job.id, ...chatState() };
+}
+
+/**
+ * A chat message for the agent. Pictures pasted into the chat are saved on this computer and the
+ * agent looks at them with view_images; with pictures (or a size typed in) it gets the same
+ * modelling rules as a product link, using the size the user gave.
+ */
+export function chatPrompt({ text = '', images = [], context }) {
+  const parts = [];
+  if (context) parts.push(`[App context: ${context}]`);
+  if (text.trim()) parts.push(text.trim());
+  const cm = (m) => Math.round(m * 1000) / 10;
+  const { dims } = dimsFromText(text || '');
+  if (!images.length && Object.keys(dims).length >= 2)
+    parts.push(`[Size found in the message: ${['w', 'd', 'h'].filter((k) => dims[k]).map((k) => `${{ w: 'width', d: 'depth', h: 'height' }[k]} ${cm(dims[k])} cm`).join(' × ')}. If the user wants something modelled or resized, use it exactly (width = side to side facing the front, depth = front to back), following docs/MODELLING.md, and check the renders.]`);
+  if (images.length) {
+    const size = ['w', 'd', 'h'].every((k) => dims[k])
+      ? `The user gave the size: width ${cm(dims.w)} cm × depth ${cm(dims.d)} cm × height ${cm(dims.h)} cm. Use it exactly.`
+      : Object.keys(dims).length
+        ? `The user gave part of the size (${Object.entries(dims).map(([k, v]) => `${{ w: 'width', d: 'depth', h: 'height' }[k]} ${cm(v)} cm`).join(', ')}); estimate the rest from the pictures and say so.`
+        : 'No size was given: look for one in the pictures (size charts, labels); otherwise estimate it from typical sizes and tell the user it is an estimate.';
+    parts.push(
+      [
+        `[The user attached ${images.length} picture${images.length > 1 ? 's' : ''}: ${images.join(', ')}. Look at ${images.length > 1 ? 'them' : 'it'} first with view_images (names: ${JSON.stringify(images)}).]`,
+        '',
+        'Unless the message asks for something else, the user wants this piece of furniture (or object) modelled for Roomcraft from the pictures:',
+        `- ${size}`,
+        '- add_item with a clear name, the right category and that size (width = side to side facing the front), realistic colour options (hex) and accent colour; pass photo_upload with the clearest picture so the library shows it.',
+        '- Then follow docs/MODELLING.md: a standard shape → update_item; an unusual shape → write_model_component (soft edges, realistic materials, detail you would notice from 2 m, front facing +z, bottom at y = 0).',
+        '- Look at the renders and compare them with every picture (silhouette, proportions, colours, materials). Fix and render again until it matches, then verify_item with notes.',
+        '- Finish with one short line: what you made, its size, and anything you could not match.',
+      ].join('\n')
+    );
+  }
+  return parts.join('\n\n');
 }
 
 /**

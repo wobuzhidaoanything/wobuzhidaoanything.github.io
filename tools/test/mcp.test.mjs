@@ -81,7 +81,14 @@ test('MCP server: link → model with renders, enforced vision check, floor plan
     assert.equal(init.result.serverInfo.name, 'roomcraft');
     assert.ok(JSON.parse(fs.readFileSync(conns, 'utf8'))['claude-code'], 'connection recorded');
     const { tools } = (await c.call('tools/list', {})).result;
-    for (const t of ['read_link', 'add_item', 'verify_item', 'write_design', 'render_design', 'export_glb']) assert.ok(tools.some((x) => x.name === t), t);
+    for (const t of ['read_link', 'view_images', 'add_item', 'verify_item', 'write_design', 'render_design', 'export_glb']) assert.ok(tools.some((x) => x.name === t), t);
+
+    // A picture pasted into the chat: the agent can look at it
+    fs.mkdirSync(path.join(USERDATA, '.state', 'uploads'), { recursive: true });
+    fs.writeFileSync(path.join(USERDATA, '.state', 'uploads', '2026-01-01-abcdef0123.png'), PNG);
+    const seen = await c.tool('view_images', { names: ['2026-01-01-abcdef0123.png', '../chat.json'] });
+    assert.equal(seen.content.filter((x) => x.type === 'image').length, 1);
+    assert.match(seen.content.at(-1).text, /No picture called/);
 
     const url = `http://127.0.0.1:${shop.address().port}/marlow`;
     const read = await c.tool('read_link', { url });

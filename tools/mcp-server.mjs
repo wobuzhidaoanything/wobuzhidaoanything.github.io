@@ -9,6 +9,7 @@ import {
 } from './lib/agent.mjs';
 import { recordConnection } from './lib/agents.mjs';
 import { TRIANGLE_BUDGET } from './lib/glb.mjs';
+import { readUpload } from './lib/uploads.mjs';
 
 const SERVER = { name: 'roomcraft', version: '1.0.0' };
 
@@ -33,6 +34,11 @@ const TOOLS = [
     description: 'Read a product page (IKEA, Amazon, Wayfair, Shopify stores, most shops). Returns name, dimensions (cm), colour options, category, description, 3D model URL if any, and the product photos (up to 6) as images so you can see the real product from several angles.',
     inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Product page URL' } }, required: ['url'] },
   },
+  {
+    name: 'view_images',
+    description: 'Look at pictures the user pasted or dropped into the Roomcraft chat (product photos, sketches, size charts). The message names them (e.g. 2026-09-28-ab12cd34ef.jpg). Returns the pictures as images.',
+    inputSchema: { type: 'object', properties: { names: { type: 'array', items: { type: 'string' }, description: 'Picture names from the message' } }, required: ['names'] },
+  },
   { name: 'list_models', description: 'List the furniture model library (ids, sizes, colours, verified status).', inputSchema: { type: 'object', properties: {} } },
   {
     name: 'add_item',
@@ -48,6 +54,7 @@ const TOOLS = [
         colors: colorSchema,
         accent: accentSchema,
         url: { type: 'string', description: 'Product page' },
+        photo_upload: { type: 'string', description: 'Name of a picture the user pasted into the chat, shown as the model\'s photo in the library' },
         image: { type: 'string', description: 'Product photo URL' },
         model_url: { type: 'string', description: 'A .glb/.gltf 3D model URL, if the store has one' },
         from_url: { type: 'string', description: 'Product link to read first' },
@@ -63,7 +70,7 @@ const TOOLS = [
         id: { type: 'string' }, name: { type: 'string' }, category: { type: 'string', enum: CATEGORIES },
         width_cm: { type: 'number' }, depth_cm: { type: 'number' }, height_cm: { type: 'number' },
         colors: colorSchema, accent: accentSchema, model_url: { type: 'string', description: 'Empty string removes it' },
-        image: { type: 'string' }, url: { type: 'string' },
+        image: { type: 'string' }, url: { type: 'string' }, photo_upload: { type: 'string', description: 'Name of a picture from the chat to use as the photo' },
       },
       required: ['id'],
     },
@@ -182,6 +189,16 @@ async function callTool(name, args = {}) {
       if (!images.length) out.push(text('No product photo could be fetched.'));
       out.push(text('To add it: add_item with from_url (override any wrong or missing fields), then check the renders.'));
       return out;
+    }
+    case 'view_images': {
+      const names = [].concat(args.names || []).slice(0, 10);
+      const out = [];
+      for (const n of names) {
+        const u = readUpload(n);
+        out.push(u ? text(`Picture ${n}:`) : text(`No picture called ${n}.`));
+        if (u) out.push(image(u.data, u.mimeType));
+      }
+      return out.length ? out : [text('Give the picture names from the message.')];
     }
     case 'list_models':
       return [text(listModels())];

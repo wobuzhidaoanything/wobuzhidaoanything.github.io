@@ -21,6 +21,7 @@ same operations exist on the command line: `node tools/cli.mjs` (run it without 
 | Task | Tools |
 | --- | --- |
 | Read a product link | `read_link` (returns up to 6 product photos and the description) |
+| See pictures pasted into the chat | `view_images` (names come in the message; `photo_upload` puts one on the model) |
 | Create or fix a furniture model | `add_item` (use `from_url`), `update_item`, `render_item`, `verify_item`, `save_model_file` |
 | How to model a product realistically | [docs/MODELLING.md](docs/MODELLING.md): read it before modelling |
 | Model an unusual shape in code | `write_model_component`, `get_model_component`: a React Three Fiber component, see [docs/R3F-MODELS.md](docs/R3F-MODELS.md) |

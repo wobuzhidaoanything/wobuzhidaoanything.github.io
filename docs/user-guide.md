@@ -461,6 +461,13 @@ agent in the background and tells it which design, floor and item you're looking
 - The panel shows what the agent is doing and which tools it used.
 - **Stop** ends a job. **+** starts a new conversation.
 - Paste a product link and it's modelled like one from the link box.
+- **No link? Paste pictures.** Paste (**Ctrl+V**), drop or attach (📎) up to 6 pictures of a piece, such as shop
+  photos, your own photos or a screenshot, and type its size, for example *200 x 90 x 80 cm* or
+  *W 140 x D 70 x H 75 cm*. Roomcraft shows the size it read under the pictures. Your agent builds the model at
+  exactly that size from the pictures and checks it against them. Without a size, it estimates one and tells you.
+  - Width is side to side facing the front, depth is front to back.
+  - Pasting a picture anywhere in Roomcraft (outside a text box) opens the Assistant with it attached.
+  - Pictures stay on this computer (in `userdata/.state/uploads/`).
 - **Changes your agent makes are applied straight away.** Each one shows as a card in the chat that says what
   changed (for example *"Ground floor: 1 wall added, Sofa moved"*), with an **Undo** button (and **Redo**).
 

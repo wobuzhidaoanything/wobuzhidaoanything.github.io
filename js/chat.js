@@ -73,20 +73,20 @@ export function createChat({ context, onJobDone, onReady, local, onLinks, onChan
       clearTimeout(hintTimer);
       hintTimer = setTimeout(() => ((hint = ''), changed()), 5000);
     },
-    /** Send a message. Returns false if it couldn't be sent (keep the text). */
-    async send(text) {
+    /** Send a message (with pictures as data: URLs). Returns false if it couldn't be sent. */
+    async send(text, images = []) {
       text = text.trim();
-      if (!text) return true;
+      if (!text && !images.length) return true;
       // Every link is treated as a product: it goes through the same modelling job as the link box
       const urls = [...new Set(text.match(/https?:\/\/[^\s<>"']+/g) || [])].map((u) => u.replace(/[).,;!?]+$/, ''));
       if (urls.length && onLinks) {
         await onLinks(urls);
         const rest = urls.reduce((t, u) => t.split(u).join(''), text).trim();
-        if (!rest) return true; // just links: nothing else to say
+        if (!rest && !images.length) return true; // just links: nothing else to say
         text = `${text}\n\n(Roomcraft has already queued a separate modelling job for each link above; don't model them again here.)`;
       }
       try {
-        const r = await api('/send', { text, context: context(), runner: st.runner });
+        const r = await api('/send', { text, images, context: context(), runner: st.runner });
         st.busy = r.busy;
         changed();
         return true;
