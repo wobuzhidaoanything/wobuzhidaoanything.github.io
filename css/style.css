@@ -664,3 +664,4 @@ input[data-num] { font-variant-numeric: tabular-nums; }
   .brand { font-size: 0; margin-right: 0; gap: 0; }
   .agents-btn span:not(.status-dot), .chat-btn span:not(.busy-dot) { display: none; }
 }
+#stageUI { display: contents; }

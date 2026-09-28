@@ -1,33 +1,28 @@
 import { Viewer, webglSupport } from './viewer.js';
 import { Walker } from './walk.js';
 import { Tools } from './tools.js';
-import { initChat } from './chat.js';
+import { createChat } from './chat.js';
 import { Measure } from './measure.js';
 import { Paint } from './paint.js';
-import { FINISHES, FINISH_NAMES } from './materials.js';
-import { paintSpan } from './house.js';
-import { floorQuantities, quantitiesCSV } from './quantities.js';
-import { planSVG, fitScale, svgToCanvas, makePDF } from './planexport.js';
-import { sunPosition, sunTimes, sunVector } from './sun.js';
-import { openGuide } from './help.js';
+import { FINISH_NAMES } from './materials.js';
+import { sunPosition, sunVector } from './sun.js';
 import { analyse as analyseClearance, zoneStatus, doorSwing, footprintRect } from './clearance.js';
 import { setQuality } from './effects.js';
 import { CATEGORY_LABELS, DEFAULT_DIMS } from './models.js';
 import { openStorage } from './storage.js';
-import { newHouse, newFloor, normalize, migrate, elevations, wallFrame, stairLayout, area, pointInPolygon, closestOnSegment, validate, DEFAULTS } from './design.js';
+import { newHouse, newFloor, normalize, migrate, elevations, wallFrame, area, pointInPolygon, closestOnSegment, validate, DEFAULTS } from './design.js';
 import { footprint } from './plan.js';
-import { cleanFloor, syncRooms, splitWall, makeRecess, moveCorner, moveOpening, openingGaps, insideSign } from './edit.js';
+import { cleanFloor, syncRooms, splitWall, moveOpening, insideSign } from './edit.js';
 import { colorFromName } from '../shared/colors.js';
 import { guessCategory } from '../shared/scrape.js';
-import { evalNumber, unitFromLabel } from './units.js';
 import { describeChange } from './diff.js';
 import { mountUI } from '../ui/main.js';
+import { openDialog } from '../ui/store.js';
+import { DISPLAY } from '../ui/Stage.js';
 
 const $ = (s, el = document) => el.querySelector(s);
-const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const uid = (p) => p + '-' + Math.random().toString(36).slice(2, 8);
 const cm = (m) => (m == null ? '?' : Math.round(m * 1000) / 10);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const pref = {
   get(k, d) {
     try {
@@ -52,7 +47,7 @@ const ui = {
   editing: false, tool: null, pickedColor: {}, queue: [],
   quality: pref.get('quality', matchMedia('(pointer: coarse)').matches ? 'low' : 'high'),
   wallExterior: false, wallThickness: DEFAULTS.interiorWall, stairShape: 'straight', stairTurn: 'left',
-  doorWidth: 0.9, windowWidth: 1.2, openingWidth: 1.0, hint: '',
+  doorWidth: 0.9, windowWidth: 1.2, openingWidth: 1.0, hover: '', hintText: '', coords: '', agents: 0, view: '3d',
 };
 const history = { stack: [], index: -1 };
 
@@ -106,8 +101,8 @@ async function saveNow() {
     design.updatedAt = lastSaved;
     if (!saveTimer) setSaveState('saved');
     saveThumb();
-    if (!$('#saveBanner').hidden) {
-      $('#saveBanner').hidden = true;
+    if (reactUI?.state.banner) {
+      reactUI.set({ banner: null });
       toast('Saved. Everything is up to date again.');
     }
   } catch (err) {
@@ -122,8 +117,7 @@ async function saveNow() {
       toast(`${design.updatedBy === 'agent' ? 'Your AI agent' : 'Another window'} changed this design at the same time. Showing that version; yours is kept in History (Designs → History).`, { action: ['History', () => openHistory(design.id)] });
     } else {
       setSaveState('error');
-      $('#saveBanner').hidden = false;
-      $('#saveBanner').textContent = err.offline ? 'Not saved yet: Roomcraft’s server isn’t running. Start it again with npm start; your changes are kept here and will save automatically.' : `Not saved yet (${err.message}). Retrying…`;
+      reactUI?.set({ banner: err.offline ? 'Not saved yet: Roomcraft’s server isn’t running. Start it again with npm start; your changes are kept here and will save automatically.' : `Not saved yet (${err.message}). Retrying…` });
       scheduleSave(3000);
     }
   }
@@ -132,7 +126,7 @@ async function saveNow() {
 // Leaving the page: save anything pending right away
 document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && saveTimer && saveNow());
 window.addEventListener('beforeunload', (e) => {
-  if (saveTimer || !$('#saveBanner').hidden) {
+  if (saveTimer || reactUI?.state.banner) {
     saveNow();
     e.preventDefault();
   }
@@ -186,139 +180,59 @@ function resetHistory() {
 // ---------- rendering ----------
 
 function renderAll() {
-  $('#designName').textContent = design.name;
-  $('#undoBtn').disabled = history.index <= 0;
-  $('#redoBtn').disabled = history.index >= history.stack.length - 1;
-  $('#editBtn').classList.toggle('on', ui.editing);
-  $('#editBtn').textContent = ui.editing ? 'Done editing' : 'Edit house';
-  $('#furniturePanel').hidden = ui.editing;
-  $('#buildPanel').hidden = !ui.editing;
-  renderLevelBar();
-  renderToolBar();
   refreshClearance();
   applySun();
   if (viewer.view === 'elevation') viewer.buildElevationDims();
-  if (ui.editing) renderBuildPanel();
-  else renderInventory();
-  renderInspector();
   updateHint();
   reactUI?.bump();
 }
 
+// Parts of the screen redraw on their own (see js/ui/store.jsx)
+const renderInspector = () => reactUI?.bump('inspector');
+const renderPanels = () => reactUI?.bump('main');
+
+/** The status bar: what a click will do right now. */
 function updateHint() {
-  if (ui.hover) return ($('#hintbar').textContent = ui.hover);
-  if (viewer.view === 'elevation') return ($('#hintbar').textContent = 'Drag furniture along the wall or up and down (e.g. to hang a TV) · scroll to zoom · drag the background to pan · Esc to go back');
   const v = viewer.view;
   const t = ui.tool;
-  if (t === 'measure' && !ui.hover)
-    return ($('#hintbar').textContent = {
-      distance: 'Click two points to measure between them · Shift locks to one direction · Alt ignores corners · Esc cancels',
-      path: 'Click points along a line or curve · double-click or Enter to finish · Esc cancels',
-      surface: 'Click two points: the length is measured along the surface between them (follows curves) · Esc cancels',
-    }[measure.mode]);
-  $('#hintbar').textContent =
-    v === 'walk'
-      ? ''
-      : t === 'wall'
-        ? 'Click to start a wall, click again for each corner · click the start point, double-click or Esc to finish · Shift for free angles'
-        : t === 'room'
-          ? 'Click inside an area enclosed by walls to make it a room'
-          : t && ['door', 'window', 'opening'].includes(t)
-            ? `Click a wall to add ${t === 'opening' ? 'an opening' : `a ${t}`}`
-            : t === 'stairs'
-              ? 'Click where the stairs start; they climb away from you (rotate them afterwards)'
-              : ui.editing
-                ? 'Drag corners, walls, doors and stairs · double-click a wall to add a corner · V W D N O S pick tools · E to finish'
-                : v === 'plan'
-                  ? 'Drag furniture to move it · drag the blue dot to rotate · scroll to zoom · drag to pan'
-                  : 'Drag furniture to move it · drag the blue dot to rotate · drag to orbit · right-drag to pan';
+  ui.hintText = ui.hover
+    ? ui.hover
+    : v === 'elevation'
+      ? 'Drag furniture along the wall or up and down (e.g. to hang a TV) · scroll to zoom · drag the background to pan · Esc to go back'
+      : t === 'measure'
+        ? {
+            distance: 'Click two points to measure between them · Shift locks to one direction · Alt ignores corners · Esc cancels',
+            path: 'Click points along a line or curve · double-click or Enter to finish · Esc cancels',
+            surface: 'Click two points: the length is measured along the surface between them (follows curves) · Esc cancels',
+          }[measure.mode]
+        : v === 'walk'
+          ? ''
+          : t === 'wall'
+            ? 'Click to start a wall, click again for each corner · click the start point, double-click or Esc to finish · Shift for free angles'
+            : t && ['door', 'window', 'opening'].includes(t)
+              ? `Click a wall to add ${t === 'opening' ? 'an opening' : `a ${t}`}`
+              : t === 'stairs'
+                ? 'Click where the stairs start; they climb away from you (rotate them afterwards)'
+                : ui.editing
+                  ? 'Drag corners, walls, doors and stairs · double-click a wall to add a corner · V W D N O S pick tools · E to finish'
+                  : v === 'plan'
+                    ? 'Drag furniture to move it · drag the blue dot to rotate · scroll to zoom · drag to pan'
+                    : 'Drag furniture to move it · drag the blue dot to rotate · drag to orbit · right-drag to pan';
+  reactUI?.bump('status');
+}
+
+function setHint(text) {
+  ui.hintText = text;
+  reactUI?.bump('status');
 }
 
 // ---------- level tabs & tool options ----------
-
-function renderLevelBar() {
-  const ys = elevations(design);
-  const all = viewer.showAll;
-  const el = $('#levelBar');
-  if (viewer.view === 'elevation') {
-    const e = viewer.elev;
-    el.innerHTML = `<button class="on" disabled>Elevation</button><span class="lvl-note">${esc(floorNow().name)} · wall ${e.len.toFixed(2)} m · drag furniture along the wall or up and down</span><span class="sep"></span><button data-eflip title="Look at the other side of this wall">⇄ Other side</button><button data-eclose title="Back (Esc)">Close</button>`;
-    $('[data-eflip]', el).onclick = () => openElevation(e.wallId, -e.side);
-    $('[data-eclose]', el).onclick = closeElevation;
-    return;
-  }
-  el.innerHTML =
-    design.floors
-      .map((f, i) => `<button role="tab" class="${!all && i === viewer.activeFloor ? 'on' : ''}" data-floor="${i}" title="${esc(f.name)} · level ${cm(ys[i])} cm · double-click to rename"><span class="lv">${i === 0 ? 'G' : i}</span>${esc(f.name)}</button>`)
-      .join('') +
-    (design.floors.length > 1 && viewer.view !== 'walk' ? `<button role="tab" class="${all ? 'on' : ''}" data-all title="See the whole house">All floors</button>` : '') +
-    (ui.editing ? '<span class="sep"></span><button class="add" data-addfloor title="Add a floor above the top one">+ Floor</button>' : '') +
-    ((viewer.view === '3d' || viewer.split) && !all ? `<span class="sep"></span><button data-walls title="Walls full height, or cut at 1.25 m like a plan">${viewer.wallMode === 'cut' ? 'Walls: cut' : 'Walls: full'}</button>` : '') +
-    '<span class="sep"></span>' +
-    (viewer.view !== 'walk' ? `<button data-measure class="${ui.tool === 'measure' ? 'on' : ''}" title="Measure distances, paths and along surfaces (M)">Measure</button>` : '') +
-    (viewer.view !== 'walk' && viewer.view !== 'elevation' ? `<button data-paint class="${ui.tool === 'paint' ? 'on' : ''}" title="Paint walls and floors: paint, wallpaper, tiles, wood… (P)">Paint</button>` : '') +
-    (viewer.view !== 'elevation' ? `<button data-sun class="${ui.sunOn ? 'on' : ''}" title="Sun and shadows for a place, date and time">${ui.sunOn ? `☀ ${esc(ui.sunTime)}` : 'Sun'}</button>` : '') +
-    (viewer.view !== 'walk' ? `<span class="sep"></span><button data-viewmenu aria-haspopup="menu" title="Show or hide dimensions, areas and the grid">View ▾</button>` : '');
-  $$('[data-floor]', el).forEach((b) => {
-    b.onclick = () => setFloor(+b.dataset.floor);
-    b.ondblclick = () => {
-      const f = design.floors[+b.dataset.floor];
-      const name = prompt('Floor name', f.name);
-      if (name?.trim()) (f.name = name.trim()), commit({ rebuild: false });
-    };
-  });
-  $('[data-all]', el)?.addEventListener('click', () => {
-    if (ui.tool) setTool(null);
-    viewer.setShowAll(true);
-    renderAll();
-  });
-  $('[data-addfloor]', el)?.addEventListener('click', addFloorAbove);
-  $('[data-measure]', el)?.addEventListener('click', () => setTool(ui.tool === 'measure' ? null : 'measure'));
-  $('[data-sun]', el)?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const m = $('#sunPanel');
-    if (!m.hidden) return (m.hidden = true);
-    renderSunPanel();
-    const r = e.currentTarget.getBoundingClientRect(), s = $('#stage').getBoundingClientRect();
-    Object.assign(m.style, { left: `${Math.max(8, r.left - s.left - 120)}px`, top: `${r.bottom - s.top + 6}px` });
-    m.hidden = false;
-  });
-  $('[data-paint]', el)?.addEventListener('click', () => setTool(ui.tool === 'paint' ? null : 'paint'));
-  $('[data-viewmenu]', el)?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const m = $('#viewMenu');
-    if (!m.hidden) return (m.hidden = true);
-    renderViewMenu();
-    const r = e.currentTarget.getBoundingClientRect(), s = $('#stage').getBoundingClientRect();
-    Object.assign(m.style, { left: `${r.right - s.left - 230}px`, top: `${r.bottom - s.top + 6}px` });
-    m.hidden = false;
-  });
-  $('[data-walls]', el)?.addEventListener('click', () => {
-    viewer.setWallMode(viewer.wallMode === 'cut' ? 'up' : 'cut');
-    pref.set('wallMode', viewer.wallMode);
-    renderLevelBar();
-  });
-}
-
-const DISPLAY = [
-  ['clear', 'Clearances', 'Space furniture needs to be used and doors need to open. Problems get a red outline'],
-  ['dims', 'Dimensions', 'Lengths of every outside wall and room sizes, drawn on the floor'],
-  ['areas', 'Room areas', 'Floor area of each room (m²)'],
-  ['grid', 'Grid', '1 m squares, with 10 cm squares when you zoom in'],
-  ['snap', 'Snap to grid', 'Walls, corners and furniture move in 5 cm steps (hold Alt to move freely)'],
-];
-
-function renderViewMenu() {
-  const m = $('#viewMenu');
-  m.innerHTML = DISPLAY.map(([k, name, tip]) => `<label title="${esc(tip)}"><input type="checkbox" data-disp="${k}" ${viewer.display[k] ? 'checked' : ''}><span><b>${name}</b><em>${esc(tip)}</em></span></label>`).join('');
-  $$('[data-disp]', m).forEach((c) => (c.onchange = () => setDisplay(c.dataset.disp, c.checked)));
-}
 
 function setDisplay(k, on) {
   viewer.setDisplay(k, on);
   if (k === 'clear') refreshClearance();
   pref.set('display', viewer.display);
-  if (!$('#viewMenu').hidden) renderViewMenu();
+  renderPanels();
 }
 
 /** Straight-on view of one wall (from inside the room by default). */
@@ -330,7 +244,6 @@ function openElevation(wallId, side) {
   if (viewer.split) viewer.setSplit(false);
   ui.beforeElevation ||= ui.view || viewer.view;
   viewer.setElevation(wallId, side ?? insideSign(f, w));
-  $$('#viewSeg button').forEach((b) => b.classList.remove('on'));
   renderAll();
 }
 
@@ -349,173 +262,9 @@ function setFloor(i) {
 }
 
 /** Options for the active tool, floating over the view (like a CAD options bar). */
-function renderToolBar() {
-  const el = $('#toolBar');
-  const t = ui.tool;
-  el.hidden = !t;
-  if (!t) return (el.innerHTML = '');
-  const seg = (attr, opts, cur) => `<div class="small-seg">${opts.map(([k, n]) => `<button data-${attr}="${k}" class="${cur === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
-  const widthKey = { door: 'doorWidth', window: 'windowWidth', opening: 'openingWidth' }[t];
-  el.innerHTML =
-    `<b>${{ wall: 'Wall', door: 'Door', window: 'Window', opening: 'Opening', stairs: 'Stairs', measure: 'Measure', paint: 'Paint' }[t]}</b>` +
-    (t === 'paint' ? `<select id="tbFinish" title="Finish">${FINISHES.map((f) => `<option value="${f.kind}" ${paint.finish.kind === f.kind ? 'selected' : ''}>${f.name}</option>`).join('')}</select><input type="color" id="tbFinishColor" value="${esc(paint.finish.color)}" title="Colour">` + seg('pscope', [['surface', 'One side'], ['room', 'Whole room']], paint.scope) + '<span>Alt+click picks up a finish</span>' : '') +
-    (t === 'measure' ? seg('mmode', [['distance', 'Distance'], ['path', 'Path'], ['surface', 'Along surface']], measure.mode) + `<button class="tb-btn" id="tbClearMeasure" ${measure.results.length ? '' : 'disabled'}>Clear all</button>` : '') +
-    (t === 'wall' ? seg('ext', [['0', 'Interior'], ['1', 'Exterior']], ui.wallExterior ? '1' : '0') + `<label>Thickness <input type="number" id="tbThick" min="5" max="60" step="1" value="${cm(ui.wallThickness)}"> cm</label>` : '') +
-    (widthKey ? `<label>Width <input type="number" id="tbWidth" min="30" max="400" step="5" value="${cm(ui[widthKey])}"> cm</label>` : '') +
-    (t === 'stairs' ? seg('sshape', [['straight', 'Straight'], ['L', 'L-turn'], ['U', 'U-turn']], ui.stairShape) + (ui.stairShape !== 'straight' ? seg('sturn', [['left', 'Turn left'], ['right', 'Turn right']], ui.stairTurn) : '') : '') +
-    '<span>Esc to finish</span><button class="x" id="tbClose" title="Stop (Esc)">×</button>';
-  $$('[data-ext]', el).forEach((b) => (b.onclick = () => {
-    ui.wallExterior = b.dataset.ext === '1';
-    ui.wallThickness = ui.wallExterior ? DEFAULTS.exteriorWall : DEFAULTS.interiorWall;
-    renderToolBar();
-  }));
-  $('#tbThick', el)?.addEventListener('change', (e) => (ui.wallThickness = Math.max(0.05, parseFloat(e.target.value) / 100 || ui.wallThickness)));
-  $('#tbWidth', el)?.addEventListener('change', (e) => (ui[widthKey] = Math.max(0.3, parseFloat(e.target.value) / 100 || ui[widthKey])));
-  $('#tbFinish', el)?.addEventListener('change', (e) => {
-    paint.finish = { kind: e.target.value, color: FINISHES.find((f) => f.kind === e.target.value).color };
-    renderToolBar();
-  });
-  $('#tbFinishColor', el)?.addEventListener('input', (e) => (paint.finish = { ...paint.finish, color: e.target.value }));
-  $$('[data-pscope]', el).forEach((b) => (b.onclick = () => ((paint.scope = b.dataset.pscope), renderToolBar())));
-  $$('[data-mmode]', el).forEach((b) => (b.onclick = () => (measure.setMode(b.dataset.mmode), renderToolBar(), updateHint())));
-  $('#tbClearMeasure', el)?.addEventListener('click', () => (measure.clear(), renderToolBar()));
-  $$('[data-sshape]', el).forEach((b) => (b.onclick = () => ((ui.stairShape = b.dataset.sshape), renderToolBar())));
-  $$('[data-sturn]', el).forEach((b) => (b.onclick = () => ((ui.stairTurn = b.dataset.sturn), renderToolBar())));
-  $('#tbClose', el).onclick = () => setTool(null);
-}
-
 // ---------- furniture inventory ----------
 
-const ICONS = {
-  default: '<svg viewBox="0 0 32 32"><rect x="5" y="11" width="22" height="12" rx="3"/><path d="M8 23v3M24 23v3"/></svg>',
-  sofa: '<svg viewBox="0 0 32 32"><rect x="4" y="13" width="24" height="9" rx="3"/><rect x="7" y="8" width="18" height="7" rx="2"/><path d="M7 22v3M25 22v3"/></svg>',
-  bed: '<svg viewBox="0 0 32 32"><rect x="4" y="15" width="24" height="7" rx="2"/><path d="M5 22v3M27 22v3M5 15V8M9 13h6"/></svg>',
-  plant: '<svg viewBox="0 0 32 32"><path d="M11 20h10l-1.5 7h-7z"/><path d="M16 20c0-6-5-9-8-9 0 5 4 8 8 9zM16 20c0-7 4-11 8-11 0 6-4 10-8 11z"/></svg>',
-  lamp: '<svg viewBox="0 0 32 32"><path d="M11 5h10l3 8H8z"/><path d="M16 13v14M11 27h10"/></svg>',
-  rug: '<svg viewBox="0 0 32 32"><rect x="5" y="9" width="22" height="14" rx="1"/><rect x="9" y="12" width="14" height="8"/></svg>',
-};
-const iconFor = (cat) => ICONS[cat] || ICONS[{ armchair: 'sofa', floorlamp: 'lamp' }[cat]] || ICONS.default;
 const placedCount = (itemId) => design.floors.reduce((n, f) => n + f.placed.filter((p) => p.itemId === itemId).length, 0);
-
-function renderInventory() {
-  const q = $('#invSearch').value.trim().toLowerCase();
-  const filter = ui.invFilter || 'all';
-  const cats = [...new Set(library.items.map((i) => i.category))].sort((a, b) => (CATEGORY_LABELS[a] || a).localeCompare(CATEGORY_LABELS[b] || b));
-  const chips = [['all', 'All'], ['fav', '★ Favourites'], ['placed', 'In this house'], ...cats.map((c) => [c, CATEGORY_LABELS[c] || c])];
-  if (!chips.some(([k]) => k === filter)) ui.invFilter = 'all';
-  $('#invFilters').innerHTML = library.items.length > 3 ? chips.map(([k, n]) => `<button class="chip ${k === (ui.invFilter || 'all') ? 'on' : ''}" data-filter="${esc(k)}">${esc(n)}</button>`).join('') : '';
-  const list = library.items
-    .filter((i) => !q || i.name.toLowerCase().includes(q) || (CATEGORY_LABELS[i.category] || '').toLowerCase().includes(q))
-    .filter((i) => filter === 'all' || (filter === 'fav' ? i.favorite : filter === 'placed' ? placedCount(i.id) : i.category === filter))
-    // Just modelled by your agent first, then favourites
-    .sort((a, b) => (ui.ready?.has(b.id) ? 1 : 0) - (ui.ready?.has(a.id) ? 1 : 0) || (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
-  $('#invCount').textContent = library.items.length;
-  const el = $('#inventory');
-  if (!library.items.length) return (el.innerHTML = '<div class="empty">No models yet.<br>Paste a product link above or add a custom model.</div>');
-  if (!list.length) return (el.innerHTML = `<div class="empty">${filter === 'fav' && !q ? 'No favourites yet. Click ☆ on a model to keep it at the top.' : 'No matches.'}</div>`);
-  el.innerHTML = list
-    .map((i) => {
-      const d = dimsOf(i);
-      const n = placedCount(i.id);
-      const pick = ui.pickedColor[i.id] || i.colors?.[0]?.name;
-      const ready = ui.ready?.has(i.id);
-      return `<div class="card ${ready ? 'ready' : ''}" draggable="true" data-id="${esc(i.id)}" title="Drag into the room, or click Add">
-        <div class="thumb" style="${i.image ? `background-image:url('${esc(i.image)}')` : ''}">${i.image ? '' : iconFor(i.category)}</div>
-        <div>
-          <div class="nm">${esc(i.name)}</div>
-          ${ready ? '<div class="badge-ready" title="Your AI agent finished this model">✓ Ready to place</div>' : i.verified === false ? '<div class="badge-unverified" title="Added by an AI agent and not yet checked against a render">Unverified</div>' : ''}
-          <div class="sz ${i.needsDims ? 'missing' : ''}">${i.needsDims ? '⚠ Check size · ' : ''}${cm(d.w)} × ${cm(d.d)} × ${cm(d.h)} cm${n ? ` · ${n} placed` : ''}${i.price ? ` · ${esc(i.currency || pref.get('currency', 'SGD'))} ${esc(i.price)}` : ''}</div>
-          <div class="swatches">${(i.colors || []).slice(0, 10).map((c) => `<button class="sw ${c.name === pick ? 'on' : ''}" data-color="${esc(c.name)}" title="${esc(c.name)}" style="background:${esc(c.hex)}"></button>`).join('')}${i.colors?.length > 10 ? `<span class="hint">+${i.colors.length - 10}</span>` : ''}</div>
-        </div>
-        <div class="card-actions">
-          <button class="btn small primary" data-act="add" title="Put it in the room">Add</button>
-          <button class="btn small ghost" data-act="edit" title="Size, colours and 3D model">Edit</button>
-          <button class="fav ${i.favorite ? 'on' : ''}" data-act="fav" title="${i.favorite ? 'Remove from favourites' : 'Favourite: keep it at the top'}" aria-label="Favourite">${i.favorite ? '★' : '☆'}</button>
-        </div>
-      </div>`;
-    })
-    .join('');
-}
-
-// ---------- inspector ----------
-
-function renderInspector() {
-  const el = $('#inspector');
-  const s = viewer.sel;
-  if (viewer.view === 'walk') return (el.innerHTML = walkInspector());
-  if (s?.type === 'item') return itemInspector(el, s.id);
-  if (s?.type === 'items') return multiInspector(el);
-  if (s?.type === 'wall') return wallInspector(el, s.id);
-  if (s?.type === 'opening') return openingInspector(el, s.id);
-  if (s?.type === 'stairs') return stairsInspector(el, s.id);
-  if (s?.type === 'room') return roomInspector(el, s.id);
-  return floorInspector(el);
-}
-
-function walkInspector() {
-  const f = floorNow();
-  return `<div class="insp"><h3>Walking</h3><div class="sub">You're on ${esc(f.name)}</div>
-    <div class="tip">Click the view to look around with your mouse. <b>W A S D</b> or the arrow keys to walk, <b>Shift</b> to hurry, scroll to step. Walk onto the stairs to change floors. <b>Esc</b> releases the mouse; press it again to leave.</div>
-    <div class="group" style="margin-top:14px"><button class="btn" style="width:100%" id="leaveWalk">Back to 3D view</button></div></div>`;
-}
-
-const field = (label, attrs) => `<label>${label}<input ${attrs}></label>`;
-
-function itemInspector(el, id) {
-  const { p, floor } = findPlaced(id);
-  const item = p && itemById(p.itemId);
-  if (!item) return (el.innerHTML = '');
-  const d = dimsOf(item);
-  const cur = colorOf(item, p);
-  const custom = p.color?.startsWith?.('#');
-  el.innerHTML = `<div class="insp">
-    ${item.image ? `<div class="hero" style="background-image:url('${esc(item.image)}')"></div>` : ''}
-    <h3>${esc(item.name)}</h3>
-    <div class="sub">${esc(CATEGORY_LABELS[item.category] || item.category)} · ${esc(floor.name)}${item.price ? ` · ${esc(item.currency || '')} ${esc(item.price)}` : ''}${item.url ? ` · <a href="${esc(item.url)}" target="_blank" rel="noopener">Product ↗</a>` : ''}</div>
-    ${item.verified === false ? '<div class="note">Added by an AI agent and not yet visually checked.</div>' : ''}
-    ${clearanceProblems().filter((x) => x.placedId === p.id).map((x) => `<div class="note warn">⚠ ${esc(x.message)}.</div>`).join('')}
-    <div class="group"><div class="lbl">Colour <span>${esc(cur?.name || '')}</span></div>
-      <div class="color-list">
-        ${(item.colors || []).map((c) => `<button class="color-chip ${!custom && c.name === cur?.name ? 'on' : ''}" data-color="${esc(c.name)}"><span class="dot" style="background:${esc(c.hex)}"></span>${esc(c.name)}</button>`).join('')}
-        <label class="color-chip ${custom ? 'on' : ''}" title="Any colour"><input type="color" id="customColor" value="${esc(custom ? p.color : cur?.hex || '#cccccc')}">Custom</label>
-      </div>
-    </div>
-    <div class="group"><div class="lbl">Size <button class="btn small ghost" id="editSize">Edit model</button></div><div>${cm(d.w)} W × ${cm(d.d)} D × ${cm(d.h)} H cm</div></div>
-    <div class="group"><div class="lbl">Rotate <span>${Math.round(p.rot || 0)}°</span></div>
-      <div class="row"><button class="btn small" data-rot="-90">↺ 90°</button><button class="btn small" data-rot="-15">↺ 15°</button><button class="btn small" data-rot="15">↻ 15°</button><button class="btn small" data-rot="90">↻ 90°</button></div>
-    </div>
-    <div class="group"><div class="lbl">Position (cm)</div>
-      <div class="num-row">${field('X', `type="number" step="1" data-pos="x" value="${cm(p.x)}"`)}${field('Z', `type="number" step="1" data-pos="z" value="${cm(p.z)}"`)}${field('Lift', `type="number" step="1" min="0" data-pos="y" value="${cm(p.y || 0)}"`)}</div>
-    </div>
-    ${design.floors.length > 1 ? `<div class="group"><div class="lbl">Floor</div><select id="moveFloor">${design.floors.map((f) => `<option value="${esc(f.id)}" ${f === floor ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>` : ''}
-    ${item.modelUrl ? `<div class="group"><label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" id="useModel" ${item.useModel !== false ? 'checked' : ''}> Use the store's 3D model</label></div>` : ''}
-    <div class="group"><div class="row"><button class="btn small" id="wallBtn">Against wall</button><button class="btn small" id="dupBtn" title="Ctrl+D">Duplicate</button></div>
-      <div class="row" style="margin-top:6px"><button class="btn small ${p.locked ? 'on' : ''}" id="lockBtn" title="A locked item can't be moved, turned or deleted by accident (L)">${p.locked ? '🔒 Locked' : 'Lock'}</button><button class="btn small danger" id="removeBtn" title="Delete">Remove</button></div></div>
-  </div>`;
-  $$('.color-chip[data-color]', el).forEach((b) => (b.onclick = () => ((p.color = b.dataset.color), commit({ rebuild: false }))));
-  $('#customColor', el).oninput = (e) => ((p.color = e.target.value), viewer.syncFurniture());
-  $('#customColor', el).onchange = () => commit({ rebuild: false });
-  $('#editSize', el).onclick = () => openItemDialog(item);
-  $$('[data-rot]', el).forEach((b) => (b.onclick = () => rotateItem(p, +b.dataset.rot)));
-  $$('[data-pos]', el).forEach((inp) => (inp.onchange = () => {
-    const v = parseFloat(inp.value) / 100;
-    if (Number.isFinite(v)) (p[inp.dataset.pos] = inp.dataset.pos === 'y' ? Math.max(0, v) : v), commit({ rebuild: false });
-  }));
-  if ($('#moveFloor', el)) $('#moveFloor', el).onchange = (e) => {
-    const to = design.floors.find((f) => f.id === e.target.value);
-    floor.placed = floor.placed.filter((x) => x !== p);
-    to.placed.push(p);
-    commit({ rebuild: false });
-    viewer.setActiveFloor(design.floors.indexOf(to));
-    viewer.select({ type: 'item', id: p.id });
-    renderAll();
-  };
-  if ($('#useModel', el)) $('#useModel', el).onchange = (e) => ((item.useModel = e.target.checked), commit({ lib: true, rebuild: false }));
-  $('#wallBtn', el).onclick = () => (againstWall(p, floor), commit({ rebuild: false }));
-  $('#dupBtn', el).onclick = () => duplicate(id);
-  $('#lockBtn', el).onclick = () => toggleLock();
-  $('#removeBtn', el).onclick = () => deleteSelection();
-}
 
 // ---------- clearances ----------
 
@@ -562,27 +311,6 @@ function extentOf(p) {
 }
 
 const selectedPlaced = () => viewer.selectedItems().map((id) => findPlaced(id).p).filter(Boolean);
-
-function multiInspector(el) {
-  const ps = selectedPlaced();
-  const locked = ps.filter((p) => p.locked).length;
-  const btn = (k, label, tip, dis = false) => `<button class="btn small icon-txt" data-align="${k}" title="${tip}" ${dis ? 'disabled' : ''}>${label}</button>`;
-  el.innerHTML = `<div class="insp"><h3>${ps.length} items</h3><div class="sub">${esc(ps.map((p) => itemById(p.itemId)?.name).filter(Boolean).slice(0, 4).join(', '))}${ps.length > 4 ? '…' : ''}${locked ? ` · ${locked} locked` : ''}</div>
-    <div class="group"><div class="lbl">Align</div>
-      <div class="row">${btn('left', '⇤ Left', 'Line up their left edges')}${btn('cx', '↔ Centre', 'Line up their centres (left–right)')}${btn('right', 'Right ⇥', 'Line up their right edges')}</div>
-      <div class="row" style="margin-top:6px">${btn('top', '⤒ Back', 'Line up their back edges (top of the plan)')}${btn('cz', '↕ Middle', 'Line up their centres (front–back)')}${btn('bottom', 'Front ⤓', 'Line up their front edges (bottom of the plan)')}</div></div>
-    <div class="group"><div class="lbl">Distribute</div>
-      <div class="row">${btn('dx', '↔ Evenly across', 'Equal gaps from left to right', ps.length < 3)}${btn('dz', '↕ Evenly down', 'Equal gaps from back to front', ps.length < 3)}</div></div>
-    <div class="group"><div class="row"><button class="btn small" id="mRot">↻ Rotate 90°</button><button class="btn small" id="mDup" title="Ctrl+D">Duplicate</button><button class="btn small" id="mCopy" title="Ctrl+C">Copy</button></div>
-      <div class="row" style="margin-top:6px"><button class="btn small" id="mLock">${locked === ps.length ? 'Unlock all' : 'Lock all'}</button><button class="btn small danger" id="mDel">Remove</button></div></div>
-    <div class="tip">Shift-click adds or removes items. Shift-drag on the floor draws a selection box. Drag any selected item to move them together.</div></div>`;
-  $$('[data-align]', el).forEach((b) => (b.onclick = () => alignItems(b.dataset.align)));
-  $('#mRot', el).onclick = () => rotateGroup(90);
-  $('#mDup', el).onclick = () => (copyItems(), pasteItems({ offset: true }));
-  $('#mCopy', el).onclick = () => copyItems();
-  $('#mLock', el).onclick = () => toggleLock();
-  $('#mDel', el).onclick = () => deleteSelection();
-}
 
 function alignItems(mode) {
   const ps = selectedPlaced().filter((p) => !p.locked);
@@ -662,78 +390,6 @@ function selectAllItems() {
   if (ids.length) viewer.select(ids.length > 1 ? { type: 'items', ids } : { type: 'item', id: ids[0] });
 }
 
-function wallInspector(el, id) {
-  const f = floorNow();
-  const w = f.walls.find((x) => x.id === id);
-  if (!w) return (el.innerHTML = '');
-  const { len } = wallFrame(w);
-  const ops = f.openings.filter((o) => o.wall === id).sort((a, b) => a.offset - b.offset);
-  const edit = ui.editing;
-  const rw = Math.min(2, Math.max(0.5, +(len / 3).toFixed(2)));
-  el.innerHTML = `<div class="insp"><h3>Wall</h3><div class="sub">${esc(f.name)} · ${w.exterior ? 'exterior' : 'interior'} · ${cm(len)} cm</div>
-    ${edit ? `<div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Length (cm)', `type="number" min="10" step="1" id="wLen" value="${cm(len)}"`)}${field('Thickness (cm)', `type="number" min="5" max="60" step="1" id="wThick" value="${cm(w.thickness)}"`)}</div>
-      <label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="wExt" ${w.exterior ? 'checked' : ''}> Exterior wall</label>
-      <label class="row" style="gap:8px;margin-top:6px" title="A locked wall can't be dragged, pushed or deleted by accident"><input type="checkbox" id="wLock" ${w.locked ? 'checked' : ''}> Locked</label></div>
-    <div class="group"><div class="lbl">Add to this wall</div><div class="row"><button class="btn small" data-add="door">+ Door</button><button class="btn small" data-add="window">+ Window</button><button class="btn small" data-add="opening">+ Opening</button></div></div>
-    <div class="group"><div class="lbl">Recess or bay</div>
-      <div class="num-row">${field('From start', `type="number" min="0" step="5" id="rStart" value="${cm((len - rw) / 2)}"`)}${field('Width', `type="number" min="20" step="5" id="rWidth" value="${cm(rw)}"`)}${field('Depth', `type="number" min="5" step="5" id="rDepth" value="60"`)}</div>
-      <div class="row" style="margin-top:8px"><button class="btn small" id="rIn" title="Push part of the wall into the building">Make recess</button><button class="btn small" id="rOut" title="Push part of the wall outward">Make bay</button></div></div>` : ''}
-    <div class="group"><div class="lbl">Finish</div>${['l', 'r'].map((sd) => {
-      const list = [].concat(w.finishes?.[sd] || []);
-      const names = [...new Set(list.map((x) => FINISH_NAMES[x.kind] || x.kind))].join(' + ');
-      return `<div class="finish-row">${list.length ? list.slice(0, 4).map((x) => `<span class="sw" style="background:${esc(x.color)}"></span>`).join('') : `<span class="sw" style="background:${esc(design.wallColor || '#efebe4')}"></span>`}<span>${sd === 'l' ? 'Side A' : 'Side B'}: ${esc(list.length ? names : 'house colour')}</span>${list.length ? `<button class="btn small ghost" data-unfinish="${sd}" title="Back to the house wall colour">Reset</button>` : ''}</div>`;
-    }).join('')}<p class="hint" style="margin:6px 0 0">Use <b>Paint</b> (P) to change a side.</p></div>
-    <div class="group"><button class="btn small" id="wElev" title="Look straight at this wall, with heights">Elevation view</button></div>
-    ${ops.length ? `<div class="group"><div class="lbl">On this wall</div>${ops.map((o) => `<button class="btn small ghost list-btn" data-op="${esc(o.id)}"><span>${o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening'} · ${cm(o.width)} cm</span><em>${cm(o.offset)} cm in</em></button>`).join('')}</div>` : ''}
-    ${edit ? `<div class="group"><div class="row"><button class="btn small" id="wSplit" title="Adds a corner in the middle; drag it to angle the wall">Add corner</button><button class="btn small danger" id="wDel">Delete wall</button></div></div>
-    <div class="tip">Drag the wall to push or pull it: square neighbours stretch, others get a step. Drag the dots to move corners (Shift for any angle). Double-click a wall to add a corner there.</div>` : '<div class="tip">Turn on <b>Edit house</b> (E) to change walls.</div>'}</div>`;
-  $$('[data-op]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'opening', id: b.dataset.op })));
-  $('#wElev', el).onclick = () => openElevation(id);
-  $$('[data-unfinish]', el).forEach((b) => (b.onclick = () => {
-    delete w.finishes[b.dataset.unfinish];
-    commit();
-  }));
-  if (!edit) return;
-  $('#wLen', el).onchange = (e) => {
-    const L = parseFloat(e.target.value) / 100;
-    if (!(L >= 0.1)) return renderInspector();
-    const { dir } = wallFrame(w);
-    moveCorner(f, w.b.slice(), [+(w.a[0] + dir[0] * L).toFixed(4), +(w.a[1] + dir[1] * L).toFixed(4)]);
-    tidy(f);
-    commit();
-  };
-  $('#wThick', el).onchange = (e) => {
-    const t = parseFloat(e.target.value) / 100;
-    if (t >= 0.05 && t <= 0.6) (w.thickness = t), tidy(f), commit();
-    else renderInspector();
-  };
-  $('#wExt', el).onchange = (e) => ((w.exterior = e.target.checked), commit());
-  $('#wLock', el).onchange = (e) => (e.target.checked ? (w.locked = true) : delete w.locked, commit({ rebuild: false }));
-  $$('[data-add]', el).forEach((b) => (b.onclick = () => addOpening(w, b.dataset.add)));
-  const recess = (sign) => {
-    const start = parseFloat($('#rStart', el).value) / 100;
-    const width = parseFloat($('#rWidth', el).value) / 100;
-    const depth = parseFloat($('#rDepth', el).value) / 100;
-    if (!(start >= 0 && width >= 0.2 && depth >= 0.05)) return toast('Enter a start, width (20 cm or more) and depth.');
-    if (start + width > len + 1e-6) return toast(`That runs past the end of the wall (${cm(len)} cm).`);
-    const cut = f.openings.find((o) => o.wall === w.id && o.offset < start + width && o.offset + o.width > start && (o.offset < start || o.offset + o.width > start + width));
-    if (cut) return toast(`A ${cut.type} crosses the edge of that ${sign > 0 ? 'recess' : 'bay'}. Move it or change the numbers.`);
-    const mid = makeRecess(f, w.id, { start, width, depth: sign * depth });
-    tidy(f);
-    commit();
-    viewer.select({ type: 'wall', id: mid });
-    toast(sign > 0 ? 'Recess made. Drag the back wall to change its depth.' : 'Bay made. Drag the front wall to change its depth.', { undo: true });
-  };
-  $('#rIn', el).onclick = () => recess(1);
-  $('#rOut', el).onclick = () => recess(-1);
-  $('#wSplit', el).onclick = () => {
-    if (!splitWall(f, w.id, len / 2)) return toast('This wall is too short to split.');
-    commit();
-    toast('Corner added in the middle. Drag its dot to move it.');
-  };
-  $('#wDel', el).onclick = () => deleteSelection();
-}
-
 /** Add a door, window or opening to wall `w`, centred on `at` (default: the middle of the wall). */
 function addOpening(w, type, at) {
   const f = floorNow();
@@ -751,175 +407,8 @@ function addOpening(w, type, at) {
   viewer.select({ type: 'opening', id: oid });
 }
 
-function openingInspector(el, id) {
-  const f = floorNow();
-  const o = f.openings.find((x) => x.id === id);
-  if (!o) return (el.innerHTML = '');
-  const w = f.walls.find((x) => x.id === o.wall);
-  const { len } = wallFrame(w);
-  const g = openingGaps(f, id);
-  const name = o.type === 'door' ? 'Door' : o.type === 'window' ? 'Window' : 'Opening';
-  if (!ui.editing) return (el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · ${cm(o.width)} × ${cm(o.height)} cm</div><div class="tip">Turn on <b>Edit house</b> (E) to change it.</div></div>`);
-  el.innerHTML = `<div class="insp"><h3>${name}</h3><div class="sub">${esc(f.name)} · on a ${cm(len)} cm wall</div>
-    <div class="group"><div class="lbl">Type</div><div class="seg small-seg">${['door', 'window', 'opening'].map((t) => `<button data-type="${t}" class="${o.type === t ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div></div>
-    <div class="group"><div class="num-row">${field('Width', `type="number" min="30" step="1" data-k="width" value="${cm(o.width)}"`)}${field('Height', `type="number" min="30" step="1" data-k="height" value="${cm(o.height)}"`)}${o.type === 'window' ? field('Sill', `type="number" min="0" step="1" data-k="sill" value="${cm(o.sill)}"`) : '<span></span>'}</div></div>
-    <div class="group"><div class="lbl">Position <span>${cm(g.left)} cm clear · ${cm(g.right)} cm clear</span></div><div class="num-row" style="grid-template-columns:1fr 1fr">${field('From start', `type="number" min="0" step="1" data-pos="start" value="${cm(o.offset)}"`)}${field('From end', `type="number" min="0" step="1" data-pos="end" value="${cm(len - o.offset - o.width)}"`)}</div></div>
-    ${o.type === 'door' ? `<div class="group"><div class="lbl">Swing</div><div class="row"><button class="btn small" id="oHinge" title="Hinge on the other side">⇄ Hinge side</button><button class="btn small" id="oSwing" title="Open to the other side of the wall">⇅ Flip swing</button></div><label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="oOpen" ${o.open ? 'checked' : ''}> Shown open</label></div>` : ''}
-    <div class="group"><button class="btn small danger" id="oDel">Delete</button></div>
-    <div class="tip">Drag it along the wall, or onto another wall. It stops at other doors and windows. Arrow keys nudge it 1 cm (Shift: 10 cm).</div></div>`;
-  $$('[data-type]', el).forEach((b) => (b.onclick = () => {
-    o.type = b.dataset.type;
-    if (o.type === 'window') Object.assign(o, { sill: 0.9, height: Math.min(o.height, 1.4, f.height - 1) });
-    else Object.assign(o, { sill: 0, height: Math.min(2.1, f.height - 0.1), width: o.type === 'door' ? Math.max(o.width, 0.6) : o.width });
-    tidy(f);
-    commit();
-  }));
-  const place = (offset) => {
-    // Through moveOpening so it never overlaps a neighbour or leaves the wall.
-    const { dir } = wallFrame(w);
-    const u = Math.max(0, Math.min(len - o.width, offset)) + o.width / 2;
-    moveOpening(f, id, [w.a[0] + dir[0] * u, w.a[1] + dir[1] * u], { reach: 0.01, snap: 0.01 });
-  };
-  $$('[data-k]', el).forEach((inp) => (inp.onchange = () => {
-    const v = parseFloat(inp.value) / 100;
-    const k = inp.dataset.k;
-    const min = { width: o.type === 'door' ? 0.6 : 0.3, height: 0.3, sill: 0 }[k];
-    if (!Number.isFinite(v) || v < min) return toast(`Minimum ${cm(min)} cm.`), renderInspector();
-    if (k === 'width') {
-      const room = g.left + g.right + o.width - 0.1;
-      if (v > room) return toast(`Only ${cm(room)} cm free here.`), renderInspector();
-      const grow = v - o.width;
-      o.width = v;
-      if (g.right < grow + 0.05) o.offset = Math.max(0.05, o.offset - (grow + 0.05 - g.right));
-    } else if (k === 'height') o.height = Math.min(v, f.height - (o.type === 'window' ? o.sill : 0) - 0.05);
-    else o.sill = Math.min(v, f.height - o.height - 0.05);
-    tidy(f);
-    commit();
-  }));
-  $$('[data-pos]', el).forEach((inp) => (inp.onchange = () => {
-    const v = parseFloat(inp.value) / 100;
-    if (!Number.isFinite(v) || v < 0) return renderInspector();
-    place(inp.dataset.pos === 'start' ? v : len - o.width - v);
-    commit();
-  }));
-  if ($('#oOpen', el)) $('#oOpen', el).onchange = (e) => ((o.open = e.target.checked), commit());
-  if ($('#oSwing', el)) $('#oSwing', el).onclick = () => ((o.swing = o.swing === 'out' ? 'in' : 'out'), commit());
-  if ($('#oHinge', el)) $('#oHinge', el).onclick = () => ((o.hinge = o.hinge === 'end' ? 'start' : 'end'), commit());
-  $('#oDel', el).onclick = () => deleteSelection();
-}
-
-function stairsInspector(el, id) {
-  const f = floorNow();
-  const s = f.stairs.find((x) => x.id === id);
-  if (!s) return (el.innerHTML = '');
-  const ys = elevations(design);
-  const fi = viewer.activeFloor;
-  const H = ys[fi + 1] - ys[fi];
-  const L = stairLayout(s, H);
-  const stats = `<div class="stat-grid"><div><b>${L.n}</b><span>steps</span></div><div><b>${Math.round(L.riser * 1000)}</b><span>mm rise</span></div><div><b>${Math.round(L.going * 1000)}</b><span>mm tread</span></div><div><b>${cm(H)}</b><span>cm climb</span></div></div>`;
-  if (!ui.editing) return (el.innerHTML = `<div class="insp"><h3>Stairs</h3><div class="sub">${esc(f.name)} → ${esc(design.floors[fi + 1]?.name || '')}</div>${stats}<div class="tip">Turn on <b>Edit house</b> to change them.</div></div>`);
-  el.innerHTML = `<div class="insp"><h3>Stairs</h3><div class="sub">${esc(f.name)} → ${esc(design.floors[fi + 1]?.name || '')}</div>${stats}
-    <div class="group"><div class="lbl">Shape</div><div class="seg small-seg">${[['straight', 'Straight'], ['L', 'L-turn'], ['U', 'U-turn']].map(([k, t]) => `<button data-shape="${k}" class="${s.shape === k ? 'on' : ''}">${t}</button>`).join('')}</div></div>
-    ${s.shape !== 'straight' ? `<div class="group"><div class="lbl">Turns</div><div class="seg small-seg">${['left', 'right'].map((k) => `<button data-turn="${k}" class="${s.turn === k ? 'on' : ''}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>` : ''}
-    <div class="group"><div class="num-row" style="grid-template-columns:1fr">${field('Width (cm)', `type="number" min="60" max="200" step="5" id="sWidth" value="${cm(s.width)}"`)}</div></div>
-    <div class="group"><div class="lbl">Rotate <span>${Math.round(s.rot || 0)}°</span></div><div class="row"><button class="btn small" data-srot="-90">↺ 90°</button><button class="btn small" data-srot="90">↻ 90°</button></div></div>
-    <div class="group"><button class="btn small danger" id="sDel">Delete stairs</button></div>
-    <div class="tip">Step height and tread depth follow real building rules (max 18 cm rise, 2 × rise + tread ≈ 63 cm) and adjust to the floor-to-floor height automatically. The stairwell is cut in the floor above.</div></div>`;
-  $$('[data-shape]', el).forEach((b) => (b.onclick = () => ((s.shape = b.dataset.shape), commit())));
-  $$('[data-turn]', el).forEach((b) => (b.onclick = () => ((s.turn = b.dataset.turn), commit())));
-  $('#sWidth', el).onchange = (e) => {
-    const v = parseFloat(e.target.value) / 100;
-    if (v >= 0.6) (s.width = v), commit();
-  };
-  $$('[data-srot]', el).forEach((b) => (b.onclick = () => ((s.rot = ((((s.rot || 0) + +b.dataset.srot) % 360) + 360) % 360), commit())));
-  $('#sDel', el).onclick = () => deleteSelection();
-}
-
-function roomInspector(el, id) {
-  const f = floorNow();
-  const r = f.rooms.find((x) => x.id === id);
-  if (!r) return (el.innerHTML = '');
-  const items = f.placed.filter((p) => pointInPolygon(p.x, p.z, r.points));
-  el.innerHTML = `<div class="insp"><h3>${esc(r.name || 'Room')}</h3><div class="sub">${esc(f.name)} · ${Math.abs(area(r.points)).toFixed(1)} m²</div>
-    <div class="group"><label class="field-label">Name<input id="rName" list="roomNames" value="${esc(r.name || '')}" placeholder="Pick or type a name"></label>
-      <div class="chips wrap" style="margin-top:6px">${ROOM_QUICK.map((n) => `<button class="chip ${r.name === n ? 'on' : ''}" data-rname="${esc(n)}">${esc(n)}</button>`).join('')}</div></div>
-    <div class="group"><div class="lbl">Floor finish</div><div class="swatch-input"><select id="rKind">${['wood', 'tiles', 'carpet', 'concrete'].map((k) => `<option ${r.floorKind === k ? 'selected' : ''}>${k}</option>`).join('')}</select><input type="color" id="rColor" value="${esc(r.floorColor || '#c49a6c')}"></div></div>
-    <div class="group"><div class="lbl">Ceiling</div><div class="swatch-input"><select id="rCeilKind">${FINISHES.filter((x) => ['paint', 'wood', 'concrete', 'tiles'].includes(x.kind)).map((x) => `<option value="${x.kind}" ${(r.ceiling?.kind || 'paint') === x.kind ? 'selected' : ''}>${x.name}</option>`).join('')}</select><input type="color" id="rCeilColor" value="${esc(r.ceiling?.color || '#f6f5f2')}"></div></div>
-    <div class="group"><div class="lbl">Walls of this room</div><div class="swatch-input"><select id="rWallKind">${FINISHES.filter((x) => x.kind !== 'carpet').map((x) => `<option value="${x.kind}">${x.name}</option>`).join('')}</select><input type="color" id="rWallColor" value="${esc(design.wallColor || '#efebe4')}"><button class="btn small" id="rWallApply">Apply</button></div></div>
-    ${items.length ? `<div class="group"><div class="lbl">In this room</div>${items.map((p) => `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}">${esc(itemById(p.itemId)?.name || 'Item')}</button>`).join('')}</div>` : ''}
-    ${ui.editing ? '<div class="tip">Rooms follow the walls. Delete or move a wall to merge or reshape rooms.</div>' : ''}</div>`;
-  $('#rName', el).onchange = (e) => ((r.name = e.target.value.trim()), commit());
-  $$('[data-rname]', el).forEach((b) => (b.onclick = () => ((r.name = b.dataset.rname), commit())));
-  $('#rKind', el).onchange = (e) => ((r.floorKind = e.target.value), commit());
-  $('#rColor', el).oninput = (e) => (r.floorColor = e.target.value);
-  $('#rColor', el).onchange = () => commit();
-  const ceil = () => ((r.ceiling = { kind: $('#rCeilKind', el).value, color: $('#rCeilColor', el).value }), commit());
-  $('#rCeilKind', el).onchange = ceil;
-  $('#rCeilColor', el).onchange = ceil;
-  $('#rWallApply', el).onclick = () => {
-    const fin = { kind: $('#rWallKind', el).value, color: $('#rWallColor', el).value };
-    const sides = paint.roomSides(r);
-    for (const { wall, side, from, to } of sides) paintSpan(wall, side, { from, to, ...fin });
-    commit();
-    toast(`${FINISH_NAMES[fin.kind]} on ${sides.length} wall side${sides.length === 1 ? '' : 's'} of ${r.name || 'this room'}.`, { undo: true });
-  };
-  $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'item', id: b.dataset.sel })));
-}
-
-const ROOM_NAMES = ['Living room', 'Kitchen', 'Dining room', 'Kitchen & dining', 'Bedroom', 'Master bedroom', 'Kids’ room', 'Guest room', 'Bathroom', 'En-suite', 'Toilet', 'Study', 'Home office', 'Family room', 'Hall', 'Entrance', 'Corridor', 'Laundry', 'Utility', 'Storage', 'Walk-in wardrobe', 'Balcony', 'Garage', 'Yard', 'Helper’s room', 'Prayer room'];
-const ROOM_QUICK = ['Living room', 'Bedroom', 'Kitchen', 'Bathroom', 'Study', 'Dining room'];
-
 /** Furniture total for the floors, against the budget from Settings. */
-function costLine(floors) {
-  const c = furnitureCost(floors);
-  if (!c.main && !c.other.length) return '';
-  const budget = pref.get('budget', 0);
-  const pct = budget ? Math.round((c.main / budget) * 100) : 0;
-  return `<div class="group cost"><div class="lbl">Furniture cost <span>${floors.length > 1 ? 'whole house' : 'this floor'}</span></div>
-    <div class="cost-total">${money(c.main, c.cur)}${c.other.map(([k, v]) => ` <em>+ ${money(v, k)}</em>`).join('')}</div>
-    ${budget ? `<div class="budget-bar ${pct > 100 ? 'over' : ''}"><span style="width:${Math.min(100, pct)}%"></span></div><div class="hint">${pct}% of your ${money(budget, c.cur)} budget${pct > 100 ? ` · ${money(c.main - budget, c.cur)} over` : ` · ${money(budget - c.main, c.cur)} left`}</div>` : ''}
-  </div>`;
-}
-
-function floorInspector(el) {
-  const f = floorNow();
-  const ys = elevations(design);
-  const fi = viewer.activeFloor;
-  const gross = footprint(f).reduce((s, p) => s + Math.abs(area(p[0].slice(0, -1))), 0);
-  el.innerHTML = `<div class="insp"><h3>${esc(f.name)}</h3><div class="sub">Level ${cm(ys[fi])} cm · ${gross.toFixed(1)} m² · ${f.rooms.length} rooms · ${f.placed.length} items</div>
-    ${ui.editing ? `<div class="group"><label class="field-label">Floor name<input id="fName" value="${esc(f.name)}"></label></div>
-    <div class="group"><div class="num-row" style="grid-template-columns:1fr 1fr">${field('Ceiling height (cm)', `type="number" min="200" max="600" step="5" id="fHeight" value="${cm(f.height)}"`)}${field(fi === 0 ? 'Ground slab (cm)' : 'Floor slab (cm)', `type="number" min="5" max="60" step="1" id="fSlab" value="${cm(f.slab)}"`)}</div></div>` : ''}
-    ${floorProblems(f, fi)}
-    ${f.rooms.length ? `<div class="group"><div class="lbl">Rooms</div>${f.rooms.map((r) => `<button class="btn small ghost list-btn" data-room="${esc(r.id)}"><span>${esc(r.name || 'Room')}</span><em>${Math.abs(area(r.points)).toFixed(1)} m²</em></button>`).join('')}</div>` : ''}
-    ${f.placed.length ? `<div class="group"><div class="lbl">Furniture</div>${f.placed.map((p) => {
-      const it = itemById(p.itemId);
-      const c = it && colorOf(it, p);
-      return it ? `<button class="btn small ghost list-btn" data-sel="${esc(p.id)}"><span class="sw" style="background:${esc(c?.hex || '#ccc')}"></span>${esc(it.name)}</button>` : '';
-    }).join('')}</div>` : ''}
-    ${costLine([f])}${design.floors.length > 1 ? costLine(design.floors) : ''}
-    ${!ui.editing ? `<div class="group"><button class="btn" style="width:100%" id="walkHere">Walk through ${esc(f.name)}</button></div><div class="group"><button class="btn" style="width:100%" id="editHouse">Edit walls, rooms &amp; stairs</button></div>` : ''}
-    <div class="group"><div class="lbl">House</div>
-      ${ui.editing ? `<label class="field-label">Name<input id="hName" value="${esc(design.name)}"></label>` : ''}
-      <div class="swatch-input" style="margin-top:6px"><input type="color" id="wallColor" value="${esc(design.wallColor || '#efebe4')}"><span class="hint">Wall colour</span></div>
-    </div></div>`;
-  $$('[data-room]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'room', id: b.dataset.room })));
-  $$('[data-sel]', el).forEach((b) => (b.onclick = () => viewer.select({ type: 'item', id: b.dataset.sel })));
-  if ($('#fName', el)) $('#fName', el).onchange = (e) => ((f.name = e.target.value.trim() || f.name), commit());
-  if ($('#fHeight', el)) $('#fHeight', el).onchange = (e) => {
-    const v = parseFloat(e.target.value) / 100;
-    if (v >= 2) (f.height = v), commit();
-  };
-  if ($('#fSlab', el)) $('#fSlab', el).onchange = (e) => {
-    const v = parseFloat(e.target.value) / 100;
-    if (v >= 0.05) (f.slab = v), commit();
-  };
-  if ($('#hName', el)) $('#hName', el).onchange = (e) => ((design.name = e.target.value.trim() || design.name), commit());
-  $('#wallColor', el).oninput = (e) => (design.wallColor = e.target.value);
-  $('#wallColor', el).onchange = () => commit();
-  if ($('#walkHere', el)) $('#walkHere', el).onclick = () => setView('walk');
-  if ($('#editHouse', el)) $('#editHouse', el).onclick = () => setEditing(true);
-}
-
+/** Problems on a floor, in words, for the Check list. */
 function floorProblems(f, fi) {
   const ys = elevations(design);
   const list = validate(design)
@@ -929,48 +418,10 @@ function floorProblems(f, fi) {
   for (const p of f.placed) if (!itemById(p.itemId)) list.push('a placed item has no model in your library');
   if (viewer.display.clear) for (const x of clearanceProblems(f)) list.push(x.message);
   if (!f.rooms.length && f.walls.length) list.push('no enclosed rooms yet: close the walls into a loop');
-  if (!list.length) return '<div class="group problems ok">✓ No problems on this floor</div>';
-  return `<div class="group problems"><div class="lbl">Check</div><ul>${list.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>`;
+  return list;
 }
 
-// ---------- build panel (edit mode) ----------
-
-const TOOL_KEYS = { select: 'V', wall: 'W', door: 'D', window: 'N', opening: 'O', stairs: 'S' };
-const TOOLS = [
-  ['select', 'Select', '<path d="M5 3l14 8-6 2-2 6z"/>'],
-  ['wall', 'Wall', '<path d="M3 17h18M3 17V7h18v10M8 7v10M14 7v10"/>'],
-  ['door', 'Door', '<path d="M6 21V4h10v17M4 21h16"/><circle cx="13" cy="13" r="1"/>'],
-  ['window', 'Window', '<rect x="4" y="5" width="16" height="14"/><path d="M12 5v14M4 12h16"/>'],
-  ['opening', 'Opening', '<path d="M5 21V8a7 7 0 0 1 14 0v13"/>'],
-  ['stairs', 'Stairs', '<path d="M4 20h4v-4h4v-4h4V8h4"/>'],
-];
-
-function renderBuildPanel() {
-  const el = $('#buildPanel');
-  const t = ui.tool || 'select';
-  const fi = viewer.activeFloor;
-  el.innerHTML = `<section>
-      <h2>Build · ${esc(floorNow().name)}</h2>
-      <div class="tool-grid">${TOOLS.map(([k, name, svg]) => `<button class="tool ${t === k ? 'on' : ''}" data-tool="${k}" title="${name} (${TOOL_KEYS[k]})"><svg viewBox="0 0 24 24">${svg}</svg>${name}</button>`).join('')}</div>
-      <p class="hint" style="margin:10px 0 0">Rooms follow the walls automatically. Drag a corner or a wall to reshape; double-click a wall to add a corner.</p>
-    </section>
-    <section>
-      <h2>Floors</h2>
-      <div class="floor-list">${design.floors.map((f, i) => ({ f, i })).reverse().map(({ f, i }) => `<button class="floor-row ${i === fi ? 'on' : ''}" data-f="${i}"><span class="badge">${i === 0 ? 'G' : i}</span><span>${esc(f.name)}</span><em>${f.rooms.length} rooms</em></button>`).join('')}</div>
-      <div class="row" style="margin-top:8px"><button class="btn small" id="addFloor">+ Floor above</button><button class="btn small danger ghost" id="delFloor" ${design.floors.length < 2 ? 'disabled' : ''}>Delete floor</button></div>
-    </section>
-    <section>
-      <h2>Start over</h2>
-      <div class="row"><button class="btn small" id="newHouse2">New house…</button><button class="btn small" id="dxf2">Import DXF…</button></div>
-      <p class="hint" style="margin-top:8px">Have a floor plan image? Give it to your AI agent (see <b>Agents</b>) and it will trace it into this house.</p>
-    </section>`;
-  $$('[data-tool]', el).forEach((b) => (b.onclick = () => setTool(b.dataset.tool === 'select' ? null : b.dataset.tool)));
-  $$('[data-f]', el).forEach((b) => (b.onclick = () => setFloor(+b.dataset.f)));
-  $('#addFloor', el).onclick = addFloorAbove;
-  $('#delFloor', el).onclick = deleteFloor;
-  $('#newHouse2', el).onclick = () => $('#newHouseDialog').showModal();
-  $('#dxf2', el).onclick = () => $('#dxfFile').click();
-}
+// ---------- edit mode ----------
 
 function setTool(name) {
   tools.set(name === 'measure' || name === 'paint' ? null : name);
@@ -1076,7 +527,6 @@ function addToRoom(itemId, at) {
   const c = rec && viewer.constrain(rec, p.x, p.z, false);
   if (c) Object.assign(p, c);
   if (!at && ['curtain', 'mirror', 'wardrobe', 'bookshelf', 'tvstand', 'sideboard', 'dresser'].includes(item.category)) againstWall(p, floor);
-  $('#leftPanel').classList.remove('open');
   commit({ rebuild: false });
   viewer.select({ type: 'item', id: p.id });
 }
@@ -1140,66 +590,25 @@ function deleteSelection() {
 
 // ---------- model editor ----------
 
-let editing = null;
-
-function colorRow(c = { name: '', hex: '#cccccc' }) {
-  const row = document.createElement('div');
-  row.className = 'color-row';
-  row.innerHTML = `<input type="color" value="${esc(c.hex || '#cccccc')}"><input type="text" placeholder="Colour name, e.g. Light beige" value="${esc(c.name)}"><button type="button" title="Remove">×</button>`;
-  const [pick, name] = $$('input', row);
-  let manual = !!c.name;
-  pick.oninput = () => (manual = true);
-  name.oninput = () => {
-    const hex = colorFromName(name.value);
-    if (hex && !manual) pick.value = hex;
-  };
-  $('button', row).onclick = () => row.remove();
-  return row;
-}
-
 function openItemDialog(item, { note, isNew } = {}) {
-  editing = { item, isNew };
-  const f = $('#itemForm');
-  $('#itemDialogTitle').textContent = isNew ? 'New model' : 'Edit model';
-  $('#itemNote').hidden = !note;
-  $('#itemNote').textContent = note || '';
-  const d = item.dims || {};
-  const def = DEFAULT_DIMS[item.category] || [0.6, 0.6, 0.6];
-  f.name.value = item.name || '';
-  f.category.value = item.category || 'box';
-  f.url.value = item.url || '';
-  f.w.value = cm(d.w || def[0]);
-  f.d.value = cm(d.d || def[1]);
-  f.h.value = cm(d.h || def[2]);
-  f.image.value = item.image || '';
-  f.modelUrl.value = item.modelUrl || '';
-  f.useModel.checked = item.useModel !== false;
-  f.accentOn.checked = !!item.accent;
-  f.accent.value = item.accent?.hex || '#4a3426';
-  const rows = $('#colorRows');
-  rows.innerHTML = '';
-  for (const c of item.colors?.length ? item.colors : [{ name: '', hex: '#cccccc' }]) rows.appendChild(colorRow(c));
-  $('#deleteItemBtn').hidden = !!isNew;
-  $('#itemDialog').showModal();
+  if (item) openDialog('item', { item, note, isNew });
 }
 
-function saveItemDialog() {
-  const f = $('#itemForm');
-  const { item, isNew } = editing;
-  const num = (v) => Math.max(0.005, parseFloat(v) / 100);
-  item.name = f.name.value.trim() || 'Untitled model';
-  item.category = f.category.value;
-  item.url = f.url.value.trim() || null;
-  item.dims = { w: num(f.w.value), d: num(f.d.value), h: num(f.h.value) };
-  item.image = f.image.value.trim() || null;
-  item.modelUrl = f.modelUrl.value.trim() || null;
-  item.useModel = f.useModel.checked;
-  item.accent = f.accentOn.checked ? { name: 'Custom', hex: f.accent.value } : null;
-  item.colors = $$('#colorRows .color-row')
-    .map((r) => {
-      const [pick, name] = $$('input', r);
-      return { name: name.value.trim() || pick.value, hex: pick.value };
-    })
+const newItem = () => openItemDialog({ id: uid('i'), name: '', category: 'sofa', colors: [] }, { isNew: true });
+
+/** Save the model editor's values `v` into `item` (a new model is added to the library). */
+function saveItem(item, v, isNew) {
+  const num = (x) => Math.max(0.005, parseFloat(x) / 100);
+  item.name = v.name.trim() || 'Untitled model';
+  item.category = v.category;
+  item.url = v.url.trim() || null;
+  item.dims = { w: num(v.w), d: num(v.d), h: num(v.h) };
+  item.image = v.image.trim() || null;
+  item.modelUrl = v.modelUrl.trim() || null;
+  item.useModel = v.useModel;
+  item.accent = v.accentOn ? { name: 'Custom', hex: v.accent } : null;
+  item.colors = v.colors
+    .map((c) => ({ name: c.name.trim() || c.hex, hex: c.hex, ...(c.image ? { image: c.image } : {}) }))
     .filter((c, i, a) => a.findIndex((x) => x.name === c.name) === i);
   if (!item.colors.length) item.colors = [{ name: 'Default', hex: '#b8b2a7' }];
   delete item.needsDims;
@@ -1209,35 +618,42 @@ function saveItemDialog() {
   if (isNew) toast(`“${item.name}” added to your models.`, { action: ['Add to room', () => addToRoom(item.id)] });
 }
 
+/** Delete a model from the library (and the design). Returns true if it was deleted. */
+function deleteItem(item) {
+  const n = placedCount(item.id);
+  if (n && !confirm(`Delete “${item.name}”? It is placed ${n} time(s) in this design.`)) return false;
+  library.items = library.items.filter((i) => i !== item);
+  viewer.library = library.items;
+  for (const f of design.floors) f.placed = f.placed.filter((p) => p.itemId !== item.id);
+  viewer.select(null);
+  commit({ lib: true, rebuild: false });
+  toast('Model deleted.', { undo: true });
+  return true;
+}
+
+/** Click a colour swatch on a library card: remember it, and recolour the selected piece. */
+function pickColor(itemId, name) {
+  ui.pickedColor[itemId] = name;
+  const sel = viewer.sel?.type === 'item' && findPlaced(viewer.sel.id).p;
+  if (sel?.itemId === itemId) (sel.color = name), commit({ rebuild: false });
+  else renderPanels();
+}
+
+function moveToFloor(p, floor, toId) {
+  const to = design.floors.find((f) => f.id === toId);
+  floor.placed = floor.placed.filter((x) => x !== p);
+  to.placed.push(p);
+  commit({ rebuild: false });
+  viewer.setActiveFloor(design.floors.indexOf(to));
+  viewer.select({ type: 'item', id: p.id });
+  renderAll();
+}
+
 // ---------- importing links ----------
 
 /** The local server (npm start) reads product pages and proxies model files. */
 function workerUrl() {
   return store.kind === 'device' ? location.origin : '';
-}
-
-function renderQueue() {
-  $('#queue').innerHTML = ui.queue
-    .slice(-6)
-    .reverse()
-    .map((q) => `<li class="${q.status === 'error' ? 'err' : q.status === 'warn' ? 'warn' : ''}" data-q="${q.id}">
-      <span class="st">${q.status === 'pending' || q.status === 'busy' ? '<span class="spin"></span>' : q.status === 'error' ? '✕' : q.status === 'warn' ? '!' : '✓'}</span>
-      <div class="body"><div class="t" title="${esc(q.url)}">${esc(q.title || q.url)}</div><div class="m">${q.message || 'Reading page…'}</div></div>
-      ${q.status !== 'pending' ? '<button class="x" data-dismiss title="Dismiss">×</button>' : ''}
-    </li>`)
-    .join('');
-  $$('#queue [data-dismiss]').forEach((b) => (b.onclick = () => {
-    const id = b.closest('li').dataset.q;
-    ui.queue.splice(ui.queue.findIndex((q) => q.id === id), 1);
-    renderQueue();
-  }));
-  $$('#queue [data-edit]').forEach((a) => (a.onclick = () => itemById(a.dataset.edit) && openItemDialog(itemById(a.dataset.edit))));
-  $$('#queue [data-add]').forEach((a) => (a.onclick = () => addToRoom(a.dataset.add)));
-  $$('#queue [data-chat]').forEach((a) => (a.onclick = () => chat?.toggle(true)));
-  $$('#queue [data-manual]').forEach((a) => (a.onclick = () => {
-    const q = ui.queue.find((x) => x.id === a.dataset.manual);
-    openItemDialog(guessFromUrl(q.url), { isNew: true, note: "We couldn't read this page automatically. Check the name and enter the size from the product page." });
-  }));
 }
 
 export function extractUrls(text) {
@@ -1290,6 +706,7 @@ function itemFromProduct(prod) {
   };
 }
 
+// Queue entries: { id, url, status, title, message, actions: [[label, kind, arg]] }
 async function importUrls(urls) {
   if (!urls.length) return toast('No links found. Paste a full link starting with https://');
   const base = workerUrl();
@@ -1298,16 +715,16 @@ async function importUrls(urls) {
     const q = { id: uid('q'), url, status: 'pending', title: url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60) };
     ui.queue.push(q);
     if (existing) {
-      Object.assign(q, { status: 'ok', title: existing.name, message: `Already in your models · <a data-add="${existing.id}">Add to room</a>` });
+      Object.assign(q, { status: 'ok', title: existing.name, message: 'Already in your models', actions: [['Add to room', 'add', existing.id]] });
       continue;
     }
-    renderQueue();
+    renderPanels();
     if (!base) {
       const item = guessFromUrl(url);
       item.needsDims = true;
       library.items.unshift(item);
       commit({ lib: true, rebuild: false });
-      Object.assign(q, { status: 'warn', title: item.name, message: `Run Roomcraft with <code>npm start</code> to read links. Size is a typical guess: <a data-edit="${item.id}">enter the real size</a>` });
+      Object.assign(q, { status: 'warn', title: item.name, message: 'Run Roomcraft with npm start to read links. Size is a typical guess', actions: [['enter the real size', 'edit', item.id]] });
       continue;
     }
     try {
@@ -1320,7 +737,11 @@ async function importUrls(urls) {
       const bits = [`${cm(item.dims.w)} × ${cm(item.dims.d)} × ${cm(item.dims.h)} cm`];
       if (item.colors.length > 1) bits.push(`${item.colors.length} colours`);
       if (item.modelUrl) bits.push('3D model found');
-      Object.assign(q, { status: item.needsDims ? 'warn' : 'ok', title: item.name, itemId: item.id, message: (item.needsDims ? `Size partly guessed. <a data-edit="${item.id}">Check size</a> · ` : '') + bits.join(' · ') + ` · <a data-add="${item.id}">Add to room</a>` });
+      Object.assign(q, {
+        status: item.needsDims ? 'warn' : 'ok', title: item.name, itemId: item.id,
+        message: (item.needsDims ? 'Size partly guessed · ' : '') + bits.join(' · '),
+        actions: [...(item.needsDims ? [['Check size', 'edit', item.id]] : []), ['Add to room', 'add', item.id]],
+      });
       await handToAgent(q, url, item);
     } catch (err) {
       if (agentModels()) {
@@ -1329,16 +750,16 @@ async function importUrls(urls) {
         item.needsDims = true;
         library.items.unshift(item);
         commit({ lib: true, rebuild: false });
-        Object.assign(q, { status: 'warn', title: item.name, itemId: item.id, message: `Couldn’t read the page here (${esc(err.message || err)}).` });
+        Object.assign(q, { status: 'warn', title: item.name, itemId: item.id, message: `Couldn’t read the page here (${err.message || err}).`, actions: [] });
         await handToAgent(q, url, item);
-      } else Object.assign(q, { status: 'error', message: `${esc(err.message || err)} <a data-manual="${q.id}">Add manually</a>` });
+      } else Object.assign(q, { status: 'error', message: String(err.message || err), actions: [['Add manually', 'manual', q.id]] });
     }
-    renderQueue();
+    renderPanels();
   }
-  renderQueue();
+  renderPanels();
 }
 
-const agentModels = () => !!chat?.ready && $('#autoModel').checked;
+const agentModels = () => !!chat?.ready && pref.get('autoModel', true);
 
 /** Pasted links go to the user's agent, which models them from the product photos. */
 async function handToAgent(q, url, item) {
@@ -1346,11 +767,33 @@ async function handToAgent(q, url, item) {
   try {
     await chat.modelLink(url, item);
     q.status = 'busy';
-    q.message = `${q.message ? q.message + ' ' : ''}Your agent is modelling it from the photos… <a data-chat>watch</a>`;
+    q.message = `${q.message ? q.message + ' · ' : ''}Your agent is modelling it from the photos…`;
+    q.actions = [...(q.actions || []), ['watch', 'chat']];
   } catch (err) {
-    q.message += ` (Agent: ${esc(err.message)})`;
+    q.message += ` (Agent: ${err.message})`;
   }
-  renderQueue();
+  renderPanels();
+}
+
+function queueAction(kind, arg) {
+  if (kind === 'add') (ui.ready?.delete(arg), addToRoom(arg));
+  else if (kind === 'edit') openItemDialog(itemById(arg));
+  else if (kind === 'chat') chat?.toggle(true);
+  else if (kind === 'manual') {
+    const q = ui.queue.find((x) => x.id === arg);
+    openItemDialog(guessFromUrl(q.url), { isNew: true, note: "We couldn't read this page automatically. Check the name and enter the size from the product page." });
+  }
+}
+
+function dismissQueue(id) {
+  ui.queue.splice(ui.queue.findIndex((q) => q.id === id), 1);
+  renderPanels();
+}
+
+function focusLinkBox() {
+  if (ui.editing) setEditing(false);
+  document.body.classList.remove('hide-left');
+  setTimeout(() => $('#linkInput')?.focus(), 50);
 }
 
 // ---------- designs ----------
@@ -1367,51 +810,26 @@ async function openDesign(id) {
   renderAll();
 }
 
-async function renderDesignList() {
-  const list = await store.list();
-  $('#storageNote').textContent = store.kind === 'device' ? 'Saved on this computer (userdata/ folder)' : 'Saved in this browser. Run npm start to save to your computer.';
-  $('#designList').innerHTML = list
-    .map((d) => `<div class="design-row ${d.id === design.id ? 'on' : ''}" data-id="${esc(d.id)}">
-      ${store.kind === 'device' ? `<div class="dr-thumb"><img alt="" loading="lazy" src="api/thumbs/${encodeURIComponent(d.id)}?v=${encodeURIComponent(d.updatedAt || '')}" onerror="this.remove()"></div>` : ''}
-      <div class="dr-main"><b>${esc(d.name || 'Untitled')}</b><span>${d.floors} floor${d.floors === 1 ? '' : 's'} · ${d.updatedAt ? new Date(d.updatedAt).toLocaleString() : ''}${d.updatedBy === 'agent' ? ' · edited by agent' : ''}</span></div>
-      <div class="dr-actions">
-        ${d.id === design.id ? '<span class="pill">Open</span>' : '<button class="btn small primary" data-open>Open</button>'}
-        <button class="btn small ghost" data-dup>Duplicate</button>
-        <button class="btn small ghost" data-rename>Rename</button>
-        ${store.history ? '<button class="btn small ghost" data-hist title="Earlier versions, saved automatically">History</button>' : ''}
-        <button class="btn small ghost danger" data-del ${list.length < 2 ? 'disabled' : ''}>Delete</button>
-      </div></div>`)
-    .join('');
-  $$('#designList .design-row').forEach((row) => {
-    const id = row.dataset.id;
-    $('[data-open]', row)?.addEventListener('click', async () => {
-      await openDesign(id);
-      $('#designsDialog').close();
-    });
-    $('[data-hist]', row)?.addEventListener('click', () => openHistory(row.dataset.id));
-    $('[data-dup]', row).onclick = async () => {
-      const d = id === design.id ? JSON.parse(JSON.stringify(design)) : await store.load(id);
-      d.id = uid('d');
-      d.name = `${d.name} (copy)`;
-      await store.save(d);
-      renderDesignList();
-    };
-    $('[data-rename]', row).onclick = async () => {
-      const d = id === design.id ? design : await store.load(id);
-      const name = prompt('Design name', d.name);
-      if (!name?.trim()) return;
-      d.name = name.trim();
-      if (id === design.id) commit({ rebuild: false });
-      else await store.save(d);
-      renderDesignList();
-    };
-    $('[data-del]', row).onclick = async () => {
-      if (!confirm('Delete this design? This cannot be undone.')) return;
-      await store.remove(id);
-      if (id === design.id) await openDesign((await store.list())[0].id);
-      renderDesignList();
-    };
-  });
+async function duplicateDesign(id) {
+  const d = id === design.id ? JSON.parse(JSON.stringify(design)) : await store.load(id);
+  d.id = uid('d');
+  d.name = `${d.name} (copy)`;
+  await store.save(d);
+}
+
+async function renameDesign(id) {
+  const d = id === design.id ? design : await store.load(id);
+  const name = prompt('Design name', d.name);
+  if (!name?.trim()) return;
+  d.name = name.trim();
+  if (id === design.id) commit({ rebuild: false });
+  else await store.save(d);
+}
+
+async function deleteDesign(id) {
+  if (!confirm('Delete this design? This cannot be undone.')) return;
+  await store.remove(id);
+  if (id === design.id) await openDesign((await store.list())[0].id);
 }
 
 async function createHouse(opts) {
@@ -1461,9 +879,9 @@ async function exportAs(kind) {
   } else if (kind === 'png') {
     download(`${fileName(design.name)}.png`, viewer.screenshot());
   } else if (kind === 'qty') {
-    openQuantities();
+    openDialog('qty');
   } else if (kind === 'plan') {
-    openPlanExport();
+    openDialog('plan');
   } else if (kind === 'glb') {
     toast('Preparing 3D model…');
     const { exportGLB } = await import('./export.js');
@@ -1473,41 +891,56 @@ async function exportAs(kind) {
   }
 }
 
+/** The Share menu. */
+function shareAction(act) {
+  if (act === 'photo') takePhoto();
+  else if (act === 'copy') copyPicture();
+  else exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
+}
+
+const pickFile = (kind) => $(kind === 'dxf' ? '#dxfFile' : '#designFile').click();
+
 // ---------- version history ----------
 
-async function openHistory(id) {
-  const dlg = $('#historyDialog');
-  const list = await store.history(id).catch(() => []);
-  const when = (s) => (s ? new Date(s).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '?');
-  $('#historyList').innerHTML = list.length
-    ? list.map((v) => `<div class="design-row" data-v="${esc(v.file)}"><div><b>${esc(when(v.savedAt))}</b><div class="muted">${v.by === 'agent' ? 'saved by your AI agent' : 'saved by you'} · ${v.floors} floor${v.floors === 1 ? '' : 's'}, ${v.rooms} rooms, ${v.items} items</div></div><span class="spacer"></span><button class="btn small" data-restore>Restore</button><button class="btn small ghost" data-copy>Open as copy</button></div>`).join('')
-    : '<p class="muted">No earlier versions yet. Roomcraft keeps one every couple of minutes while you work, and one every time an AI agent changes the design.</p>';
-  $$('#historyList [data-v]').forEach((row) => {
-    const load = () => store.version(id, row.dataset.v);
-    $('[data-restore]', row).onclick = async () => {
-      const d = await load();
-      if (id !== design.id) await openDesign(id);
-      await saveNow(); // the current state goes into History first
-      design = { ...d, id, updatedAt: lastSaved };
-      viewer.setDesign(design, { force: true });
-      commit();
-      dlg.close();
-      $('#designsDialog')?.close?.();
-      toast('Restored that version. The one before it is in History too.', { undo: true });
-    };
-    $('[data-copy]', row).onclick = async () => {
-      const d = await load();
-      const copy = { ...d, id: uid('d'), name: `${d.name} (${when(d.updatedAt)})` };
-      await store.save(copy);
-      dlg.close();
-      await openDesign(copy.id);
-      toast(`Opened “${copy.name}” as a separate design.`);
-    };
-  });
-  dlg.showModal();
+const openHistory = (id) => openDialog('history', id);
+
+async function restoreVersion(id, file) {
+  const d = await store.version(id, file);
+  if (id !== design.id) await openDesign(id);
+  await saveNow(); // the current state goes into History first
+  design = { ...d, id, updatedAt: lastSaved };
+  viewer.setDesign(design, { force: true });
+  commit();
+  reactUI.set({ dialogs: {} });
+  toast('Restored that version. The one before it is in History too.', { undo: true });
+}
+
+async function openVersionCopy(id, file) {
+  const d = await store.version(id, file);
+  const when = d.updatedAt ? new Date(d.updatedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '?';
+  const copy = { ...d, id: uid('d'), name: `${d.name} (${when})` };
+  await store.save(copy);
+  reactUI.set({ dialogs: {} });
+  await openDesign(copy.id);
+  toast(`Opened “${copy.name}” as a separate design.`);
 }
 
 // ---------- sun study ----------
+
+function setSunOn(on) {
+  ui.sunOn = on;
+  pref.set('sunOn', on);
+  applySun();
+  renderPanels();
+}
+
+function useMyLocation() {
+  if (!navigator.geolocation) return toast('Location isn’t available in this browser.');
+  navigator.geolocation.getCurrentPosition(
+    (p) => ((design.site = { ...(design.site || {}), lat: +p.coords.latitude.toFixed(4), lon: +p.coords.longitude.toFixed(4) }), commit({ rebuild: false })),
+    () => toast('Couldn’t get your location. Type the latitude and longitude instead (search the address on a map).')
+  );
+}
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -1524,132 +957,6 @@ function applySun() {
   viewer.setSun(sunVector(pos, site.north || 0));
   $('#northArrow').hidden = false;
   return pos;
-}
-
-function renderSunPanel() {
-  const site = design.site || {};
-  const m = $('#sunPanel');
-  const pos = applySun();
-  const t = site.lat != null ? sunTimes(new Date(`${ui.sunDate}T12:00`), site.lat, site.lon) : null;
-  const hm = (d) => (d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : '—');
-  const [h, mi] = ui.sunTime.split(':').map(Number);
-  m.innerHTML = `<div class="sun-grid">
-      <label class="check small-check"><input type="checkbox" id="sunOn" ${ui.sunOn ? 'checked' : ''}> <b>Sun study</b></label>
-      <div class="row"><label class="field-label">Latitude<input id="sunLat" type="number" step="0.01" value="${site.lat ?? ''}" placeholder="51.50"></label><label class="field-label">Longitude<input id="sunLon" type="number" step="0.01" value="${site.lon ?? ''}" placeholder="-0.12"></label></div>
-      <button class="btn small" id="sunHere">Use my location</button>
-      <label class="field-label">North <span id="sunNorthV">${Math.round(site.north || 0)}°</span><input id="sunNorth" type="range" min="0" max="359" value="${Math.round(site.north || 0)}"></label>
-      <label class="field-label">Date<input id="sunDate" type="date" value="${ui.sunDate}"></label>
-      <label class="field-label">Time <b id="sunTimeV">${ui.sunTime}</b><input id="sunTime" type="range" min="0" max="1439" step="15" value="${h * 60 + mi}"></label>
-      <p class="hint">${site.lat == null ? 'Enter where the house is (or use your location) to see real sunlight and shadows.' : `Sunrise ${hm(t?.rise)} · sunset ${hm(t?.set)}${pos ? ` · sun ${Math.round((pos.altitude * 180) / Math.PI)}° up, from ${compass(pos.bearing)}` : ''}`}</p>
-    </div>`;
-  const save = () => {
-    const lat = parseFloat($('#sunLat', m).value), lon = parseFloat($('#sunLon', m).value);
-    design.site = { ...(design.site || {}), lat: Number.isFinite(lat) ? Math.max(-90, Math.min(90, lat)) : undefined, lon: Number.isFinite(lon) ? Math.max(-180, Math.min(180, lon)) : undefined, north: +$('#sunNorth', m).value };
-    commit({ rebuild: false });
-  };
-  $('#sunOn', m).onchange = (e) => ((ui.sunOn = e.target.checked), pref.set('sunOn', ui.sunOn), renderSunPanel(), renderLevelBar());
-  $('#sunLat', m).onchange = () => (save(), renderSunPanel());
-  $('#sunLon', m).onchange = () => (save(), renderSunPanel());
-  $('#sunNorth', m).oninput = (e) => {
-    $('#sunNorthV', m).textContent = `${e.target.value}°`;
-    design.site = { ...(design.site || {}), north: +e.target.value };
-    applySun();
-  };
-  $('#sunNorth', m).onchange = () => save();
-  $('#sunDate', m).onchange = (e) => ((ui.sunDate = e.target.value || ui.sunDate), renderSunPanel());
-  $('#sunTime', m).oninput = (e) => {
-    const v = +e.target.value;
-    ui.sunTime = `${pad2(Math.floor(v / 60))}:${pad2(v % 60)}`;
-    $('#sunTimeV', m).textContent = ui.sunTime;
-    applySun();
-    renderLevelBar();
-  };
-  $('#sunTime', m).onchange = () => renderSunPanel();
-  $('#sunHere', m).onclick = () =>
-    navigator.geolocation
-      ? navigator.geolocation.getCurrentPosition(
-          (p) => ((design.site = { ...(design.site || {}), lat: +p.coords.latitude.toFixed(4), lon: +p.coords.longitude.toFixed(4) }), commit({ rebuild: false }), renderSunPanel()),
-          () => toast('Couldn’t get your location. Type the latitude and longitude instead (search the address on a map).')
-        )
-      : toast('Location isn’t available in this browser.');
-}
-
-const compass = (b) => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(((b * 180) / Math.PI) / 45) % 8];
-
-// ---------- 2D plan export ----------
-
-function planOpts(fi) {
-  const paper = $('#planPaper').value;
-  const sv = $('#planScale').value;
-  return { paper, scale: sv === 'fit' ? fitScale(design.floors[fi], paper) : +sv, dims: $('#planDims').checked, areas: $('#planAreas').checked, furniture: $('#planFurniture').checked, itemById, dimsOf };
-}
-
-function planFloors() {
-  return $$('#planFloors input:checked').map((c) => +c.value);
-}
-
-function renderPlanPreview() {
-  const fis = planFloors();
-  if (!fis.length) return ($('#planPreview').innerHTML = '<p class="muted">Pick at least one floor.</p>');
-  const r = planSVG(design, fis[0], planOpts(fis[0]));
-  $('#planPreview').innerHTML = r.svg.replace(/width="[\d.]+mm" height="[\d.]+mm"/, 'width="100%"');
-  const tight = fis.filter((fi) => !planSVG(design, fi, planOpts(fi)).fits);
-  $('#planNote').textContent = tight.length
-    ? `At this scale ${tight.map((fi) => design.floors[fi].name).join(', ')} won't fit on ${$('#planPaper').value}. Choose a larger paper or scale, or "Largest that fits".`
-    : `Print at 100% ("actual size") to keep the scale 1:${r.scale}.`;
-}
-
-function openPlanExport() {
-  $('#planFloors').innerHTML = design.floors.map((f, i) => `<label class="check small-check"><input type="checkbox" value="${i}" ${i === viewer.activeFloor ? 'checked' : ''}> ${esc(f.name)}</label>`).join('');
-  for (const el of $$('#planDialog select, #planDialog input')) el.onchange = renderPlanPreview;
-  renderPlanPreview();
-  const pages = async () => {
-    const out = [];
-    for (const fi of planFloors()) {
-      const r = planSVG(design, fi, planOpts(fi));
-      out.push({ fi, r, canvas: await svgToCanvas(r.svg, r.width, r.height, 300) });
-    }
-    return out;
-  };
-  $('#planPng').onclick = async () => {
-    for (const { fi, canvas } of await pages()) download(`${fileName(design.name)} ${fileName(design.floors[fi].name)} plan.png`, canvas.toDataURL('image/png'));
-  };
-  $('#planPdf').onclick = async () => {
-    const ps = await pages();
-    if (!ps.length) return;
-    const list = [];
-    for (const { r, canvas } of ps) {
-      const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
-      list.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), widthPx: canvas.width, heightPx: canvas.height, widthMm: r.width, heightMm: r.height });
-    }
-    download(`${fileName(design.name)} plans.pdf`, URL.createObjectURL(new Blob([makePDF(list)], { type: 'application/pdf' })));
-    toast('Saved the plan PDF. Print at 100% (actual size) to keep the scale.');
-  };
-  $('#planDialog').showModal();
-}
-
-// ---------- quantities ----------
-
-function openQuantities() {
-  const m2 = (v) => `${v.toFixed(1)} m²`;
-  const fin = (f) => `<span class="sw" style="background:${esc(f.color)}"></span>${esc(FINISH_NAMES[f.kind] || f.kind)}`;
-  $('#qtyBody').innerHTML = design.floors
-    .map((f) => {
-      const q = floorQuantities(f, { itemById, wallColor: design.wallColor });
-      const cost = Object.entries(q.totals.cost).map(([c, v]) => `${esc(c)} ${v.toFixed(2)}`.trim()).join(' + ');
-      return `<h4>${esc(f.name)} <em>${m2(q.totals.floorArea)} of rooms · ${m2(q.totals.wallArea)} of walls · ${q.totals.skirting.toFixed(1)} m skirting${cost ? ` · furniture ${cost}` : ''}</em></h4>
-      <table class="qty"><thead><tr><th>Room</th><th>Floor</th><th>Flooring to order</th><th>Walls</th><th>Ceiling</th><th>Skirting</th><th>Furniture</th></tr></thead><tbody>
-      ${q.rooms.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td>${m2(r.floorArea)}</td><td>${fin({ kind: r.flooring.kind, color: r.flooring.color || '#c49a6c' })} ${m2(r.flooring.order)}</td>
-        <td>${r.walls.map((w) => `<div>${fin(w.finish)} ${m2(w.area)}</div>`).join('')}</td><td>${m2(r.ceilingArea)}</td><td>${r.skirting.toFixed(1)} m</td>
-        <td>${r.items.map(({ item }) => `<div>${esc(item.name)}${item.price ? ` <em>${esc(item.currency || '')} ${esc(item.price)}</em>` : ''}</div>`).join('') || '<em>none</em>'}</td></tr>`).join('')}
-      </tbody></table>
-      ${q.finishes.length ? `<p class="qty-sum">Wall coverings on this floor: ${q.finishes.map((w) => `${fin(w.finish)} ${esc(w.finish.color)} <b>${m2(w.area)}</b>`).join(' · ')}</p>` : ''}`;
-    })
-    .join('');
-  const c = furnitureCost();
-  if (c.main || c.other.length) $('#qtyBody').insertAdjacentHTML('afterbegin', `<div class="qty-total">Furniture for the whole house: <b>${money(c.main, c.cur)}</b>${c.other.map(([k, v]) => ` + ${money(v, k)}`).join('')}${pref.get('budget', 0) ? ` · budget ${money(pref.get('budget', 0), c.cur)}` : ''}</div>`);
-  $('#qtyCsv').onclick = () => download(`${fileName(design.name)} quantities.csv`, URL.createObjectURL(new Blob(['\ufeff' + quantitiesCSV(design, { itemById })], { type: 'text/csv' })));
-  $('#qtyDialog').showModal();
 }
 
 async function importDxf(file) {
@@ -1678,73 +985,19 @@ async function importDxf(file) {
 
 // ---------- AI agents ----------
 
-async function openAgents() {
+function openAgents() {
   if (store.kind !== 'device') return toast('Connecting agents needs Roomcraft running with npm start.');
-  const dlg = $('#agentsDialog');
-  const data = await (await fetch('api/agents')).json();
-  const connected = data.harnesses.filter((h) => h.connection || h.configured);
-  $('#agentsTitle').textContent = connected.length ? 'AI agents' : 'Connect your AI agent';
-  $('#agentsDontAsk').checked = pref.get('agentsDontAsk', false);
-  $('#agentsConnected').innerHTML = connected.length
-    ? `<div class="lbl">Set up</div>${connected
-        .map((h) => `<div class="agent-row"><div><b>${esc(h.name)}</b><span>${h.connection ? `Connected · last used ${new Date(h.connection.lastSeen).toLocaleString()}` : 'Configured, waiting for its first connection. Restart the agent and ask it to list the roomcraft tools.'}</span></div><button class="btn small danger ghost" data-remove="${esc(h.id)}">Remove</button></div>`)
-        .join('')}<div class="lbl" style="margin-top:14px">Set up another agent</div>`
-    : '';
-  $('#agentGrid').innerHTML =
-    data.harnesses
-      .filter((h) => !h.other)
-      .map((h) => `<button class="agent-card ${h.connection || h.configured ? 'done' : ''}" data-agent="${esc(h.id)}"><b>${esc(h.name)}</b><span>${h.connection ? 'Connected' : h.configured ? 'Configured' : 'Set up'}</span></button>`)
-      .join('') + '<button class="agent-card" data-agent="other"><b>Other agent</b><span>Any MCP client</span></button>';
-  $('#agentSetup').hidden = true;
-  $$('[data-remove]', dlg).forEach((b) => (b.onclick = async () => {
-    const r = await (await fetch('api/agents/remove', { method: 'POST', body: JSON.stringify({ id: b.dataset.remove }) })).json();
-    toast(r.message);
-    openAgents();
-    refreshAgentsDot();
-  }));
-  $$('[data-agent]', dlg).forEach((b) => (b.onclick = () => {
-    $$('[data-agent]', dlg).forEach((x) => x.classList.toggle('on', x === b));
-    const h = data.harnesses.find((x) => x.id === b.dataset.agent);
-    const prompt = h ? h.prompt : data.genericPrompt;
-    const box = $('#agentSetup');
-    box.hidden = false;
-    box.innerHTML = `<div class="setup-steps">
-      <div class="step"><span>1</span><div>${h?.noShell ? `${esc(h.name)} can't run setup commands itself, so Roomcraft can add itself to its config for you.` : `Copy this prompt and paste it into ${esc(h?.name || 'your agent')}. It installs the Roomcraft server into its own settings.`}</div></div>
-      ${h?.noShell ? '' : `<div class="prompt-box"><pre>${esc(prompt)}</pre><button class="btn small primary" id="copyPrompt">Copy prompt</button></div>`}
-      ${h?.canAutoSetup ? `<div class="step"><span>${h.noShell ? '2' : 'or'}</span><div><button class="btn small ${h.noShell ? 'primary' : ''}" id="autoSetup">Add it to ${esc(h.name)} automatically</button> <em class="muted">${esc(h.configPath)}</em></div></div>` : ''}
-      <div class="step"><span>${h?.noShell ? '3' : '2'}</span><div>Approve what the agent asks for and restart it if it says so. It shows as connected here the first time it uses Roomcraft.</div></div>
-    </div>`;
-    $('#copyPrompt', box)?.addEventListener('click', async (e) => {
-      try {
-        await navigator.clipboard.writeText(prompt);
-        e.target.textContent = 'Copied ✓';
-      } catch {
-        const r = document.createRange();
-        r.selectNodeContents($('pre', box));
-        getSelection().removeAllRanges();
-        getSelection().addRange(r);
-        e.target.textContent = 'Selected, press Ctrl+C';
-      }
-    });
-    $('#autoSetup', box)?.addEventListener('click', async () => {
-      const r = await (await fetch('api/agents/setup', { method: 'POST', body: JSON.stringify({ id: h.id }) })).json();
-      toast(r.message || r.error);
-      refreshAgentsDot();
-      openAgents();
-    });
-  }));
-  if (!dlg.open) dlg.showModal();
+  openDialog('agents');
 }
 
 async function refreshAgentsDot() {
-  if (store.kind !== 'device') return ($('#agentsBtn').hidden = true), 0;
+  if (store.kind !== 'device') return 0;
   chat?.refresh();
   try {
     const data = await (await fetch('api/agents')).json();
-    const n = data.harnesses.filter((h) => h.connection || h.configured).length;
-    $('#agentsDot').classList.toggle('ok', n > 0);
-    $('#agentsBtn').title = n ? `${n} AI agent${n > 1 ? 's' : ''} set up` : 'Connect an AI agent';
-    return n;
+    ui.agents = data.harnesses.filter((h) => h.connection || h.configured).length;
+    renderPanels();
+    return ui.agents;
   } catch {
     return 0;
   }
@@ -1774,7 +1027,6 @@ function setView(v) {
   viewer.setView(v === 'split' ? 'plan' : v);
   if (v === 'split') viewer.setSplit(true);
   ui.view = v;
-  $$('#viewSeg button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
   $('#walkUI').hidden = v !== 'walk';
   if (v === 'walk') {
     viewer.select(null);
@@ -1782,30 +1034,19 @@ function setView(v) {
     walkHelp(false);
   } else walker.stop();
   renderAll();
-  if ($('#leaveWalk')) $('#leaveWalk').onclick = () => setView('3d');
 }
 
 function walkHelp(locked) {
-  const f = design && viewer ? `<b>${esc(floorNow().name)}</b> · ` : '';
-  $('#walkHelp').innerHTML = locked
-    ? `${f}W A S D to walk · Shift to hurry · Esc to release the mouse`
-    : matchMedia('(pointer: coarse)').matches
-      ? `${f}drag to look around · use the arrows to walk`
-      : `${f}<u>Click to look around</u> · W A S D to walk · walk onto the stairs to change floors`;
+  ui.walkLocked = locked;
+  reactUI?.bump('status');
 }
 
 // ---------- photo ----------
 
 let photoAbort = null;
 async function takePhoto() {
-  const ov = $('#photoOverlay');
-  ov.hidden = false;
-  $('#photoImg').hidden = true;
-  $('#photoSave').hidden = true;
-  $('#photoCancel').textContent = 'Cancel';
-  $('#photoTitle').textContent = 'Rendering photo…';
-  $('#photoInfo').textContent = 'Preparing the scene…';
-  $('#photoBar').style.width = '0%';
+  const show = (p) => reactUI.set({ photo: { ...reactUI.state.photo, ...p } });
+  reactUI.set({ photo: { title: 'Rendering photo…', info: 'Preparing the scene…', progress: 0 } });
   photoAbort = new AbortController();
   try {
     const { renderPhoto } = await import('./photo.js');
@@ -1814,26 +1055,24 @@ async function takePhoto() {
       samples: ui.quality === 'high' ? 400 : 150,
       signal: photoAbort.signal,
       onProgress: (n, total) => {
-        $('#photoBar').style.width = `${(n / total) * 100}%`;
         const secs = ((performance.now() - started) / 1000) * (total / Math.max(1, n) - 1);
-        $('#photoInfo').textContent = `${n} / ${total} light samples · about ${Math.max(1, Math.round(secs))} s left`;
+        show({ progress: n / total, info: `${n} / ${total} light samples · about ${Math.max(1, Math.round(secs))} s left` });
       },
     });
-    if (!url) return (ov.hidden = true);
-    $('#photoTitle').textContent = 'Photo ready';
-    $('#photoInfo').textContent = '';
-    $('#photoImg').src = url;
-    $('#photoImg').hidden = false;
-    $('#photoSave').hidden = false;
-    $('#photoCancel').textContent = 'Close';
-    $('#photoSave').onclick = () => download(`${fileName(design.name)}-photo.png`, url);
+    if (!url) return reactUI.set({ photo: null });
+    show({ title: 'Photo ready', info: '', url });
   } catch (err) {
     console.error(err);
-    $('#photoTitle').textContent = "Couldn't render the photo";
-    $('#photoInfo').textContent = err.message;
-    $('#photoCancel').textContent = 'Close';
+    show({ title: "Couldn't render the photo", info: err.message, error: true });
   }
 }
+
+function cancelPhoto() {
+  photoAbort?.abort();
+  reactUI.set({ photo: null });
+}
+
+const savePhoto = (url) => download(`${fileName(design.name)}-photo.png`, url);
 
 // ---------- misc UI ----------
 
@@ -1842,15 +1081,11 @@ let measure = null;
 let paint = null;
 let toastTimer;
 function toast(msg, { undo, action } = {}) {
-  const t = $('#toast');
-  t.innerHTML = esc(msg) + (undo ? '<button data-t="undo">Undo</button>' : '') + (action ? `<button data-t="act">${esc(action[0])}</button>` : '');
-  t.classList.add('show');
-  if (undo) $('[data-t=undo]', t).onclick = () => (restore(history.index - 1), t.classList.remove('show'));
-  if (action) $('[data-t=act]', t).onclick = () => (action[1](), t.classList.remove('show'));
+  const t = { id: uid('t'), msg, undo, action };
+  reactUI?.set({ toast: t });
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), action || undo ? 6000 : 3500);
+  toastTimer = setTimeout(() => reactUI.state.toast?.id === t.id && reactUI.set({ toast: null }), action || undo ? 6000 : 3500);
 }
-
 // ---------- React panels: commands, right-click menu, settings, tour, save state ----------
 
 let reactUI = null;
@@ -1897,7 +1132,7 @@ function setSetting(k, v) {
   if (k === 'quality') {
     ui.quality = v;
     setQuality(viewer, v);
-  } else if (k === 'autoModel') $('#autoModel').checked = v;
+  }
   pref.set(k, v);
   if (k === 'theme') applyTheme();
   renderAll();
@@ -1935,7 +1170,6 @@ const money = (v, c) => {
 };
 
 const openSun = () => $('[data-sun]')?.click();
-const openViewMenu = () => $('[data-viewmenu]')?.click();
 
 /** Everything you can do, for the command palette (and its shortcuts, shown as hints). */
 function commands() {
@@ -1990,8 +1224,8 @@ function commands() {
     if (n?.trim()) (design.name = n.trim()), commit({ rebuild: false });
   });
 
-  add('Furniture', 'links', 'Add furniture from a product link', () => (ui.editing && setEditing(false), document.body.classList.remove('hide-left'), $('#linkInput').focus()), { keywords: 'import shop url ikea' });
-  add('Furniture', 'custom', 'Add a custom model', () => $('#newItemBtn').click());
+  add('Furniture', 'links', 'Add furniture from a product link', focusLinkBox, { keywords: 'import shop url ikea' });
+  add('Furniture', 'custom', 'Add a custom model', newItem);
   add('Furniture', 'selall', 'Select all furniture on this floor', selectAllItems, { keys: 'Ctrl+A' });
   if (clipboard?.length) add('Furniture', 'paste', 'Paste', () => pasteItems(), { keys: 'Ctrl+V' });
   for (const it of library.items) add('Add to room', `add-${it.id}`, it.name, () => addToRoom(it.id), { note: CATEGORY_LABELS[it.category] || '', keywords: `add place ${it.category}`, hidden: true });
@@ -1999,8 +1233,8 @@ function commands() {
   add('Edit', 'undo', 'Undo', () => restore(history.index - 1), { keys: 'Ctrl+Z', disabled: history.index <= 0 });
   add('Edit', 'redo', 'Redo', () => restore(history.index + 1), { keys: 'Ctrl+Shift+Z', disabled: history.index >= history.stack.length - 1 });
 
-  add('File', 'designs', 'Your designs', () => $('#designBtn').click(), { keywords: 'open switch house' });
-  add('File', 'new', 'New house', () => $('#newHouseDialog').showModal());
+  add('File', 'designs', 'Your designs', () => openDialog('designs'), { keywords: 'open switch house' });
+  add('File', 'new', 'New house', () => openDialog('newHouse'));
   if (store.history) add('File', 'history', 'Version history', () => openHistory(design.id), { keywords: 'restore earlier backup' });
   add('File', 'photo', 'Photo-real picture of this view', takePhoto, { keywords: 'render' });
   add('File', 'copyimg', 'Copy a picture of this view', copyPicture, { keys: 'Ctrl+Shift+C', keywords: 'clipboard screenshot' });
@@ -2009,12 +1243,12 @@ function commands() {
   add('File', 'qty', 'Quantities and costs', () => exportAs('qty'), { keywords: 'budget price paint flooring' });
   add('File', 'glb', '3D model for Blender (.glb)', () => exportAs('glb').catch((err) => toast(`Export failed: ${err.message}`)));
   add('File', 'json', 'Design file (.json)', () => exportAs('design'), { keywords: 'backup share' });
-  add('File', 'import', 'Import a design file', () => $('#designFile').click());
-  add('File', 'dxf', 'Import a CAD floor plan (DXF)', () => $('#dxfFile').click());
+  add('File', 'import', 'Import a design file', () => pickFile('design'));
+  add('File', 'dxf', 'Import a CAD floor plan (DXF)', () => pickFile('dxf'));
 
   add('Help', 'assistant', 'Talk to your AI agent', () => chat?.toggle(true), { keys: 'C', keywords: 'chat ai assistant' });
   add('Help', 'agents', 'Connect an AI agent', openAgents);
-  add('Help', 'guide', 'User guide', () => openGuide($('#helpDialog')), { keys: 'F1 or ?' });
+  add('Help', 'guide', 'User guide', () => openDialog('help'), { keys: 'F1 or ?' });
   add('Help', 'tour', 'Show the tour again', startTour);
   add('Help', 'settings', 'Settings', () => reactUI.set({ settings: true }), { keywords: 'preferences currency theme graphics' });
   return walk ? c.filter((x) => !['Selection', 'Furniture', 'Add to room'].includes(x.group) || x.id === 'links') : c;
@@ -2127,7 +1361,7 @@ function contextMenu(e) {
       sep();
     }
     add('Select all furniture', selectAllItems, { keys: 'Ctrl+A' });
-    add('Add furniture from a link…', () => (ui.editing && setEditing(false), $('#linkInput').focus()));
+    add('Add furniture from a link…', focusLinkBox);
     add('Measure', () => setTool('measure'), { keys: 'M' });
     add('Zoom to the whole house', () => (viewer.select(null), viewer.frameHouse(true)), { keys: 'F' });
     sep();
@@ -2136,52 +1370,6 @@ function contextMenu(e) {
   if (items.at(-1)?.sep) items.pop();
   reactUI.set({ menu: { x: e.clientX, y: e.clientY, title, items } });
 }
-
-/**
- * Number fields take units and sums ("2.4 m", "1.2 m + 30 cm", "3 x 60"). The typed text is
- * turned into a plain number in the field's own unit before the field's handler reads it.
- * Arrow keys step the value (Shift for 10 steps).
- */
-function upgradeNumbers(root) {
-  for (const inp of root.querySelectorAll('input[type=number]:not([data-plain])')) {
-    inp.type = 'text';
-    inp.inputMode = 'decimal';
-    inp.autocomplete = 'off';
-    inp.dataset.num = '';
-    const labels = [inp.closest('label')?.textContent, inp.closest('.group')?.querySelector('.lbl')?.textContent, inp.closest('fieldset')?.querySelector('legend')?.textContent];
-    inp.dataset.unit = inp.dataset.unit || labels.map(unitFromLabel).find(Boolean) || '';
-    if (!inp.title && inp.dataset.unit) inp.dataset.tip = `Type a number in ${inp.dataset.unit}, or with a unit (2.4 m, 85 cm) or a sum (1.2 m + 30 cm). ↑/↓ change it.`;
-  }
-}
-function normaliseNumber(inp) {
-  if (!inp?.matches?.('input[data-num]')) return true;
-  const v = evalNumber(inp.value, inp.dataset.unit || null);
-  if (v == null) {
-    if (inp.value.trim()) toast(`“${inp.value}” isn’t a number Roomcraft understands. Try 240, 2.4 m or 1.2 m + 30 cm.`);
-    return false;
-  }
-  inp.value = String(v);
-  return true;
-}
-window.addEventListener('change', (e) => normaliseNumber(e.target) || e.stopImmediatePropagation(), true);
-window.addEventListener('submit', (e) => [...e.target.querySelectorAll('input[data-num]')].forEach((i) => normaliseNumber(i)), true);
-window.addEventListener('keydown', (e) => {
-  const inp = e.target;
-  if (!inp.matches?.('input[data-num]') || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-  e.preventDefault();
-  const v = evalNumber(inp.value, inp.dataset.unit || null) ?? 0;
-  const step = (parseFloat(inp.step) || 1) * (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
-  let nv = Math.round((v + step) * 1000) / 1000;
-  if (inp.min !== '') nv = Math.max(+inp.min, nv);
-  if (inp.max !== '') nv = Math.min(+inp.max, nv);
-  inp.value = String(nv);
-  inp.dispatchEvent(new Event('input', { bubbles: true }));
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
-}, true);
-new MutationObserver((muts) => {
-  for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) (n.matches('input[type=number]') ? upgradeNumbers(n.parentNode) : upgradeNumbers(n));
-}).observe(document.body, { childList: true, subtree: true });
-upgradeNumbers(document.body);
 
 // ---------- boot ----------
 
@@ -2203,8 +1391,6 @@ async function boot() {
   }
   design = await store.load(id);
   lastSaved = design.updatedAt;
-  $('#categorySelect').innerHTML = Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
-  $('#roomNames').innerHTML = ROOM_NAMES.map((n) => `<option value="${esc(n)}">`).join('');
 
   $('#loading').remove();
   viewer = new Viewer($('#viewport'), {
@@ -2237,9 +1423,9 @@ async function boot() {
       updateHint();
     },
     onPointer: (x, z, kind) => {
-      if (kind === 'elevation') return ($('#coords').textContent = `along ${x.toFixed(2)} m · height ${z.toFixed(2)} m`);
-      ui.pointer = [x, z];
-      $('#coords').textContent = `x ${x.toFixed(2)} m · z ${z.toFixed(2)} m`;
+      if (kind === 'elevation') ui.coords = `along ${x.toFixed(2)} m · height ${z.toFixed(2)} m`;
+      else (ui.pointer = [x, z]), (ui.coords = `x ${x.toFixed(2)} m · z ${z.toFixed(2)} m`);
+      reactUI?.bump('status');
     },
     onHeavyModel: (item, tris) => {
       ui.heavyWarned ||= new Set();
@@ -2276,16 +1462,14 @@ async function boot() {
   walker = new Walker(viewer, {
     onFloor: (fi) => {
       viewer.activeFloor = fi;
-      renderLevelBar();
       walkHelp(!!document.pointerLockElement);
-      renderInspector();
-      if ($('#leaveWalk')) $('#leaveWalk').onclick = () => setView('3d');
+      reactUI?.bump();
     },
   });
   measure = new Measure(viewer, {
     onResult: (r) => {
-      $('#hintbar').textContent = `${r.mode === 'surface' ? 'Along the surface' : r.mode === 'path' ? 'Path length' : 'Distance'}: ${r.length.toFixed(3)} m${r.mode !== 'distance' ? ` (straight line ${r.straight.toFixed(3)} m)` : ''}`;
-      renderToolBar();
+      setHint(`${r.mode === 'surface' ? 'Along the surface' : r.mode === 'path' ? 'Path length' : 'Distance'}: ${r.length.toFixed(3)} m${r.mode !== 'distance' ? ` (straight line ${r.straight.toFixed(3)} m)` : ''}`);
+      renderPanels();
     },
   });
   paint = new Paint(viewer, {
@@ -2293,8 +1477,8 @@ async function boot() {
       fn(floorNow());
       commit();
     },
-    picked: (fin) => (renderToolBar(), toast(`Picked up ${FINISH_NAMES[fin.kind] || fin.kind} ${fin.color}. Click to apply it.`)),
-    hover: (t) => ($('#hintbar').textContent = t),
+    picked: (fin) => (renderPanels(), toast(`Picked up ${FINISH_NAMES[fin.kind] || fin.kind} ${fin.color}. Click to apply it.`)),
+    hover: (t) => setHint(t),
   });
   tools = new Tools(viewer, {
     edit: (fn) => {
@@ -2311,16 +1495,7 @@ async function boot() {
     },
     options: () => ({ exterior: ui.wallExterior, thickness: ui.wallThickness, stairShape: ui.stairShape, stairTurn: ui.stairTurn, doorWidth: ui.doorWidth, windowWidth: ui.windowWidth, openingWidth: ui.openingWidth }),
   });
-  reactUI = mountUI({
-    commands, runCommand, settings, setSetting, startTour,
-    recentCommands: () => pref.get('recentCommands', []),
-    // After the first tour, offer to connect an agent (once)
-    tourEnded: async () => {
-      if (store.kind !== 'device' || pref.get('agentsDontAsk', false) || ui.askedAgents) return;
-      ui.askedAgents = true;
-      if (!(await refreshAgentsDot())) openAgents();
-    },
-  });
+  reactUI = mountUI(appApi());
   resetHistory();
   wireUI();
   renderAll();
@@ -2359,31 +1534,24 @@ async function boot() {
     }
   });
 
-  chat = initChat({
+  chat = createChat({
     local: store.kind === 'device',
     context: chatContext,
-    openAgents,
     onLinks: (urls) => importUrls(urls),
-    onReady: (r) => {
-      $('#autoModelRow').hidden = !r;
-      $('#autoModelAgent').textContent = r?.name || 'my agent';
-    },
+    onChange: () => reactUI.bump('chat'),
     onJobDone: (ev) => {
       if (ev.kind !== 'model') return;
       const item = itemById(ev.itemId);
       const q = ui.queue.find((x) => x.itemId && x.itemId === ev.itemId);
       if (q) {
-        Object.assign(q, { status: ev.error ? 'warn' : 'ok', message: (ev.error ? 'Your agent couldn’t finish the model; the draft is kept. ' : `Modelled and checked by your agent · `) + `<a data-add="${esc(ev.itemId)}">Add to room</a>` });
-        renderQueue();
+        Object.assign(q, { status: ev.error ? 'warn' : 'ok', message: ev.error ? 'Your agent couldn’t finish the model; the draft is kept.' : 'Modelled and checked by your agent', actions: [['Add to room', 'add', ev.itemId]] });
       }
       if (item && !ev.error) (ui.ready ||= new Set()).add(item.id);
-      renderInventory();
-      $(`#inventory .card[data-id="${CSS.escape(ev.itemId || '')}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      renderPanels();
+      setTimeout(() => $(`#inventory .card[data-id="${CSS.escape(ev.itemId || '')}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
       toast(ev.error ? 'Your agent couldn’t finish a model. See the Assistant panel.' : `Your agent finished the model${item ? ` for “${item.name}”` : ''}. It’s at the top of your models.`, { action: item && ['Add to room', () => (ui.ready?.delete(item.id), addToRoom(item.id))] });
     },
   });
-  $('#autoModel').checked = pref.get('autoModel', true);
-  $('#autoModel').onchange = (e) => pref.set('autoModel', e.target.checked);
 
   const agents = await refreshAgentsDot();
   const firstRun = !pref.get('tourDone', false);
@@ -2393,144 +1561,8 @@ async function boot() {
 }
 
 function wireUI() {
-  $$('#viewSeg button').forEach((b) => (b.onclick = () => setView(b.dataset.view)));
-  $('#editBtn').onclick = () => setEditing(!ui.editing);
-  $('#undoBtn').onclick = () => restore(history.index - 1);
-  $('#redoBtn').onclick = () => restore(history.index + 1);
-  $('#photoCancel').onclick = () => {
-    photoAbort?.abort();
-    $('#photoOverlay').hidden = true;
-  };
-  $('#panelToggle').onclick = () => $('#leftPanel').classList.toggle('open');
-  $('#designBtn').onclick = () => (renderDesignList(), $('#designsDialog').showModal());
-  $('#newDesignBtn').onclick = () => $('#newHouseDialog').showModal();
-  $('#importDesignBtn').onclick = () => $('#designFile').click();
-  $('#agentsBtn').onclick = () => openAgents();
-  $('#agentsDontAsk').onchange = (e) => pref.set('agentsDontAsk', e.target.checked);
-  $$('dialog [data-close]').forEach((b) => (b.onclick = () => b.closest('dialog').close()));
-  $('#newHouseForm').onsubmit = (e) => {
-    e.preventDefault();
-    const f = e.target;
-    $('#newHouseDialog').close();
-    $('#designsDialog').close();
-    createHouse({ name: f.elements.name.value.trim() || 'My house', width: +f.width.value, depth: +f.depth.value, floors: Math.round(+f.floors.value), floorHeight: +f.height.value });
-  };
-  $('#designFile').onchange = (e) => (e.target.files[0] && importDesignFile(e.target.files[0]), (e.target.value = ''), $('#designsDialog').close());
+  $('#designFile').onchange = (e) => (e.target.files[0] && importDesignFile(e.target.files[0]), (e.target.value = ''));
   $('#dxfFile').onchange = (e) => (e.target.files[0] && importDxf(e.target.files[0]), (e.target.value = ''));
-
-  const menus = [['#menuBtn', '#menu'], ['#exportBtn', '#exportMenu']];
-  for (const [btn, m] of menus)
-    $(btn).onclick = (e) => {
-      e.stopPropagation();
-      for (const [, o] of menus) if (o !== m) $(o).hidden = true;
-      $(m).hidden = !$(m).hidden;
-    };
-  document.addEventListener('click', (e) => [...menus.map(([, m]) => m), '#viewMenu', '#sunPanel'].forEach((m) => !$(m).contains(e.target) && ($(m).hidden = true)));
-  $('#exportMenu').onclick = (e) => {
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    $('#exportMenu').hidden = true;
-    if (act === 'photo') takePhoto();
-    else if (act === 'copy') copyPicture();
-    else if (act) exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
-  };
-  $('#menu').onclick = (e) => {
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    $('#menu').hidden = true;
-    if (['glb', 'design', 'png'].includes(act)) exportAs(act).catch((err) => toast(`Export failed: ${err.message}`));
-    else if (act === 'photo') takePhoto();
-    else if (act === 'history') openHistory(design.id);
-    else if (act === 'tour') startTour();
-    else if (act === 'import-design') $('#designFile').click();
-    else if (act === 'import-dxf') $('#dxfFile').click();
-    else if (act === 'settings') reactUI.set({ settings: true });
-    else if (act === 'help') openGuide($('#helpDialog'));
-  };
-
-  // Models
-  $('#invSearch').oninput = renderInventory;
-  $('#invFilters').onclick = (e) => {
-    const b = e.target.closest('[data-filter]');
-    if (b) (ui.invFilter = b.dataset.filter), renderInventory();
-  };
-  $('#newItemBtn').onclick = () => openItemDialog({ id: uid('i'), name: '', category: 'sofa', colors: [] }, { isNew: true });
-  $('#inventory').addEventListener('click', (e) => {
-    const card = e.target.closest('.card');
-    if (!card) return;
-    const id = card.dataset.id;
-    const sw = e.target.closest('.sw');
-    if (sw) {
-      ui.pickedColor[id] = sw.dataset.color;
-      const sel = viewer.sel?.type === 'item' && findPlaced(viewer.sel.id).p;
-      if (sel?.itemId === id) (sel.color = sw.dataset.color), commit({ rebuild: false });
-      else renderInventory();
-      return;
-    }
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'add') (ui.ready?.delete(id), addToRoom(id));
-    else if (act === 'edit') openItemDialog(itemById(id));
-    else if (act === 'fav') {
-      const it = itemById(id);
-      it.favorite ? delete it.favorite : (it.favorite = true);
-      commit({ lib: true, rebuild: false });
-    }
-  });
-  $('#inventory').addEventListener('dragstart', (e) => {
-    const card = e.target.closest('.card');
-    if (!card) return;
-    e.dataTransfer.setData('application/x-roomcraft-item', card.dataset.id);
-    e.dataTransfer.effectAllowed = 'copy';
-    card.classList.add('dragging');
-  });
-  $('#inventory').addEventListener('dragend', (e) => e.target.closest?.('.card')?.classList.remove('dragging'));
-
-  // Model dialog
-  $('#addColorBtn').onclick = () => $('#colorRows').appendChild(colorRow());
-  $('#cancelItemBtn').onclick = () => $('#itemDialog').close();
-  $('#itemForm').onsubmit = (e) => {
-    e.preventDefault();
-    saveItemDialog();
-    $('#itemDialog').close();
-  };
-  $('#deleteItemBtn').onclick = () => {
-    const { item } = editing;
-    const n = placedCount(item.id);
-    if (n && !confirm(`Delete “${item.name}”? It is placed ${n} time(s) in this design.`)) return;
-    library.items = library.items.filter((i) => i !== item);
-    viewer.library = library.items;
-    for (const f of design.floors) f.placed = f.placed.filter((p) => p.itemId !== item.id);
-    $('#itemDialog').close();
-    viewer.select(null);
-    commit({ lib: true, rebuild: false });
-    toast('Model deleted.', { undo: true });
-  };
-  $('#itemForm').category.onchange = (e) => {
-    if (!editing?.isNew) return;
-    const def = DEFAULT_DIMS[e.target.value];
-    const f = $('#itemForm');
-    [f.w.value, f.d.value, f.h.value] = def.map((v) => cm(v));
-  };
-  $('#itemForm').elements.name.oninput = (e) => {
-    if (!editing?.isNew) return;
-    const cat = guessCategory(e.target.value);
-    if (cat !== 'box' && cat !== $('#itemForm').category.value) {
-      $('#itemForm').category.value = cat;
-      $('#itemForm').category.onchange({ target: $('#itemForm').category });
-    }
-  };
-
-  // Importing links
-  $('#importBtn').onclick = () => {
-    const urls = extractUrls($('#linkInput').value);
-    $('#linkInput').value = '';
-    importUrls(urls);
-  };
-  $('#linkInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      $('#importBtn').click();
-    }
-  });
-  $('#linkInput').addEventListener('paste', () => setTimeout(() => extractUrls($('#linkInput').value).length && $('#importBtn').click(), 0));
 
   // Drag & drop: links anywhere; model cards onto the view.
   let dragDepth = 0;
@@ -2562,16 +1594,6 @@ function wireUI() {
     }
   });
 
-  // Walk touch pad
-  $$('.dpad [data-move]').forEach((b) => {
-    const [f, s] = b.dataset.move.split(',').map(Number);
-    const on = (e) => (e.preventDefault(), walker.setMove(f, s));
-    const off = () => walker.setMove(0, 0);
-    b.addEventListener('pointerdown', on);
-    b.addEventListener('pointerup', off);
-    b.addEventListener('pointerleave', off);
-  });
-
   // Right-click: what you can do with what's under the pointer (a right-drag still pans)
   let rdown = null;
   $('#viewport').addEventListener('pointerdown', (e) => e.button === 2 && (rdown = [e.clientX, e.clientY]));
@@ -2580,8 +1602,6 @@ function wireUI() {
     if (rdown && Math.hypot(e.clientX - rdown[0], e.clientY - rdown[1]) > 5) return;
     contextMenu(e);
   });
-  $('#cmdBtn').onclick = () => reactUI.set({ palette: true });
-  $('#settingsBtn').onclick = () => reactUI.set({ settings: true });
 
   // Keyboard
   window.addEventListener('keydown', (e) => {
@@ -2598,7 +1618,7 @@ function wireUI() {
     if (/input|textarea|select/i.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.key.toLowerCase();
-    if (e.key === 'F1' || (e.key === '?' && !mod)) return e.preventDefault(), openGuide($('#helpDialog'));
+    if (e.key === 'F1' || (e.key === '?' && !mod)) return e.preventDefault(), openDialog('help');
     const sel = viewer.sel;
     if (mod && k === 'z') (e.preventDefault(), restore(history.index + (e.shiftKey ? 1 : -1)));
     else if (mod && k === 'y') (e.preventDefault(), restore(history.index + 1));
@@ -2668,11 +1688,47 @@ function wireUI() {
       wireUI.nudge = setTimeout(() => commit({ rebuild: false }), 400);
     }
   });
-  $('#helpBtn').onclick = () => openGuide($('#helpDialog'));
   $('#toggleLeft').onclick = () => togglePanel('left');
   $('#toggleRight').onclick = () => togglePanel('right');
   for (const side of ['left', 'right']) if (pref.get('hide-' + side, false)) document.body.classList.add('hide-' + side);
-  walkHelp(false);
+}
+
+/** Everything the React UI (js/ui) reads and calls. */
+function appApi() {
+  return {
+    get design() { return design; },
+    get library() { return library; },
+    get viewer() { return viewer; },
+    get store() { return store; },
+    get chat() { return chat; },
+    get measure() { return measure; },
+    get paint() { return paint; },
+    ui, history, pref, cm,
+    bump: (...t) => reactUI.bump(...t),
+    // lookups
+    floorNow, itemById, findPlaced, dimsOf, colorOf, placedCount, selectedPlaced, clearanceProblems, floorProblems, furnitureCost, money,
+    // editing
+    commit, restore, tidy, toast, updateHint, setView, setEditing, setTool, setFloor, addFloorAbove, deleteFloor, setDisplay, openElevation, closeElevation,
+    showAllFloors: () => (ui.tool && setTool(null), viewer.setShowAll(true), renderAll()),
+    toggleWallMode: () => (viewer.setWallMode(viewer.wallMode === 'cut' ? 'up' : 'cut'), pref.set('wallMode', viewer.wallMode), renderPanels()),
+    setWallKind: (ext) => ((ui.wallExterior = ext), (ui.wallThickness = ext ? DEFAULTS.exteriorWall : DEFAULTS.interiorWall), renderPanels()),
+    applySun, setSunOn, useMyLocation,
+    addToRoom, rotateItem, rotateGroup, againstWall, duplicate, deleteSelection, toggleLock, copyItems, pasteItems, alignItems, addOpening, moveToFloor, pickColor,
+    // furniture from links and the model editor
+    extractUrls, importUrls, queueAction, dismissQueue, newItem, openItemDialog, saveItem, deleteItem,
+    // designs and files
+    openDesign, duplicateDesign, renameDesign, deleteDesign, createHouse, openHistory, restoreVersion, openVersionCopy, pickFile,
+    exportAs, shareAction, takePhoto, cancelPhoto, savePhoto, copyPicture, download, fileName,
+    // agents, commands, settings
+    openAgents, refreshAgentsDot, commands, runCommand, settings, setSetting, startTour,
+    recentCommands: () => pref.get('recentCommands', []),
+    // After the first tour, offer to connect an agent (once)
+    tourEnded: async () => {
+      if (store.kind !== 'device' || pref.get('agentsDontAsk', false) || ui.askedAgents) return;
+      ui.askedAgents = true;
+      if (!(await refreshAgentsDot())) openAgents();
+    },
+  };
 }
 
 function togglePanel(side) {

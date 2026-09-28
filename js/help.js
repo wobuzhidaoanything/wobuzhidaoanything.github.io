@@ -1,5 +1,4 @@
-// In-app user guide: renders docs/user-guide.md with a chapter list on the left (jump to any
-// chapter; the current one is highlighted as you scroll) and a search box.
+// The user guide's markdown → HTML (shown by js/ui/Help.jsx, with its chapter list and search).
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const slug = (s) => s.toLowerCase().replace(/<[^>]+>/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
 
@@ -79,74 +78,4 @@ export function renderGuide(md) {
   flush();
   closeLists();
   return { html: out.join('\n'), toc };
-}
-
-let loaded = null;
-
-/** Open the guide in `dialog` (with #helpToc, #helpBody, #helpSearch inside). */
-export async function openGuide(dialog, { chapter } = {}) {
-  const toc = dialog.querySelector('#helpToc'), body = dialog.querySelector('#helpBody'), search = dialog.querySelector('#helpSearch');
-  if (!loaded) {
-    try {
-      const r = await fetch('docs/user-guide.md', { cache: 'no-store' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      loaded = renderGuide(await r.text());
-    } catch (err) {
-      loaded = { html: `<p>Couldn't load the guide (${esc(err.message)}). It's also in the Roomcraft folder: docs/user-guide.md</p>`, toc: [] };
-    }
-    body.innerHTML = loaded.html;
-    toc.innerHTML = loaded.toc.map((t) => `<a href="#${t.id}" data-id="${t.id}" class="l${t.level}">${esc(t.text)}</a>`).join('');
-    toc.addEventListener('click', (e) => {
-      const a = e.target.closest('a[data-id]');
-      if (!a) return;
-      e.preventDefault();
-      body.querySelector(`#${CSS.escape(a.dataset.id)}`)?.scrollIntoView({ block: 'start' });
-    });
-    // Highlight the chapter being read
-    body.addEventListener('scroll', () => {
-      let cur = null;
-      for (const h of body.querySelectorAll('h2, h3')) if (h.offsetTop - body.scrollTop < 60) cur = h.id;
-      for (const a of toc.querySelectorAll('a')) a.classList.toggle('on', a.dataset.id === cur);
-    });
-    // Search: show only matching sections, highlight the words
-    search.addEventListener('input', () => {
-      const q = search.value.trim().toLowerCase();
-      const blocks = [...body.children];
-      let sectionShown = false, headerEls = [];
-      for (const el of blocks) {
-        el.hidden = false;
-        el.querySelectorAll('mark').forEach((m) => m.replaceWith(m.textContent));
-      }
-      if (!q) return;
-      // Group blocks by h3/h2 section
-      let group = [];
-      const groups = [];
-      for (const el of blocks) {
-        if (/^H[123]$/.test(el.tagName) && group.length) groups.push(group), (group = []);
-        group.push(el);
-      }
-      groups.push(group);
-      for (const g of groups) {
-        const hit = g.some((el) => el.textContent.toLowerCase().includes(q));
-        for (const el of g) el.hidden = !hit;
-        if (hit) sectionShown = true;
-        void headerEls;
-      }
-      if (!sectionShown) return;
-      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-      const hits = [];
-      while (walker.nextNode()) if (walker.currentNode.nodeValue.toLowerCase().includes(q)) hits.push(walker.currentNode);
-      for (const n of hits.slice(0, 200)) {
-        const i = n.nodeValue.toLowerCase().indexOf(q);
-        const m = document.createElement('mark');
-        const after = n.splitText(i);
-        after.splitText(q.length);
-        m.textContent = after.nodeValue;
-        after.replaceWith(m);
-      }
-    });
-  }
-  dialog.showModal();
-  if (chapter) body.querySelector(`#${CSS.escape(chapter)}`)?.scrollIntoView({ block: 'start' });
-  setTimeout(() => search.focus(), 0);
 }
