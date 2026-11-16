@@ -72,7 +72,8 @@ export function MemberDetailPage() {
   const nextMember = TEAM_MEMBERS[(memberIndex + 1) % TEAM_MEMBERS.length];
   const isMorphTarget =
     transitionState.mode === "member" &&
-    transitionState.memberSlug === member.slug;
+    transitionState.memberSlug === member.slug &&
+    transitionState.source === "card";
 
   return (
     <div className="page-shell detail-page-shell">

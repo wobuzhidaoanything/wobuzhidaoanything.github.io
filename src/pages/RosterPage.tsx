@@ -120,45 +120,68 @@ export function RosterPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return;
     const chapters = Array.from(
       document.querySelectorAll<HTMLElement>(".member-chapter"),
     );
     const showcase = document.querySelector<HTMLElement>(".chapters-showcase");
     if (chapters.length === 0) return;
 
-    const chapterObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const id = entry.target.id.replace("chapter-", "");
-            if (id) setActiveChapter(id);
-          }
+    let rafId = 0;
+
+    const syncScrollSpy = () => {
+      rafId = 0;
+      const triggerY = window.innerHeight * 0.4;
+      let matchedId: string | null = null;
+      let closestId: string | null = null;
+      let closestDist = Number.POSITIVE_INFINITY;
+
+      for (const el of chapters) {
+        const rect = el.getBoundingClientRect();
+        const id = el.id.replace("chapter-", "");
+        if (!id) continue;
+
+        if (rect.top <= triggerY && rect.bottom > triggerY) {
+          matchedId = id;
+          break;
         }
-      },
-      { rootMargin: "-40% 0px -40% 0px", threshold: 0 },
-    );
 
-    for (const el of chapters) {
-      chapterObserver.observe(el);
-    }
-
-    const showcaseObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          setShowcaseInView(entry.isIntersecting);
+        const mid = (rect.top + rect.bottom) * 0.5;
+        const dist = Math.abs(mid - triggerY);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestId = id;
         }
-      },
-      { rootMargin: "-12% 0px -20% 0px", threshold: 0 },
-    );
+      }
 
-    if (showcase) {
-      showcaseObserver.observe(showcase);
-    }
+      const nextChapter = matchedId ?? closestId;
+      if (nextChapter) {
+        setActiveChapter((prev) => (prev === nextChapter ? prev : nextChapter));
+      }
+
+      if (showcase) {
+        const sRect = showcase.getBoundingClientRect();
+        const inView =
+          sRect.top <= window.innerHeight * 0.72 &&
+          sRect.bottom >= window.innerHeight * 0.25;
+        setShowcaseInView((prev) => (prev === inView ? prev : inView));
+      }
+    };
+
+    const scheduleSync = () => {
+      if (rafId !== 0) return;
+      rafId = window.requestAnimationFrame(syncScrollSpy);
+    };
+
+    syncScrollSpy();
+    window.addEventListener("scroll", scheduleSync, { passive: true });
+    window.addEventListener("resize", scheduleSync, { passive: true });
+    window.addEventListener("hashchange", scheduleSync);
 
     return () => {
-      chapterObserver.disconnect();
-      showcaseObserver.disconnect();
+      if (rafId !== 0) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", scheduleSync);
+      window.removeEventListener("resize", scheduleSync);
+      window.removeEventListener("hashchange", scheduleSync);
     };
   }, []);
 

@@ -6,13 +6,11 @@ import {
   useScroll,
   useTransform,
   type MotionValue,
-  type Variants,
 } from "motion/react";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import type { TeamMember } from "@/data/capstone";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
 import { TransitionLink } from "@/components/TransitionLink";
-import { useTransitionState } from "@/hooks/useTransitionMember";
 
 export type ChapterLayoutVariant =
   | "perspective-lens"
@@ -26,54 +24,35 @@ interface MemberChapterProps {
   pinSide?: "left" | "right";
 }
 
-const EASE = [0.22, 1, 0.36, 1] as const;
+function ScrollBeat({
+  children,
+  className = "chapter-beat",
+  shouldReduceMotion,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  shouldReduceMotion: boolean;
+}) {
+  const beatRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: beatRef,
+    offset: ["start 96%", "start 66%"],
+  });
+  const beatY = useTransform(scrollYProgress, [0, 1], ["2.5%", "0%"]);
+  const beatScale = useTransform(scrollYProgress, [0, 1], [0.98, 1]);
 
-const containerVariants: Variants = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.02,
-    },
-  },
-};
-
-const riseVariants: Variants = {
-  hidden: { opacity: 0, y: 14 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: EASE },
-  },
-};
-
-const ruleVariants: Variants = {
-  hidden: { scaleX: 0, opacity: 0 },
-  visible: {
-    scaleX: 1,
-    opacity: 1,
-    transition: { duration: 0.34, ease: EASE },
-  },
-};
-
-const beatListVariants: Variants = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.06,
-      delayChildren: 0.04,
-    },
-  },
-};
-
-const beatItemVariants: Variants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.34, ease: EASE },
-  },
-};
+  return (
+    <motion.div
+      ref={beatRef}
+      className={className}
+      style={
+        shouldReduceMotion ? undefined : { y: beatY, scale: beatScale }
+      }
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 export function MemberChapter({
   member,
@@ -81,7 +60,6 @@ export function MemberChapter({
   pinSide,
 }: MemberChapterProps) {
   const shouldReduceMotion = Boolean(useReducedMotion());
-  const transitionState = useTransitionState();
   const sectionRef = useRef<HTMLElement>(null);
 
   const { scrollYProgress } = useScroll({
@@ -89,34 +67,12 @@ export function MemberChapter({
     offset: ["start 80%", "end 25%"],
   });
 
-  const nameScale = useTransform(scrollYProgress, [0, 0.26], [1.16, 0.76]);
-  const nameY = useTransform(scrollYProgress, [0, 0.26], ["10%", "0%"]);
+  const nameScale = useTransform(scrollYProgress, [0, 0.28], [1, 0.74]);
   const pinProgress = useTransform(scrollYProgress, [0.06, 0.88], [0, 1]);
-
-  const isMorphTarget =
-    transitionState.mode === "member" &&
-    transitionState.memberSlug === member.slug &&
-    transitionState.source === "chapter";
 
   const isCharcoalBand = layoutVariant === "charcoal-carousel";
   const resolvedPinSide =
     pinSide ?? (Number(member.index) % 2 === 0 ? "right" : "left");
-
-  const nameStyle: React.CSSProperties | undefined = (() => {
-    const base: React.CSSProperties = {};
-    if (isMorphTarget) {
-      base.viewTransitionName = "member-name";
-    }
-    if (!shouldReduceMotion) {
-      return {
-        ...base,
-        scale: nameScale as unknown as number,
-        y: nameY as unknown as string,
-        transformOrigin: "0% 0%",
-      };
-    }
-    return Object.keys(base).length > 0 ? base : undefined;
-  })();
 
   return (
     <section
@@ -129,70 +85,44 @@ export function MemberChapter({
       data-pillar={member.pillar}
       aria-labelledby={`chapter-heading-${member.index}`}
     >
-      <motion.div
-        className="chapter-inner"
-        variants={containerVariants}
-        initial={shouldReduceMotion ? false : "hidden"}
-        whileInView="visible"
-        viewport={{ once: true, amount: "some" }}
-        style={
-          isMorphTarget
-            ? ({ viewTransitionName: "member-card" } as React.CSSProperties)
-            : undefined
-        }
-      >
+      <div className="chapter-inner">
         <div className="chapter-identity">
-          <motion.div
+          <div
             className="chapter-accent-rule"
             data-pillar={member.pillar}
-            variants={ruleVariants}
             aria-hidden="true"
           />
 
-          <motion.div className="chapter-meta" variants={riseVariants}>
-            <span
-              className="chapter-index"
-              style={
-                isMorphTarget
-                  ? ({
-                      viewTransitionName: "member-index",
-                    } as React.CSSProperties)
-                  : undefined
-              }
-            >
-              {member.index} / 07
-            </span>
+          <div className="chapter-meta">
+            <span className="chapter-index">{member.index} / 07</span>
             <span className="pillar-label" data-pillar={member.pillar}>
               <span className="pillar-dot" aria-hidden="true" />
               <span>
                 {member.pillar} · {member.pillarFull}
               </span>
             </span>
-          </motion.div>
+          </div>
 
           <motion.h2
             id={`chapter-heading-${member.index}`}
             className="chapter-name"
-            variants={riseVariants}
             style={
-              nameStyle as React.CSSProperties & {
-                scale?: MotionValue<number>;
-                y?: MotionValue<string>;
-              }
+              shouldReduceMotion
+                ? undefined
+                : ({
+                    scale: nameScale,
+                    transformOrigin: "0% 0%",
+                  } as React.CSSProperties & { scale: MotionValue<number> })
             }
           >
             {member.name}
           </motion.h2>
 
-          <motion.p className="chapter-role" variants={riseVariants}>
-            {member.role}
-          </motion.p>
+          <p className="chapter-role">{member.role}</p>
 
-          <motion.p className="chapter-bio" variants={riseVariants}>
-            {member.bio}
-          </motion.p>
+          <p className="chapter-bio">{member.bio}</p>
 
-          <motion.div className="chapter-actions" variants={riseVariants}>
+          <div className="chapter-actions">
             <TransitionLink
               to={`/member/${member.slug}`}
               direction="forward"
@@ -203,7 +133,7 @@ export function MemberChapter({
               <span>View full profile</span>
               <ArrowRight className="size-4" aria-hidden="true" />
             </TransitionLink>
-          </motion.div>
+          </div>
 
           <div className="chapter-pin-track" aria-hidden="true">
             <motion.span
@@ -243,7 +173,7 @@ export function MemberChapter({
             />
           )}
         </div>
-      </motion.div>
+      </div>
     </section>
   );
 }
@@ -299,13 +229,7 @@ function PerspectiveLensStage({
 
   return (
     <div className="perspective-stage">
-      <motion.div
-        className="chapter-beat"
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
-      >
+      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
         <motion.div
           className="perspective-canvas"
           style={shouldReduceMotion ? undefined : { y: mediaY }}
@@ -370,36 +294,26 @@ function PerspectiveLensStage({
             </motion.div>
           </AnimatePresence>
         </div>
-      </motion.div>
+      </ScrollBeat>
 
-      <motion.div
+      <ScrollBeat
         className="chapter-beat chapter-beat-card"
-        variants={beatListVariants}
-        initial={shouldReduceMotion ? false : "hidden"}
-        whileInView="visible"
-        viewport={{ once: true, amount: "some" }}
+        shouldReduceMotion={shouldReduceMotion}
       >
         <h3 className="chapter-kicker">Skillsets</h3>
         <ul className="chapter-skills-list">
           {member.skillsets.map((skill, idx) => (
-            <motion.li
-              key={skill}
-              className="chapter-skill-item"
-              variants={beatItemVariants}
-            >
+            <li key={skill} className="chapter-skill-item">
               <span className="chapter-skill-num">0{idx + 1}</span>
               <span className="chapter-skill-name">{skill}</span>
-            </motion.li>
+            </li>
           ))}
         </ul>
-      </motion.div>
+      </ScrollBeat>
 
-      <motion.div
+      <ScrollBeat
         className="chapter-beat chapter-beat-card"
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
+        shouldReduceMotion={shouldReduceMotion}
       >
         <h3 className="chapter-kicker">Interests &amp; Studio Focus</h3>
         <p className="chapter-interests-line">
@@ -413,7 +327,7 @@ function PerspectiveLensStage({
             </li>
           ))}
         </ul>
-      </motion.div>
+      </ScrollBeat>
     </div>
   );
 }
@@ -432,22 +346,11 @@ function DiptychCollageStage({
 
   return (
     <div className="diptych-stage">
-      <div className="chapter-beat">
+      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
         <div className="diptych-collage">
           <motion.div
             className="diptych-plate diptych-plate-primary"
             style={shouldReduceMotion ? undefined : { y: plateAY }}
-            initial={
-              shouldReduceMotion
-                ? false
-                : { clipPath: "inset(10% 0% 0% 0%)", opacity: 0 }
-            }
-            whileInView={{
-              clipPath: "inset(0% 0% 0% 0%)",
-              opacity: 1,
-            }}
-            viewport={{ once: true, amount: "some" }}
-            transition={{ duration: 0.44, ease: EASE }}
           >
             <ArtifactFrame
               member={member}
@@ -462,17 +365,6 @@ function DiptychCollageStage({
           <motion.div
             className="diptych-plate diptych-plate-secondary"
             style={shouldReduceMotion ? undefined : { y: plateBY }}
-            initial={
-              shouldReduceMotion
-                ? false
-                : { clipPath: "inset(12% 0% 0% 0%)", opacity: 0 }
-            }
-            whileInView={{
-              clipPath: "inset(0% 0% 0% 0%)",
-              opacity: 1,
-            }}
-            viewport={{ once: true, amount: "some" }}
-            transition={{ duration: 0.44, delay: 0.06, ease: EASE }}
           >
             <ArtifactFrame
               member={member}
@@ -484,36 +376,26 @@ function DiptychCollageStage({
             />
           </motion.div>
         </div>
-      </div>
+      </ScrollBeat>
 
-      <motion.div
+      <ScrollBeat
         className="chapter-beat chapter-beat-card"
-        variants={beatListVariants}
-        initial={shouldReduceMotion ? false : "hidden"}
-        whileInView="visible"
-        viewport={{ once: true, amount: "some" }}
+        shouldReduceMotion={shouldReduceMotion}
       >
         <h3 className="chapter-kicker">Skillsets</h3>
         <ul className="chapter-skills-list">
           {member.skillsets.map((skill, idx) => (
-            <motion.li
-              key={skill}
-              className="chapter-skill-item"
-              variants={beatItemVariants}
-            >
+            <li key={skill} className="chapter-skill-item">
               <span className="chapter-skill-num">0{idx + 1}</span>
               <span className="chapter-skill-name">{skill}</span>
-            </motion.li>
+            </li>
           ))}
         </ul>
-      </motion.div>
+      </ScrollBeat>
 
-      <motion.div
+      <ScrollBeat
         className="chapter-beat chapter-beat-card"
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
+        shouldReduceMotion={shouldReduceMotion}
       >
         <h3 className="chapter-kicker">Studio &amp; Beyond</h3>
         <p className="chapter-interests-line">{member.interests.join(" · ")}</p>
@@ -524,7 +406,7 @@ function DiptychCollageStage({
             </li>
           ))}
         </ul>
-      </motion.div>
+      </ScrollBeat>
     </div>
   );
 }
@@ -730,137 +612,129 @@ function CharcoalCarouselStage({
 
   return (
     <div className="feature-stage">
-      <motion.div
-        className="chapter-beat"
-        style={shouldReduceMotion ? undefined : { y: mediaY }}
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
-      >
-        <ArtifactFrame
-          member={member}
-          src={member.artifacts?.heroImage}
-          aspectRatio="16/10"
-          plateLabel={`${member.pillar} · ${member.pillarFull}`}
-          tone="charcoal"
-        />
-      </motion.div>
+      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
+        <motion.div style={shouldReduceMotion ? undefined : { y: mediaY }}>
+          <ArtifactFrame
+            member={member}
+            src={member.artifacts?.heroImage}
+            aspectRatio="16/10"
+            plateLabel={`${member.pillar} · ${member.pillarFull}`}
+            headline={member.role}
+            subline={member.skillsets.slice(0, 3).join(" · ")}
+            tone="charcoal"
+          />
+        </motion.div>
+      </ScrollBeat>
 
-      <motion.section
-        className="chapter-beat peek-stage"
-        aria-roledescription="carousel"
-        aria-label={`${member.name} ${activeTab === "skillsets" ? "skillsets" : "interests"}`}
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
-      >
-        <div className="peek-header">
-          <div
-            className="peek-tabs"
-            role="tablist"
-            aria-label={`${member.name} focus areas`}
-          >
-            {(["skillsets", "focus"] as const).map((tab) => {
-              const isSelected = activeTab === tab;
-              const label =
-                tab === "skillsets" ? "Skillsets" : "Focus & Interests";
-              return (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  className="peek-tab-btn"
-                  onClick={() => setActiveTab(tab)}
-                >
-                  {isSelected && (
-                    <motion.span
-                      layoutId={`peek-tab-${member.id}`}
-                      className="peek-tab-pill"
-                      transition={
-                        shouldReduceMotion
-                          ? { duration: 0 }
-                          : { type: "spring", stiffness: 420, damping: 36 }
-                      }
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="peek-tab-label">{label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="peek-controls">
-            <button
-              type="button"
-              className="peek-nav-btn"
-              aria-label="Previous slide"
-              disabled={!canScrollPrev}
-              onClick={() => handleStep(-1)}
-            >
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="peek-nav-btn"
-              aria-label="Next slide"
-              disabled={!canScrollNext}
-              onClick={() => handleStep(1)}
-            >
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-
-        <div
-          ref={trackRef}
-          className="peek-carousel"
-          role="group"
-          aria-label="Slides"
-          tabIndex={0}
+      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
+        <section
+          className="peek-stage"
+          aria-roledescription="carousel"
+          aria-label={`${member.name} ${activeTab === "skillsets" ? "skillsets" : "interests"}`}
         >
-          {cards.map((card, idx) => (
-            <article
-              key={card.id}
-              role="group"
-              aria-roledescription="slide"
-              aria-label={`${idx + 1} of ${cards.length}`}
-              className="peek-card"
+          <div className="peek-header">
+            <div
+              className="peek-tabs"
+              role="tablist"
+              aria-label={`${member.name} focus areas`}
             >
-              <span className="peek-card-tag">{card.tag}</span>
-              <h3 className="peek-card-title">{card.title}</h3>
-              <p className="peek-card-detail">{card.detail}</p>
-            </article>
-          ))}
-        </div>
+              {(["skillsets", "focus"] as const).map((tab) => {
+                const isSelected = activeTab === tab;
+                const label =
+                  tab === "skillsets" ? "Skillsets" : "Focus & Interests";
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    className="peek-tab-btn"
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {isSelected && (
+                      <motion.span
+                        layoutId={`peek-tab-${member.id}`}
+                        className="peek-tab-pill"
+                        transition={
+                          shouldReduceMotion
+                            ? { duration: 0 }
+                            : { type: "spring", stiffness: 420, damping: 36 }
+                        }
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="peek-tab-label">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-        <nav className="peek-markers" aria-label="Choose a slide">
-          {cards.map((card, idx) => (
-            <button
-              key={card.id}
-              type="button"
-              className="peek-marker-btn"
-              aria-label={`Go to slide ${idx + 1}: ${card.title}`}
-              aria-current={idx === activeIndex ? "true" : undefined}
-              onClick={() => scrollToSlide(idx)}
-            />
-          ))}
-        </nav>
+            <div className="peek-controls">
+              <button
+                type="button"
+                className="peek-nav-btn"
+                aria-label="Previous slide"
+                disabled={!canScrollPrev}
+                onClick={() => handleStep(-1)}
+              >
+                <ChevronLeft className="size-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="peek-nav-btn"
+                aria-label="Next slide"
+                disabled={!canScrollNext}
+                onClick={() => handleStep(1)}
+              >
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
 
-        <p className="visually-hidden" role="status" aria-live="polite">
-          {settledAnnouncement}
-        </p>
-      </motion.section>
+          <div
+            ref={trackRef}
+            className="peek-carousel"
+            role="group"
+            aria-label="Slides"
+            tabIndex={0}
+          >
+            {cards.map((card, idx) => (
+              <article
+                key={card.id}
+                role="group"
+                aria-roledescription="slide"
+                aria-label={`${idx + 1} of ${cards.length}`}
+                className="peek-card"
+              >
+                <span className="peek-card-tag">{card.tag}</span>
+                <h3 className="peek-card-title">{card.title}</h3>
+                <p className="peek-card-detail">{card.detail}</p>
+              </article>
+            ))}
+          </div>
 
-      <motion.div
+          <nav className="peek-markers" aria-label="Choose a slide">
+            {cards.map((card, idx) => (
+              <button
+                key={card.id}
+                type="button"
+                className="peek-marker-btn"
+                aria-label={`Go to slide ${idx + 1}: ${card.title}`}
+                aria-current={idx === activeIndex ? "true" : undefined}
+                onClick={() => scrollToSlide(idx)}
+              />
+            ))}
+          </nav>
+
+          <p className="visually-hidden" role="status" aria-live="polite">
+            {settledAnnouncement}
+          </p>
+        </section>
+      </ScrollBeat>
+
+      <ScrollBeat
         className="chapter-beat chapter-spec-grid"
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
+        shouldReduceMotion={shouldReduceMotion}
       >
         <div className="chapter-beat-card">
           <h3 className="chapter-kicker">Core Capabilities</h3>
@@ -872,7 +746,7 @@ function CharcoalCarouselStage({
             {member.interests.join(" · ")}
           </p>
         </div>
-      </motion.div>
+      </ScrollBeat>
     </div>
   );
 }
@@ -889,17 +763,11 @@ function EditorialSpotlightStage({
   const lenses = useMemberLenses(member);
   const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "craft");
   const currentLens = lenses.find((l) => l.id === activeLensId) ?? lenses[0];
-  const frameScale = useTransform(scrollYProgress, [0, 0.35], [0.95, 1]);
+  const frameScale = useTransform(scrollYProgress, [0, 0.35], [0.96, 1]);
 
   return (
     <div className="spotlight-stage">
-      <motion.div
-        className="chapter-beat"
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
-      >
+      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
         <motion.div
           className="spotlight-canvas"
           style={shouldReduceMotion ? undefined : { scale: frameScale }}
@@ -963,39 +831,26 @@ function EditorialSpotlightStage({
             </motion.div>
           </AnimatePresence>
         </div>
-      </motion.div>
+      </ScrollBeat>
 
-      <motion.div
-        className="chapter-beat"
-        variants={beatListVariants}
-        initial={shouldReduceMotion ? false : "hidden"}
-        whileInView="visible"
-        viewport={{ once: true, amount: "some" }}
-      >
+      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
         <h3 className="chapter-kicker">Skillsets</h3>
         <ul className="spotlight-skill-grid">
           {member.skillsets.map((skill, idx) => (
-            <motion.li
-              key={skill}
-              className="spotlight-skill-card"
-              variants={beatItemVariants}
-            >
+            <li key={skill} className="spotlight-skill-card">
               <span className="chapter-skill-num">0{idx + 1}</span>
               <span className="spotlight-skill-title">{skill}</span>
               <span className="spotlight-skill-meta">
                 {member.pillar} · {member.role}
               </span>
-            </motion.li>
+            </li>
           ))}
         </ul>
-      </motion.div>
+      </ScrollBeat>
 
-      <motion.div
+      <ScrollBeat
         className="chapter-beat chapter-beat-card"
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.42, ease: EASE }}
+        shouldReduceMotion={shouldReduceMotion}
       >
         <h3 className="chapter-kicker">Interests &amp; Exploration</h3>
         <p className="chapter-interests-line">
@@ -1010,7 +865,7 @@ function EditorialSpotlightStage({
             </li>
           ))}
         </ul>
-      </motion.div>
+      </ScrollBeat>
     </div>
   );
 }
