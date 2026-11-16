@@ -5,6 +5,7 @@ import {
   useReducedMotion,
   useScroll,
   useTransform,
+  type MotionValue,
   type Variants,
 } from "motion/react";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
@@ -14,17 +15,15 @@ import { TransitionLink } from "@/components/TransitionLink";
 import { useTransitionState } from "@/hooks/useTransitionMember";
 
 export type ChapterLayoutVariant =
-  | "split"
-  | "split-reverse"
-  | "offset"
-  | "monumental"
-  | "split-wide"
-  | "inset"
-  | "compact-band";
+  | "perspective-lens"
+  | "diptych-collage"
+  | "charcoal-carousel"
+  | "editorial-spotlight";
 
 interface MemberChapterProps {
   member: TeamMember;
   layoutVariant: ChapterLayoutVariant;
+  pinSide?: "left" | "right";
 }
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -40,20 +39,11 @@ const containerVariants: Variants = {
 };
 
 const riseVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 14 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.36, ease: EASE },
-  },
-};
-
-const skillItemVariants: Variants = {
-  hidden: { opacity: 0, y: 8 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.3, ease: EASE },
+    transition: { duration: 0.4, ease: EASE },
   },
 };
 
@@ -66,30 +56,67 @@ const ruleVariants: Variants = {
   },
 };
 
-export function MemberChapter({ member, layoutVariant }: MemberChapterProps) {
-  const shouldReduceMotion = useReducedMotion();
+const beatListVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.04,
+    },
+  },
+};
+
+const beatItemVariants: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.34, ease: EASE },
+  },
+};
+
+export function MemberChapter({
+  member,
+  layoutVariant,
+  pinSide,
+}: MemberChapterProps) {
+  const shouldReduceMotion = Boolean(useReducedMotion());
   const transitionState = useTransitionState();
   const sectionRef = useRef<HTMLElement>(null);
 
   const { scrollYProgress } = useScroll({
     target: sectionRef,
-    offset: ["start end", "end start"],
+    offset: ["start 80%", "end 25%"],
   });
 
-  /* Proportional scroll travel (%) so motion scales with element size at any viewport or zoom */
-  const plateAY = useTransform(scrollYProgress, [0, 1], ["3.5%", "-3.5%"]);
-  const plateBY = useTransform(scrollYProgress, [0, 1], ["-3%", "4.5%"]);
+  const nameScale = useTransform(scrollYProgress, [0, 0.26], [1.16, 0.76]);
+  const nameY = useTransform(scrollYProgress, [0, 0.26], ["10%", "0%"]);
+  const pinProgress = useTransform(scrollYProgress, [0.06, 0.88], [0, 1]);
 
   const isMorphTarget =
     transitionState.mode === "member" &&
     transitionState.memberSlug === member.slug &&
     transitionState.source === "chapter";
 
-  const isCharcoalBand =
-    layoutVariant === "offset" || layoutVariant === "compact-band";
-  const isDiptych =
-    layoutVariant === "split-reverse" || layoutVariant === "inset";
-  const isCenterpiece = layoutVariant === "monumental";
+  const isCharcoalBand = layoutVariant === "charcoal-carousel";
+  const resolvedPinSide =
+    pinSide ?? (Number(member.index) % 2 === 0 ? "right" : "left");
+
+  const nameStyle: React.CSSProperties | undefined = (() => {
+    const base: React.CSSProperties = {};
+    if (isMorphTarget) {
+      base.viewTransitionName = "member-name";
+    }
+    if (!shouldReduceMotion) {
+      return {
+        ...base,
+        scale: nameScale as unknown as number,
+        y: nameY as unknown as string,
+        transformOrigin: "0% 0%",
+      };
+    }
+    return Object.keys(base).length > 0 ? base : undefined;
+  })();
 
   return (
     <section
@@ -97,6 +124,7 @@ export function MemberChapter({ member, layoutVariant }: MemberChapterProps) {
       id={`chapter-${member.index}`}
       className="member-chapter"
       data-variant={layoutVariant}
+      data-pin={resolvedPinSide}
       data-surface={isCharcoalBand ? "charcoal" : undefined}
       data-pillar={member.pillar}
       aria-labelledby={`chapter-heading-${member.index}`}
@@ -147,9 +175,10 @@ export function MemberChapter({ member, layoutVariant }: MemberChapterProps) {
             className="chapter-name"
             variants={riseVariants}
             style={
-              isMorphTarget
-                ? ({ viewTransitionName: "member-name" } as React.CSSProperties)
-                : undefined
+              nameStyle as React.CSSProperties & {
+                scale?: MotionValue<number>;
+                y?: MotionValue<string>;
+              }
             }
           >
             {member.name}
@@ -175,30 +204,42 @@ export function MemberChapter({ member, layoutVariant }: MemberChapterProps) {
               <ArrowRight className="size-4" aria-hidden="true" />
             </TransitionLink>
           </motion.div>
+
+          <div className="chapter-pin-track" aria-hidden="true">
+            <motion.span
+              className="chapter-pin-progress"
+              style={shouldReduceMotion ? undefined : { scaleX: pinProgress }}
+            />
+          </div>
         </div>
 
         <div className="chapter-stage">
-          {isCenterpiece ? (
-            <InteractivePerspectiveStage
+          {layoutVariant === "perspective-lens" && (
+            <PerspectiveLensStage
               member={member}
-              shouldReduceMotion={Boolean(shouldReduceMotion)}
+              scrollYProgress={scrollYProgress}
+              shouldReduceMotion={shouldReduceMotion}
             />
-          ) : isCharcoalBand ? (
-            <PeekCarouselStage
+          )}
+          {layoutVariant === "diptych-collage" && (
+            <DiptychCollageStage
               member={member}
-              shouldReduceMotion={Boolean(shouldReduceMotion)}
+              scrollYProgress={scrollYProgress}
+              shouldReduceMotion={shouldReduceMotion}
             />
-          ) : isDiptych ? (
-            <DiptychStage
+          )}
+          {layoutVariant === "charcoal-carousel" && (
+            <CharcoalCarouselStage
               member={member}
-              plateAY={plateAY}
-              plateBY={plateBY}
-              shouldReduceMotion={Boolean(shouldReduceMotion)}
+              scrollYProgress={scrollYProgress}
+              shouldReduceMotion={shouldReduceMotion}
             />
-          ) : (
-            <PopOutSpecStage
+          )}
+          {layoutVariant === "editorial-spotlight" && (
+            <EditorialSpotlightStage
               member={member}
-              shouldReduceMotion={Boolean(shouldReduceMotion)}
+              scrollYProgress={scrollYProgress}
+              shouldReduceMotion={shouldReduceMotion}
             />
           )}
         </div>
@@ -207,139 +248,294 @@ export function MemberChapter({ member, layoutVariant }: MemberChapterProps) {
   );
 }
 
-function PopOutSpecStage({
+function useMemberLenses(member: TeamMember) {
+  return useMemo(() => {
+    if (member.artifacts?.lenses && member.artifacts.lenses.length > 0) {
+      return member.artifacts.lenses.map((lens) => ({
+        ...lens,
+        headline: member.role,
+        subline: member.skillsets.slice(0, 3).join(" · "),
+      }));
+    }
+    return [
+      {
+        id: "craft",
+        label: "Craft",
+        headline: member.role,
+        subline: member.skillsets.slice(0, 3).join(" · "),
+        summary: member.bio,
+      },
+      {
+        id: "toolchain",
+        label: "Toolchain",
+        headline: member.skillsets.slice(0, 2).join(" & "),
+        subline: member.skillsets.join(" · "),
+        summary: member.skillsets.join(" · "),
+      },
+      {
+        id: "role",
+        label: "Capstone Role",
+        headline: member.pillarFull,
+        subline: `${member.pillar} · ${member.interests.slice(0, 2).join(" · ")}`,
+        summary: `${member.pillarFull} — ${member.role}`,
+      },
+    ];
+  }, [member]);
+}
+
+function PerspectiveLensStage({
   member,
+  scrollYProgress,
   shouldReduceMotion,
 }: {
   member: TeamMember;
+  scrollYProgress: MotionValue<number>;
   shouldReduceMotion: boolean;
 }) {
+  const lenses = useMemberLenses(member);
+  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "craft");
+  const currentLens = lenses.find((l) => l.id === activeLensId) ?? lenses[0];
+  const mediaY = useTransform(scrollYProgress, [0, 1], ["3%", "-3%"]);
+
   return (
-    <div className="pop-spec-stage">
+    <div className="perspective-stage">
       <motion.div
-        className="chapter-pop-frame"
-        variants={riseVariants}
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+        className="chapter-beat"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: "some" }}
-        transition={{ duration: 0.34, ease: EASE }}
+        transition={{ duration: 0.42, ease: EASE }}
       >
-        <ArtifactFrame
-          member={member}
-          src={member.artifacts?.heroImage}
-          aspectRatio="16/10"
-          plateLabel={`${member.pillar} · ${member.pillarFull}`}
-        />
+        <motion.div
+          className="perspective-canvas"
+          style={shouldReduceMotion ? undefined : { y: mediaY }}
+        >
+          <ArtifactFrame
+            member={member}
+            src={member.artifacts?.heroImage}
+            aspectRatio="16/10"
+            plateLabel={`${member.pillar} · ${currentLens.label}`}
+            headline={currentLens.headline}
+            subline={currentLens.subline}
+            className="perspective-artifact"
+          />
+        </motion.div>
+
+        <div className="perspective-controls">
+          <div
+            className="perspective-lens-strip"
+            role="group"
+            aria-label="Perspective lens"
+          >
+            {lenses.map((lens) => {
+              const active = lens.id === activeLensId;
+              return (
+                <button
+                  key={lens.id}
+                  type="button"
+                  aria-pressed={active}
+                  className="perspective-lens-btn"
+                  onClick={() => setActiveLensId(lens.id)}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId={`perspective-lens-${member.id}`}
+                      className="perspective-lens-pill"
+                      transition={
+                        shouldReduceMotion
+                          ? { duration: 0 }
+                          : { type: "spring", stiffness: 420, damping: 36 }
+                      }
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="perspective-lens-label">{lens.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentLens.id}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="perspective-readout"
+            >
+              <p className="perspective-lens-summary">
+                <strong>{currentLens.label}:</strong> {currentLens.summary}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </motion.div>
 
-      <div className="chapter-specs-block">
-        <motion.h3 className="chapter-kicker" variants={riseVariants}>
-          Skillsets
-        </motion.h3>
+      <motion.div
+        className="chapter-beat chapter-beat-card"
+        variants={beatListVariants}
+        initial={shouldReduceMotion ? false : "hidden"}
+        whileInView="visible"
+        viewport={{ once: true, amount: "some" }}
+      >
+        <h3 className="chapter-kicker">Skillsets</h3>
         <ul className="chapter-skills-list">
           {member.skillsets.map((skill, idx) => (
             <motion.li
               key={skill}
               className="chapter-skill-item"
-              variants={skillItemVariants}
+              variants={beatItemVariants}
             >
               <span className="chapter-skill-num">0{idx + 1}</span>
               <span className="chapter-skill-name">{skill}</span>
             </motion.li>
           ))}
         </ul>
-      </div>
+      </motion.div>
 
-      <motion.div className="chapter-interests-block" variants={riseVariants}>
-        <h3 className="chapter-kicker">Interests</h3>
-        <p className="chapter-interests-line">{member.interests.join(" · ")}</p>
+      <motion.div
+        className="chapter-beat chapter-beat-card"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: "some" }}
+        transition={{ duration: 0.42, ease: EASE }}
+      >
+        <h3 className="chapter-kicker">Interests &amp; Studio Focus</h3>
+        <p className="chapter-interests-line">
+          Exploring {member.interests.slice(0, 2).join(" and ").toLowerCase()}{" "}
+          alongside {member.role.toLowerCase()}.
+        </p>
+        <ul className="chapter-interest-tags">
+          {member.interests.map((interest) => (
+            <li key={interest} className="chapter-interest-tag">
+              {interest}
+            </li>
+          ))}
+        </ul>
       </motion.div>
     </div>
   );
 }
 
-function DiptychStage({
+function DiptychCollageStage({
   member,
-  plateAY,
-  plateBY,
+  scrollYProgress,
   shouldReduceMotion,
 }: {
   member: TeamMember;
-  plateAY: ReturnType<typeof useTransform<number, string>>;
-  plateBY: ReturnType<typeof useTransform<number, string>>;
+  scrollYProgress: MotionValue<number>;
   shouldReduceMotion: boolean;
 }) {
+  const plateAY = useTransform(scrollYProgress, [0, 1], ["4%", "-4%"]);
+  const plateBY = useTransform(scrollYProgress, [0, 1], ["-3%", "5%"]);
+
   return (
     <div className="diptych-stage">
-      <div className="diptych-collage">
-        <motion.div
-          className="diptych-plate diptych-plate-primary"
-          style={shouldReduceMotion ? undefined : { y: plateAY }}
-          initial={
-            shouldReduceMotion
-              ? false
-              : { clipPath: "inset(10% 0% 0% 0%)", opacity: 0 }
-          }
-          whileInView={{
-            clipPath: "inset(0% 0% 0% 0%)",
-            opacity: 1,
-          }}
-          viewport={{ once: true, amount: "some" }}
-          transition={{ duration: 0.4, ease: EASE }}
-        >
-          <ArtifactFrame
-            member={member}
-            src={member.artifacts?.heroImage}
-            aspectRatio="4/5"
-            plateLabel={`${member.pillar} · ${member.pillarFull}`}
-          />
-        </motion.div>
+      <div className="chapter-beat">
+        <div className="diptych-collage">
+          <motion.div
+            className="diptych-plate diptych-plate-primary"
+            style={shouldReduceMotion ? undefined : { y: plateAY }}
+            initial={
+              shouldReduceMotion
+                ? false
+                : { clipPath: "inset(10% 0% 0% 0%)", opacity: 0 }
+            }
+            whileInView={{
+              clipPath: "inset(0% 0% 0% 0%)",
+              opacity: 1,
+            }}
+            viewport={{ once: true, amount: "some" }}
+            transition={{ duration: 0.44, ease: EASE }}
+          >
+            <ArtifactFrame
+              member={member}
+              src={member.artifacts?.heroImage}
+              aspectRatio="4/5"
+              plateLabel={`${member.pillar} · ${member.pillarFull}`}
+              headline={member.role}
+              subline={member.skillsets.slice(0, 3).join(" · ")}
+            />
+          </motion.div>
 
-        <motion.div
-          className="diptych-plate diptych-plate-secondary"
-          style={shouldReduceMotion ? undefined : { y: plateBY }}
-          initial={
-            shouldReduceMotion
-              ? false
-              : { clipPath: "inset(12% 0% 0% 0%)", opacity: 0 }
-          }
-          whileInView={{
-            clipPath: "inset(0% 0% 0% 0%)",
-            opacity: 1,
-          }}
-          viewport={{ once: true, amount: "some" }}
-          transition={{ duration: 0.4, delay: 0.05, ease: EASE }}
-        >
-          <ArtifactFrame
-            member={member}
-            src={member.artifacts?.secondaryImage}
-            aspectRatio="16/10"
-            plateLabel={`${member.pillar} · Focus`}
-          />
-        </motion.div>
+          <motion.div
+            className="diptych-plate diptych-plate-secondary"
+            style={shouldReduceMotion ? undefined : { y: plateBY }}
+            initial={
+              shouldReduceMotion
+                ? false
+                : { clipPath: "inset(12% 0% 0% 0%)", opacity: 0 }
+            }
+            whileInView={{
+              clipPath: "inset(0% 0% 0% 0%)",
+              opacity: 1,
+            }}
+            viewport={{ once: true, amount: "some" }}
+            transition={{ duration: 0.44, delay: 0.06, ease: EASE }}
+          >
+            <ArtifactFrame
+              member={member}
+              src={member.artifacts?.secondaryImage}
+              aspectRatio="16/10"
+              plateLabel={`${member.pillar} · Studio Focus`}
+              headline={member.skillsets.slice(0, 2).join(" & ")}
+              subline={member.interests.join(" · ")}
+            />
+          </motion.div>
+        </div>
       </div>
 
-      <motion.div className="diptych-meta-strip" variants={riseVariants}>
-        <div>
-          <h3 className="chapter-kicker">Skillsets</h3>
-          <p className="chapter-inline-specs">{member.skillsets.join(" · ")}</p>
-        </div>
-        <div>
-          <h3 className="chapter-kicker">Interests</h3>
-          <p className="chapter-interests-line">
-            {member.interests.join(" · ")}
-          </p>
-        </div>
+      <motion.div
+        className="chapter-beat chapter-beat-card"
+        variants={beatListVariants}
+        initial={shouldReduceMotion ? false : "hidden"}
+        whileInView="visible"
+        viewport={{ once: true, amount: "some" }}
+      >
+        <h3 className="chapter-kicker">Skillsets</h3>
+        <ul className="chapter-skills-list">
+          {member.skillsets.map((skill, idx) => (
+            <motion.li
+              key={skill}
+              className="chapter-skill-item"
+              variants={beatItemVariants}
+            >
+              <span className="chapter-skill-num">0{idx + 1}</span>
+              <span className="chapter-skill-name">{skill}</span>
+            </motion.li>
+          ))}
+        </ul>
+      </motion.div>
+
+      <motion.div
+        className="chapter-beat chapter-beat-card"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: "some" }}
+        transition={{ duration: 0.42, ease: EASE }}
+      >
+        <h3 className="chapter-kicker">Studio &amp; Beyond</h3>
+        <p className="chapter-interests-line">{member.interests.join(" · ")}</p>
+        <ul className="chapter-interest-tags">
+          {member.interests.map((interest) => (
+            <li key={interest} className="chapter-interest-tag">
+              {interest}
+            </li>
+          ))}
+        </ul>
       </motion.div>
     </div>
   );
 }
 
-function PeekCarouselStage({
+function CharcoalCarouselStage({
   member,
+  scrollYProgress,
   shouldReduceMotion,
 }: {
   member: TeamMember;
+  scrollYProgress: MotionValue<number>;
   shouldReduceMotion: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<"skillsets" | "focus">(
@@ -356,6 +552,8 @@ function PeekCarouselStage({
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(true);
   const [settledAnnouncement, setSettledAnnouncement] = useState("");
+
+  const mediaY = useTransform(scrollYProgress, [0, 1], ["3%", "-3%"]);
 
   const cards = useMemo(() => {
     if (activeTab === "skillsets") {
@@ -531,223 +729,288 @@ function PeekCarouselStage({
   };
 
   return (
-    <section
-      className="peek-stage"
-      aria-roledescription="carousel"
-      aria-label={`${member.name} ${activeTab === "skillsets" ? "skillsets" : "interests"}`}
-    >
-      <div className="peek-header">
-        <div
-          className="peek-tabs"
-          role="tablist"
-          aria-label={`${member.name} focus areas`}
-        >
-          {(["skillsets", "focus"] as const).map((tab) => {
-            const isSelected = activeTab === tab;
-            const label =
-              tab === "skillsets" ? "Skillsets" : "Focus & Interests";
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                className="peek-tab-btn"
-                onClick={() => setActiveTab(tab)}
-              >
-                {isSelected && (
-                  <motion.span
-                    layoutId={`peek-tab-${member.id}`}
-                    className="peek-tab-pill"
-                    transition={
-                      shouldReduceMotion
-                        ? { duration: 0 }
-                        : { type: "spring", stiffness: 420, damping: 36 }
-                    }
-                    aria-hidden="true"
-                  />
-                )}
-                <span className="peek-tab-label">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="peek-controls">
-          <button
-            type="button"
-            className="peek-nav-btn"
-            aria-label="Previous slide"
-            disabled={!canScrollPrev}
-            onClick={() => handleStep(-1)}
-          >
-            <ChevronLeft className="size-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="peek-nav-btn"
-            aria-label="Next slide"
-            disabled={!canScrollNext}
-            onClick={() => handleStep(1)}
-          >
-            <ChevronRight className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
-      <div
-        ref={trackRef}
-        className="peek-carousel"
-        role="group"
-        aria-label="Slides"
-        tabIndex={0}
+    <div className="feature-stage">
+      <motion.div
+        className="chapter-beat"
+        style={shouldReduceMotion ? undefined : { y: mediaY }}
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: "some" }}
+        transition={{ duration: 0.42, ease: EASE }}
       >
-        {cards.map((card, idx) => (
-          <article
-            key={card.id}
-            role="group"
-            aria-roledescription="slide"
-            aria-label={`${idx + 1} of ${cards.length}`}
-            className="peek-card"
-          >
-            <span className="peek-card-tag">{card.tag}</span>
-            <h3 className="peek-card-title">{card.title}</h3>
-            <p className="peek-card-detail">{card.detail}</p>
-          </article>
-        ))}
-      </div>
-
-      <nav className="peek-markers" aria-label="Choose a slide">
-        {cards.map((card, idx) => (
-          <button
-            key={card.id}
-            type="button"
-            className="peek-marker-btn"
-            aria-label={`Go to slide ${idx + 1}: ${card.title}`}
-            aria-current={idx === activeIndex ? "true" : undefined}
-            onClick={() => scrollToSlide(idx)}
-          />
-        ))}
-      </nav>
-
-      <p className="visually-hidden" role="status" aria-live="polite">
-        {settledAnnouncement}
-      </p>
-    </section>
-  );
-}
-
-function InteractivePerspectiveStage({
-  member,
-  shouldReduceMotion,
-}: {
-  member: TeamMember;
-  shouldReduceMotion: boolean;
-}) {
-  const lenses = useMemo(
-    () =>
-      member.artifacts?.lenses ?? [
-        {
-          id: "craft",
-          label: "Craft",
-          summary: member.bio,
-        },
-        {
-          id: "toolchain",
-          label: "Toolchain",
-          summary: member.skillsets.join(" · "),
-        },
-        {
-          id: "role",
-          label: "Capstone Role",
-          summary: `${member.pillarFull} — ${member.role}`,
-        },
-      ],
-    [member],
-  );
-
-  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "craft");
-
-  const currentLens = lenses.find((l) => l.id === activeLensId) ?? lenses[0];
-
-  return (
-    <div className="perspective-stage">
-      <div className="perspective-canvas">
         <ArtifactFrame
           member={member}
           src={member.artifacts?.heroImage}
-          aspectRatio="16/9"
-          plateLabel={`${member.pillar} · ${currentLens.label}`}
-          className="perspective-artifact"
+          aspectRatio="16/10"
+          plateLabel={`${member.pillar} · ${member.pillarFull}`}
+          tone="charcoal"
         />
-      </div>
+      </motion.div>
 
-      <div className="perspective-controls">
-        <div
-          className="perspective-lens-strip"
-          role="group"
-          aria-label="Perspective lens"
-        >
-          {lenses.map((lens) => {
-            const active = lens.id === activeLensId;
-            return (
-              <button
-                key={lens.id}
-                type="button"
-                aria-pressed={active}
-                className="perspective-lens-btn"
-                onClick={() => setActiveLensId(lens.id)}
-              >
-                {active && (
-                  <motion.span
-                    layoutId={`perspective-lens-${member.id}`}
-                    className="perspective-lens-pill"
-                    transition={
-                      shouldReduceMotion
-                        ? { duration: 0 }
-                        : { type: "spring", stiffness: 420, damping: 36 }
-                    }
-                    aria-hidden="true"
-                  />
-                )}
-                <span className="perspective-lens-label">{lens.label}</span>
-              </button>
-            );
-          })}
+      <motion.section
+        className="chapter-beat peek-stage"
+        aria-roledescription="carousel"
+        aria-label={`${member.name} ${activeTab === "skillsets" ? "skillsets" : "interests"}`}
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: "some" }}
+        transition={{ duration: 0.42, ease: EASE }}
+      >
+        <div className="peek-header">
+          <div
+            className="peek-tabs"
+            role="tablist"
+            aria-label={`${member.name} focus areas`}
+          >
+            {(["skillsets", "focus"] as const).map((tab) => {
+              const isSelected = activeTab === tab;
+              const label =
+                tab === "skillsets" ? "Skillsets" : "Focus & Interests";
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  className="peek-tab-btn"
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {isSelected && (
+                    <motion.span
+                      layoutId={`peek-tab-${member.id}`}
+                      className="peek-tab-pill"
+                      transition={
+                        shouldReduceMotion
+                          ? { duration: 0 }
+                          : { type: "spring", stiffness: 420, damping: 36 }
+                      }
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="peek-tab-label">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="peek-controls">
+            <button
+              type="button"
+              className="peek-nav-btn"
+              aria-label="Previous slide"
+              disabled={!canScrollPrev}
+              onClick={() => handleStep(-1)}
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="peek-nav-btn"
+              aria-label="Next slide"
+              disabled={!canScrollNext}
+              onClick={() => handleStep(1)}
+            >
+              <ChevronRight className="size-4" aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentLens.id}
-            initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-            className="perspective-readout"
-          >
-            <p className="perspective-lens-summary">
-              <strong>{currentLens.label}:</strong> {currentLens.summary}
-            </p>
-          </motion.div>
-        </AnimatePresence>
-      </div>
+        <div
+          ref={trackRef}
+          className="peek-carousel"
+          role="group"
+          aria-label="Slides"
+          tabIndex={0}
+        >
+          {cards.map((card, idx) => (
+            <article
+              key={card.id}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`${idx + 1} of ${cards.length}`}
+              className="peek-card"
+            >
+              <span className="peek-card-tag">{card.tag}</span>
+              <h3 className="peek-card-title">{card.title}</h3>
+              <p className="peek-card-detail">{card.detail}</p>
+            </article>
+          ))}
+        </div>
 
-      <div className="chapter-specs-block">
+        <nav className="peek-markers" aria-label="Choose a slide">
+          {cards.map((card, idx) => (
+            <button
+              key={card.id}
+              type="button"
+              className="peek-marker-btn"
+              aria-label={`Go to slide ${idx + 1}: ${card.title}`}
+              aria-current={idx === activeIndex ? "true" : undefined}
+              onClick={() => scrollToSlide(idx)}
+            />
+          ))}
+        </nav>
+
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {settledAnnouncement}
+        </p>
+      </motion.section>
+
+      <motion.div
+        className="chapter-beat chapter-spec-grid"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: "some" }}
+        transition={{ duration: 0.42, ease: EASE }}
+      >
+        <div className="chapter-beat-card">
+          <h3 className="chapter-kicker">Core Capabilities</h3>
+          <p className="chapter-inline-specs">{member.skillsets.join(" · ")}</p>
+        </div>
+        <div className="chapter-beat-card">
+          <h3 className="chapter-kicker">Studio Interests</h3>
+          <p className="chapter-interests-line">
+            {member.interests.join(" · ")}
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function EditorialSpotlightStage({
+  member,
+  scrollYProgress,
+  shouldReduceMotion,
+}: {
+  member: TeamMember;
+  scrollYProgress: MotionValue<number>;
+  shouldReduceMotion: boolean;
+}) {
+  const lenses = useMemberLenses(member);
+  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "craft");
+  const currentLens = lenses.find((l) => l.id === activeLensId) ?? lenses[0];
+  const frameScale = useTransform(scrollYProgress, [0, 0.35], [0.95, 1]);
+
+  return (
+    <div className="spotlight-stage">
+      <motion.div
+        className="chapter-beat"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: "some" }}
+        transition={{ duration: 0.42, ease: EASE }}
+      >
+        <motion.div
+          className="spotlight-canvas"
+          style={shouldReduceMotion ? undefined : { scale: frameScale }}
+        >
+          <ArtifactFrame
+            member={member}
+            src={member.artifacts?.heroImage}
+            aspectRatio="16/9"
+            plateLabel={`${member.pillar} · ${currentLens.label}`}
+            headline={currentLens.headline}
+            subline={currentLens.subline}
+          />
+        </motion.div>
+
+        <div className="perspective-controls">
+          <div
+            className="perspective-lens-strip"
+            role="group"
+            aria-label="Perspective lens"
+          >
+            {lenses.map((lens) => {
+              const active = lens.id === activeLensId;
+              return (
+                <button
+                  key={lens.id}
+                  type="button"
+                  aria-pressed={active}
+                  className="perspective-lens-btn"
+                  onClick={() => setActiveLensId(lens.id)}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId={`perspective-lens-${member.id}`}
+                      className="perspective-lens-pill"
+                      transition={
+                        shouldReduceMotion
+                          ? { duration: 0 }
+                          : { type: "spring", stiffness: 420, damping: 36 }
+                      }
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="perspective-lens-label">{lens.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentLens.id}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="perspective-readout"
+            >
+              <p className="perspective-lens-summary">
+                <strong>{currentLens.label}:</strong> {currentLens.summary}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="chapter-beat"
+        variants={beatListVariants}
+        initial={shouldReduceMotion ? false : "hidden"}
+        whileInView="visible"
+        viewport={{ once: true, amount: "some" }}
+      >
         <h3 className="chapter-kicker">Skillsets</h3>
-        <ul className="chapter-skills-list">
+        <ul className="spotlight-skill-grid">
           {member.skillsets.map((skill, idx) => (
-            <li key={skill} className="chapter-skill-item">
+            <motion.li
+              key={skill}
+              className="spotlight-skill-card"
+              variants={beatItemVariants}
+            >
               <span className="chapter-skill-num">0{idx + 1}</span>
-              <span className="chapter-skill-name">{skill}</span>
+              <span className="spotlight-skill-title">{skill}</span>
+              <span className="spotlight-skill-meta">
+                {member.pillar} · {member.role}
+              </span>
+            </motion.li>
+          ))}
+        </ul>
+      </motion.div>
+
+      <motion.div
+        className="chapter-beat chapter-beat-card"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: "some" }}
+        transition={{ duration: 0.42, ease: EASE }}
+      >
+        <h3 className="chapter-kicker">Interests &amp; Exploration</h3>
+        <p className="chapter-interests-line">
+          Investigating{" "}
+          {member.interests.slice(0, 2).join(" and ").toLowerCase()} in support
+          of {member.pillarFull.toLowerCase()}.
+        </p>
+        <ul className="chapter-interest-tags">
+          {member.interests.map((interest) => (
+            <li key={interest} className="chapter-interest-tag">
+              {interest}
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className="chapter-interests-block">
-        <h3 className="chapter-kicker">Interests</h3>
-        <p className="chapter-interests-line">{member.interests.join(" · ")}</p>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -7,6 +7,8 @@ interface ArtifactFrameProps {
   caption?: string;
   aspectRatio?: "4/5" | "16/10" | "16/9" | "1/1";
   plateLabel?: string;
+  headline?: string;
+  subline?: string;
   tone?: "default" | "charcoal";
   className?: string;
 }
@@ -18,6 +20,8 @@ export function ArtifactFrame({
   caption,
   aspectRatio = "4/5",
   plateLabel,
+  headline,
+  subline,
   tone = "default",
   className = "",
 }: ArtifactFrameProps) {
@@ -52,12 +56,14 @@ export function ArtifactFrame({
               <span className="artifact-plate-index">{member.index} / 07</span>
             </div>
             <div className="artifact-plate-center">
-              <span className="artifact-plate-role">{member.role}</span>
+              <span className="artifact-plate-role">
+                {headline ?? member.role}
+              </span>
               <span className="artifact-plate-numeral">{member.index}</span>
             </div>
             <div className="artifact-plate-bottom">
               <span className="artifact-plate-spec">
-                {member.skillsets.slice(0, 3).join(" · ")}
+                {subline ?? member.skillsets.slice(0, 3).join(" · ")}
               </span>
             </div>
           </div>

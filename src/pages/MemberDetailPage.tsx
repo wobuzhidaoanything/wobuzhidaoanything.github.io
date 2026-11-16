@@ -2,6 +2,7 @@ import { useParams } from "react-router";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { GROUP_META, TEAM_MEMBERS } from "@/data/capstone";
+import { ArtifactFrame } from "@/components/ArtifactFrame";
 import { TransitionLink } from "@/components/TransitionLink";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useTransitionState } from "@/hooks/useTransitionMember";
@@ -155,6 +156,14 @@ export function MemberDetailPage() {
         <p className="detail-role">{member.role}</p>
         <p className="detail-bio">{member.bio}</p>
 
+        <ArtifactFrame
+          member={member}
+          src={member.artifacts?.heroImage}
+          aspectRatio="16/9"
+          plateLabel={`${member.pillar} · ${member.pillarFull}`}
+          className="detail-artifact"
+        />
+
         <motion.div
           key={member.slug}
           className="detail-sections"
@@ -170,13 +179,14 @@ export function MemberDetailPage() {
               Skillsets
             </h2>
             <ul className="detail-list">
-              {member.skillsets.map((skill) => (
+              {member.skillsets.map((skill, idx) => (
                 <motion.li
                   key={skill}
-                  className="detail-list-item"
+                  className="detail-list-item detail-list-numbered"
                   variants={itemFade}
                 >
-                  {skill}
+                  <span className="chapter-skill-num">0{idx + 1}</span>
+                  <span>{skill}</span>
                 </motion.li>
               ))}
             </ul>

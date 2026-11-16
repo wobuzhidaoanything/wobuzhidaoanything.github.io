@@ -229,8 +229,8 @@ export function SiteHeader() {
           onClick={handleTeamClick}
           onBeforeNavigate={closeCollapsedMenu}
         >
-          <span className="brand-institution">{GROUP_META.institution}</span>
-          <span className="brand-subline">{GROUP_META.code}</span>
+          <span className="brand-title">{GROUP_META.code}</span>
+          <span className="brand-subline">{GROUP_META.institution}</span>
         </TransitionLink>
 
         <nav className="site-nav" aria-label="Primary">

@@ -25,13 +25,13 @@ type OverviewTab = "summary" | "interests";
 const VALID_FILTERS = new Set<FilterOption>(["All", "CSD", "EPD", "ESD"]);
 
 const CHAPTER_VARIANTS: ChapterLayoutVariant[] = [
-  "split",
-  "split-reverse",
-  "offset",
-  "monumental",
-  "split-wide",
-  "inset",
-  "compact-band",
+  "perspective-lens",
+  "diptych-collage",
+  "charcoal-carousel",
+  "editorial-spotlight",
+  "perspective-lens",
+  "diptych-collage",
+  "charcoal-carousel",
 ];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -268,6 +268,30 @@ export function RosterPage() {
 
             <p className="masthead-lead">{GROUP_META.overview}</p>
 
+            <dl className="hero-stat-strip" aria-label="Capstone key figures">
+              <div className="hero-stat-item">
+                <dt className="hero-stat-label">Team</dt>
+                <dd className="hero-stat-value">
+                  <span className="hero-stat-num">07</span>
+                  <span className="hero-stat-unit">builders</span>
+                </dd>
+              </div>
+              <div className="hero-stat-item">
+                <dt className="hero-stat-label">Architecture</dt>
+                <dd className="hero-stat-value">
+                  <span className="hero-stat-num">03</span>
+                  <span className="hero-stat-unit">SUTD pillars</span>
+                </dd>
+              </div>
+              <div className="hero-stat-item">
+                <dt className="hero-stat-label">Delivery</dt>
+                <dd className="hero-stat-value">
+                  <span className="hero-stat-num">02</span>
+                  <span className="hero-stat-unit">academic terms</span>
+                </dd>
+              </div>
+            </dl>
+
             <div className="hero-actions">
               <a
                 href="#chapter-01"
@@ -325,15 +349,18 @@ export function RosterPage() {
                       {String(spec.members.length).padStart(2, "0")}
                     </span>
                     <span className="hero-spec-detail">
-                      <span className="hero-spec-heading-line">
-                        <span className="hero-spec-full">{spec.fullName}</span>
+                      <span className="hero-spec-full">{spec.fullName}</span>
+                      <span className="hero-spec-meta-line">
                         <span className="hero-spec-tag">
                           <span className="pillar-dot" aria-hidden="true" />
                           <span>{spec.pillar}</span>
                         </span>
-                      </span>
-                      <span className="hero-spec-members">
-                        {spec.members.map((m) => m.name).join(" · ")}
+                        <span className="hero-spec-sep" aria-hidden="true">
+                          ·
+                        </span>
+                        <span className="hero-spec-members">
+                          {spec.members.map((m) => m.name).join(" · ")}
+                        </span>
                       </span>
                     </span>
                     <ArrowRight
@@ -345,20 +372,23 @@ export function RosterPage() {
               ))}
             </ul>
 
-            <div className="hero-spec-footer">
-              <span>Seeking Industry Partner</span>
-              <a
-                href="#partner"
-                className="hero-spec-foot-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  scrollToElement("partner");
-                }}
-              >
+            <a
+              href="#partner"
+              className="hero-spec-footer"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToElement("partner");
+              }}
+            >
+              <span>Ready to collaborate?</span>
+              <span className="hero-spec-foot-link">
                 <span>Work With Us</span>
-                <ArrowRight className="size-3.5" aria-hidden="true" />
-              </a>
-            </div>
+                <ArrowRight
+                  className="hero-spec-foot-arrow size-3.5"
+                  aria-hidden="true"
+                />
+              </span>
+            </a>
           </aside>
         </div>
       </section>
@@ -369,6 +399,7 @@ export function RosterPage() {
             key={member.id}
             member={member}
             layoutVariant={CHAPTER_VARIANTS[idx % CHAPTER_VARIANTS.length]}
+            pinSide={idx % 2 === 1 ? "right" : "left"}
           />
         ))}
 
