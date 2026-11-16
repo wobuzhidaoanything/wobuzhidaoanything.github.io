@@ -37,7 +37,7 @@ const CHAPTER_VARIANTS: ChapterLayoutVariant[] = [
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 export function RosterPage() {
-  useDocumentTitle(`${GROUP_META.title} — Team & Skillsets`);
+  useDocumentTitle(`${GROUP_META.title} | Team & Skillsets`);
 
   const { hash } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -260,8 +260,8 @@ export function RosterPage() {
             <span className="splash-title-sub">Summer Internship</span>
           </p>
           <p className="splash-lead">
-            One team across product, systems &amp; design, and code — scroll on
-            to meet the builders.
+            One team across product, systems &amp; design, and code. Scroll on
+            to find out more about us.
           </p>
           <button
             type="button"

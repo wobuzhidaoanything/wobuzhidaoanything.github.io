@@ -35,7 +35,7 @@ export function SiteHeader() {
   useEffect(() => subscribeSplashState(setPastSplash), []);
 
   // Off the roster route there is no splash section, so the header is
-  // always compact — derived during render instead of synced in an effect.
+  // always compact: derived during render instead of synced in an effect.
   const headerSplash = pathname === "/" ? pastSplash : true;
 
   const closeCollapsedMenu = useCallback(() => {

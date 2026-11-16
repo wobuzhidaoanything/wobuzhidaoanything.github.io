@@ -4,7 +4,7 @@
   color-scheme: light dark;
   view-transition-name: none;
 
-  /* Warm editorial palette — high-contrast solid surfaces & crisp hairlines */
+  /* Warm editorial palette: high-contrast solid surfaces & crisp hairlines */
   --bg-light: #faf8f3;
   --bg-dark: #0f0f0e;
   --chapter-alt-light: #efece3;
@@ -661,7 +661,7 @@
    ========================================================================== */
 
 /* ==========================================================================
-   Splash — full-viewport Lockheed wordmark before the builders hero
+   Splash: full-viewport Lockheed wordmark before the builders hero
    ========================================================================== */
 
 .splash {
@@ -1185,7 +1185,7 @@
 }
 
 /* ==========================================================================
-   Scrollable Member Chapters (01 — 07)
+   Scrollable Member Chapters (01 to 07)
    ========================================================================== */
 
 .chapters-showcase {

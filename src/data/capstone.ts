@@ -50,11 +50,11 @@ export const PILLAR_FILTERS: {
 export const GROUP_META = {
   code: "Lockheed Summer Internship",
   institution: "SUTD Capstone",
-  title: "Lockheed Summer Internship — SUTD Capstone",
+  title: "Lockheed Summer Internship: SUTD Capstone",
   pillarsLabel: "EPD · ESD · CSD",
   overview:
     "Seven final-year students from the Singapore University of Technology and Design across Engineering Product Development, Engineering Systems and Design, and Computer Science and Design.",
-  note: "Placeholder bios, skillsets & contact — update details in src/data/capstone.ts.",
+  note: "Placeholder bios, skillsets & contact: update details in src/data/capstone.ts.",
 };
 
 export const PARTNER_OUTREACH = {
@@ -105,11 +105,11 @@ export const PARTNER_OUTREACH = {
   ],
   contactEmail: "capstone-lockheed@example.com",
   emailSubject:
-    "SUTD Capstone (Lockheed Summer Internship) — Industry Partnership Inquiry",
+    "SUTD Capstone (Lockheed Summer Internship): Industry Partnership Inquiry",
   showcaseUrl: "https://capstoneshowcase.sutd.edu.sg/",
   showcaseLabel: "Past SUTD Capstone Projects",
   closingNote:
-    "Questions or a project in mind? Let's schedule a short call — we look forward to hearing from you.",
+    "Questions or a project in mind? Let's schedule a short call. We look forward to hearing from you.",
 };
 
 type TeamMemberInput = Omit<TeamMember, "slug"> & { slug?: string };

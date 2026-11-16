@@ -33,7 +33,7 @@ export function ArtifactFrame({
   overlay = "full",
 }: ArtifactFrameProps) {
   const resolvedAlt =
-    alt ?? member.artifacts?.alt ?? `${member.name} — ${member.role}`;
+    alt ?? member.artifacts?.alt ?? `${member.name}: ${member.role}`;
   const resolvedCaption = caption ?? member.artifacts?.caption;
 
   return (

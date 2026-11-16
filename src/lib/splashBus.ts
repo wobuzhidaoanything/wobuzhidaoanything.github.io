@@ -1,7 +1,7 @@
 /**
  * Splash-state bus: the roster page owns the scroll position, the header owns
  * the visual state. A module singleton (instead of a window CustomEvent)
- * guarantees the header reads the current value on subscribe — the roster's
+ * guarantees the header reads the current value on subscribe: the roster's
  * first write happens in a child effect, before the header's subscription
  * effect runs, so an event-only handoff would drop it.
  */
