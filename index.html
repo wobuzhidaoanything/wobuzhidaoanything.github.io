@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      try {
+        var storedScheme = localStorage.getItem('color-scheme')
+        if (storedScheme === 'light' || storedScheme === 'dark') {
+          document
+            .querySelector('meta[name="color-scheme"]')
+            .setAttribute('content', storedScheme)
+        }
+      } catch {}
+    </script>
+    <meta
+      name="description"
+      content="Capstone Group 07 — seven disciplines building one cohesive system. Explore member profiles, skillsets, and project architecture."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Group 07 — Capstone Roster &amp; Skillsets</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
