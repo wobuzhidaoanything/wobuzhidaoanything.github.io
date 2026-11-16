@@ -25,13 +25,13 @@ type OverviewTab = "summary" | "interests";
 const VALID_FILTERS = new Set<FilterOption>(["All", "CSD", "EPD", "ESD"]);
 
 const CHAPTER_VARIANTS: ChapterLayoutVariant[] = [
-  "perspective-lens",
-  "diptych-collage",
-  "charcoal-carousel",
-  "editorial-spotlight",
-  "perspective-lens",
-  "diptych-collage",
-  "charcoal-carousel",
+  "split",
+  "split-reverse",
+  "offset",
+  "monumental",
+  "split-wide",
+  "inset",
+  "compact-band",
 ];
 
 const EASE = [0.22, 1, 0.36, 1] as const;

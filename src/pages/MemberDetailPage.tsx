@@ -39,7 +39,7 @@ export function MemberDetailPage() {
 
   useDocumentTitle(
     member
-      ? `${member.name} (${member.pillar}) | ${GROUP_META.title}`
+      ? `${member.fullName ?? member.name} (${member.pillar}) | ${GROUP_META.title}`
       : `Member Not Found | ${GROUP_META.title}`,
   );
 
@@ -135,8 +135,12 @@ export function MemberDetailPage() {
               : undefined
           }
         >
-          {member.name}
+          {member.fullName ?? member.name}
         </h1>
+
+        {member.minor && (
+          <p className="detail-minor">Minor in {member.minor}</p>
+        )}
 
         <p className="detail-role">{member.role}</p>
         <p className="detail-bio">{member.bio}</p>
@@ -176,6 +180,57 @@ export function MemberDetailPage() {
               ))}
             </ul>
           </section>
+
+          {member.tools && member.tools.length > 0 && (
+            <section
+              className="detail-section-block"
+              aria-labelledby="detail-tools-heading"
+            >
+              <h2 id="detail-tools-heading" className="detail-section-title">
+                Tools & Software
+              </h2>
+              <ul className="detail-tool-list">
+                {member.tools.map((tool) => (
+                  <motion.li
+                    key={tool}
+                    className="detail-tool-chip"
+                    variants={itemFade}
+                  >
+                    {tool}
+                  </motion.li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {member.projects && member.projects.length > 0 && (
+            <section
+              className="detail-section-block"
+              aria-labelledby="detail-projects-heading"
+            >
+              <h2
+                id="detail-projects-heading"
+                className="detail-section-title"
+              >
+                Projects & Internships
+              </h2>
+              <ul className="detail-list">
+                {member.projects.map((project, idx) => (
+                  <motion.li
+                    key={project.title}
+                    className="detail-list-item detail-list-numbered detail-project"
+                    variants={itemFade}
+                  >
+                    <span className="chapter-skill-num">0{idx + 1}</span>
+                    <div className="detail-project-copy">
+                      <h3 className="detail-project-title">{project.title}</h3>
+                      <p className="detail-project-detail">{project.detail}</p>
+                    </div>
+                  </motion.li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section
             className="detail-section-block"

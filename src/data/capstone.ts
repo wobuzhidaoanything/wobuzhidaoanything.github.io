@@ -23,6 +23,11 @@ export interface MemberArtifacts {
   hotspots?: ArtifactHotspot[];
 }
 
+export interface MemberProject {
+  title: string;
+  detail: string;
+}
+
 export interface TeamMember {
   id: string;
   index: string;
@@ -35,6 +40,12 @@ export interface TeamMember {
   skillsets: string[];
   interests: string[];
   artifacts?: MemberArtifacts;
+  // Profile template fields: photo → artifacts.heroImage, NAME → fullName,
+  // MAJOR → pillar + minor, skills → skillsets / tools / projects.
+  fullName?: string;
+  minor?: string;
+  tools?: string[];
+  projects?: MemberProject[];
 }
 
 export const PILLAR_FILTERS: {
@@ -123,7 +134,8 @@ function toMemberSlug(name: string, fallbackId: string): string {
   return base || fallbackId;
 }
 
-// Roster names and pillars updated (1 ESD, 3 CSD, 3 EPD); roles, bios, skillsets, and interests remain pillar-matched placeholders pending individual details.
+// Nicholas's profile reflects his submitted template details (Nov 2026); the
+// other six members keep pillar-matched placeholders pending their submissions.
 const RAW_TEAM_MEMBERS: TeamMemberInput[] = [
   {
     id: "member-01",
@@ -211,16 +223,45 @@ const RAW_TEAM_MEMBERS: TeamMemberInput[] = [
     id: "member-05",
     index: "05",
     name: "Nicholas",
+    fullName: "Nicholas Enrique Selvaraj",
     pillar: "EPD",
     pillarFull: "Engineering Product Development",
-    role: "Hardware & Mechatronics",
-    bio: "Focuses on mechanical design, physical prototyping, and electro-mechanical integration.",
+    minor: "Design, Technology & Society",
+    role: "Mechanical Design & Prototyping",
+    bio: "Focuses on CAD-driven product design and FDM rapid prototyping, building accessible hardware from landscaping safety guards to low-cost prosthetics.",
     skillsets: [
-      "SolidWorks",
-      "CAD & DFMA",
-      "CNC & 3D Printing",
-      "Actuation",
-      "Mechanical Testing",
+      "CAD/3D Modelling (Fusion 360)",
+      "Rapid Prototyping & Additive Manufacturing (FDM 3D Printing)",
+      "Engineering Drawing & Product Design",
+      "Basic Electronics & Systems Control",
+      "HTML/CSS/JS (Web Development)",
+    ],
+    tools: [
+      "Fusion 360",
+      "Microsoft Office (Word, Excel, PowerPoint)",
+      "GitHub",
+    ],
+    projects: [
+      {
+        title: "Guard-Damp-It!",
+        detail:
+          "Smart weedwhacker safety guard designed for landscaping injury prevention, fabricated with 3D printing.",
+      },
+      {
+        title: "Prosthetic Socket System",
+        detail:
+          "Low-cost 3D-printed prosthetic solution focused on accessibility.",
+      },
+      {
+        title: "Liquid Metal Flexible Antenna",
+        detail:
+          "EGaIn-in-PDMS antenna design for wearable and flexible electronics.",
+      },
+      {
+        title: "RSAF Medic",
+        detail:
+          "National Service with the Republic of Singapore Air Force.",
+      },
     ],
     interests: ["Robotics", "Industrial Design", "Cycling", "Woodworking"],
   },
