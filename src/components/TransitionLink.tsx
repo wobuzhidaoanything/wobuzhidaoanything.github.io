@@ -1,33 +1,33 @@
-import type { MouseEvent } from 'react'
-import { Link, useNavigate, type LinkProps } from 'react-router'
+import type { MouseEvent } from "react";
+import { Link, useNavigate, type LinkProps } from "react-router";
 import {
   focusRouteHeading,
   runViewTransition,
   type NavigationTransitionType,
   type TransitionSource,
-} from '@/lib/viewTransitions'
+} from "@/lib/viewTransitions";
 
 interface TransitionLinkProps extends LinkProps {
-  direction?: NavigationTransitionType
-  memberSlug?: string | null
-  transitionSource?: TransitionSource
-  onBeforeNavigate?: () => void
+  direction?: NavigationTransitionType;
+  memberSlug?: string | null;
+  transitionSource?: TransitionSource;
+  onBeforeNavigate?: () => void;
 }
 
 export function TransitionLink({
   to,
-  direction = 'forward',
+  direction = "forward",
   memberSlug = null,
   transitionSource = null,
   onBeforeNavigate,
   onClick,
   ...props
 }: TransitionLinkProps) {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
-    onClick?.(e)
-    if (e.defaultPrevented) return
+    onClick?.(e);
+    if (e.defaultPrevented) return;
 
     if (
       e.button !== 0 ||
@@ -35,28 +35,32 @@ export function TransitionLink({
       e.ctrlKey ||
       e.shiftKey ||
       e.altKey ||
-      props.target === '_blank'
+      props.target === "_blank"
     ) {
-      return
+      return;
     }
 
-    e.preventDefault()
-    onBeforeNavigate?.()
+    e.preventDefault();
+    onBeforeNavigate?.();
 
     runViewTransition({
       types: [direction],
-      mode: memberSlug ? 'member' : 'idle',
+      mode: memberSlug ? "member" : "idle",
       memberSlug,
       source: memberSlug ? transitionSource : null,
       update: () => {
-        navigate(to)
-        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+        navigate(to);
+        window.scrollTo({
+          top: 0,
+          left: 0,
+          behavior: "instant" as ScrollBehavior,
+        });
       },
       onFinished: () => {
-        focusRouteHeading()
+        focusRouteHeading();
       },
-    })
-  }
+    });
+  };
 
-  return <Link to={to} onClick={handleClick} {...props} />
+  return <Link to={to} onClick={handleClick} {...props} />;
 }

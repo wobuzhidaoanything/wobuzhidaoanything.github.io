@@ -3,23 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="text-scale" content="scale" />
     <meta name="color-scheme" content="light dark" />
     <script>
       try {
-        var storedScheme = localStorage.getItem('color-scheme')
-        if (storedScheme === 'light' || storedScheme === 'dark') {
+        var storedScheme = localStorage.getItem("color-scheme");
+        if (storedScheme === "light" || storedScheme === "dark") {
           document
             .querySelector('meta[name="color-scheme"]')
-            .setAttribute('content', storedScheme)
+            .setAttribute("content", storedScheme);
         }
       } catch {}
     </script>
     <meta
       name="description"
-      content="Capstone Group 07 — seven disciplines building one cohesive system. Explore member profiles, skillsets, and project architecture."
+      content="Lockheed Summer Internship — SUTD Capstone team across Engineering Product Development, Engineering Systems and Design, and Computer Science and Design."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Group 07 — Capstone Roster &amp; Skillsets</title>
+    <title>Lockheed Summer Internship — SUTD Capstone</title>
   </head>
   <body>
     <div id="root"></div>

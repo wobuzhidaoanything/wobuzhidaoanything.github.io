@@ -1,28 +1,28 @@
-import { ArrowLeft, ArrowUpRight } from 'lucide-react'
-import { GROUP_META } from '@/data/capstone'
-import { TransitionLink } from '@/components/TransitionLink'
-import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { GROUP_META } from "@/data/capstone";
+import { TransitionLink } from "@/components/TransitionLink";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const FONT_ATTRIBUTIONS = [
   {
-    name: 'Newsreader',
-    license: 'SIL Open Font License 1.1',
-    copyright: 'Copyright 2020 The Newsreader Project Authors',
-    url: 'https://github.com/productiontype/Newsreader',
+    name: "Newsreader",
+    license: "SIL Open Font License 1.1",
+    copyright: "Copyright 2020 The Newsreader Project Authors",
+    url: "https://github.com/productiontype/Newsreader",
   },
   {
-    name: 'Geist',
-    license: 'SIL Open Font License 1.1',
-    copyright: 'Copyright 2024 The Geist Project Authors',
-    url: 'https://github.com/vercel/geist-font',
+    name: "Geist",
+    license: "SIL Open Font License 1.1",
+    copyright: "Copyright 2024 The Geist Project Authors",
+    url: "https://github.com/vercel/geist-font",
   },
   {
-    name: 'Geist Mono',
-    license: 'SIL Open Font License 1.1',
-    copyright: 'Copyright 2024 The Geist Project Authors',
-    url: 'https://github.com/vercel/geist-font',
+    name: "Geist Mono",
+    license: "SIL Open Font License 1.1",
+    copyright: "Copyright 2024 The Geist Project Authors",
+    url: "https://github.com/vercel/geist-font",
   },
-]
+];
 
 const OFL_NOTICE = `SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 
@@ -34,24 +34,26 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font Software shall not be used to promote, endorse or advertise any Modified Version, except to acknowledge the contribution(s) of the Copyright Holder(s) and the Author(s) or with their explicit written permission.
 5) The Font Software, modified or unmodified, in part or in whole, must be distributed entirely under this license, and must not be distributed under any other license.
 
-Full text: https://scripts.sil.org/OFL`
+Full text: https://scripts.sil.org/OFL`;
 
 export function LicensesPage() {
-  useDocumentTitle(`Fonts & Licenses | ${GROUP_META.title}`)
+  useDocumentTitle(`Fonts & Licenses | ${GROUP_META.title}`);
 
   return (
     <div className="page-shell detail-page-shell">
       <div className="detail-top-bar">
         <TransitionLink to="/" direction="backward" className="back-link">
           <ArrowLeft className="size-4" aria-hidden="true" />
-          <span>Back to Showcase</span>
+          <span>Back to About Us</span>
         </TransitionLink>
       </div>
 
       <article className="detail-profile-card">
         <header className="detail-profile-head">
           <span className="member-index detail-index">Colophon</span>
-          <span className="pillar-label">Open Source · SIL OFL 1.1 &amp; MIT</span>
+          <span className="pillar-label">
+            Open Source · SIL OFL 1.1 &amp; MIT
+          </span>
         </header>
 
         <h1 id="main-content" tabIndex={-1} className="detail-name">
@@ -59,10 +61,11 @@ export function LicensesPage() {
         </h1>
 
         <p className="detail-bio">
-          All typefaces bundled on this website are free, open-source fonts licensed under the SIL
-          Open Font License 1.1 (OFL-1.1), allowing free public and commercial web use with
-          attribution preserved below. Application libraries (React, React Router, Motion, Tailwind
-          CSS, Lucide) are MIT-licensed.
+          All typefaces bundled on this website are free, open-source fonts
+          licensed under the SIL Open Font License 1.1 (OFL-1.1), allowing free
+          public and commercial web use with attribution preserved below.
+          Application libraries (React, React Router, Motion, Tailwind CSS,
+          Lucide) are MIT-licensed.
         </p>
 
         <section className="licenses-section" aria-labelledby="fonts-heading">
@@ -92,7 +95,10 @@ export function LicensesPage() {
           </ul>
         </section>
 
-        <section className="licenses-section" aria-labelledby="ofl-text-heading">
+        <section
+          className="licenses-section"
+          aria-labelledby="ofl-text-heading"
+        >
           <h2 id="ofl-text-heading" className="detail-section-title">
             SIL Open Font License 1.1 Notice
           </h2>
@@ -100,5 +106,5 @@ export function LicensesPage() {
         </section>
       </article>
     </div>
-  )
+  );
 }

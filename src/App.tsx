@@ -1,27 +1,27 @@
-import { useEffect } from 'react'
-import { MotionConfig } from 'motion/react'
-import { BrowserRouter, Route, Routes } from 'react-router'
-import { SiteFooter } from '@/components/SiteFooter'
-import { SiteHeader } from '@/components/SiteHeader'
-import { useTransitionState } from '@/hooks/useTransitionMember'
-import { focusRouteHeading } from '@/lib/viewTransitions'
-import { LicensesPage } from '@/pages/LicensesPage'
-import { MemberDetailPage } from '@/pages/MemberDetailPage'
-import { NotFoundPage } from '@/pages/NotFoundPage'
-import { RosterPage } from '@/pages/RosterPage'
+import { useEffect } from "react";
+import { MotionConfig } from "motion/react";
+import { BrowserRouter, Route, Routes } from "react-router";
+import { SiteFooter } from "@/components/SiteFooter";
+import { SiteHeader } from "@/components/SiteHeader";
+import { useTransitionState } from "@/hooks/useTransitionMember";
+import { focusRouteHeading } from "@/lib/viewTransitions";
+import { LicensesPage } from "@/pages/LicensesPage";
+import { MemberDetailPage } from "@/pages/MemberDetailPage";
+import { NotFoundPage } from "@/pages/NotFoundPage";
+import { RosterPage } from "@/pages/RosterPage";
 
 function AppShell() {
-  const transitionState = useTransitionState()
+  const transitionState = useTransitionState();
 
   useEffect(() => {
     const onPopState = () => {
-      focusRouteHeading()
-    }
-    window.addEventListener('popstate', onPopState)
+      focusRouteHeading();
+    };
+    window.addEventListener("popstate", onPopState);
     return () => {
-      window.removeEventListener('popstate', onPopState)
-    }
-  }, [])
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
 
   return (
     <div className="app-frame">
@@ -29,8 +29,8 @@ function AppShell() {
       <main
         className="site-main"
         style={
-          transitionState.mode !== 'filter'
-            ? ({ viewTransitionName: 'page-main' } as React.CSSProperties)
+          transitionState.mode !== "filter"
+            ? ({ viewTransitionName: "page-main" } as React.CSSProperties)
             : undefined
         }
       >
@@ -43,7 +43,7 @@ function AppShell() {
       </main>
       <SiteFooter />
     </div>
-  )
+  );
 }
 
 export function App() {
@@ -53,7 +53,7 @@ export function App() {
         <AppShell />
       </BrowserRouter>
     </MotionConfig>
-  )
+  );
 }
 
-export default App
+export default App;

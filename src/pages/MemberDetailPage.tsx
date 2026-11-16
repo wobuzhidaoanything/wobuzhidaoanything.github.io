@@ -1,12 +1,12 @@
-import { useParams } from 'react-router'
-import { motion, useReducedMotion, type Variants } from 'motion/react'
-import { ArrowLeft, ArrowRight } from 'lucide-react'
-import { GROUP_META, TEAM_MEMBERS } from '@/data/capstone'
-import { TransitionLink } from '@/components/TransitionLink'
-import { useDocumentTitle } from '@/hooks/useDocumentTitle'
-import { useTransitionState } from '@/hooks/useTransitionMember'
+import { useParams } from "react-router";
+import { motion, useReducedMotion, type Variants } from "motion/react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { GROUP_META, TEAM_MEMBERS } from "@/data/capstone";
+import { TransitionLink } from "@/components/TransitionLink";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useTransitionState } from "@/hooks/useTransitionMember";
 
-const EASE = [0.22, 1, 0.36, 1] as const
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 const listStagger: Variants = {
   hidden: {},
@@ -16,7 +16,7 @@ const listStagger: Variants = {
       delayChildren: 0.08,
     },
   },
-}
+};
 
 const itemFade: Variants = {
   hidden: { opacity: 0, y: 10 },
@@ -25,18 +25,22 @@ const itemFade: Variants = {
     y: 0,
     transition: { duration: 0.38, ease: EASE },
   },
-}
+};
 
 export function MemberDetailPage() {
-  const { slug } = useParams<{ slug: string }>()
-  const shouldReduceMotion = useReducedMotion()
-  const memberIndex = TEAM_MEMBERS.findIndex((m) => m.slug === slug)
-  const member = memberIndex >= 0 ? TEAM_MEMBERS[memberIndex] : null
-  const transitionState = useTransitionState()
+  const { slug } = useParams<{ slug: string }>();
+  const shouldReduceMotion = useReducedMotion();
+  const memberIndex = TEAM_MEMBERS.findIndex(
+    (m) => m.slug === slug || m.id === slug,
+  );
+  const member = memberIndex >= 0 ? TEAM_MEMBERS[memberIndex] : null;
+  const transitionState = useTransitionState();
 
   useDocumentTitle(
-    member ? `${member.name} (${member.pillar}) | ${GROUP_META.title}` : `Member Not Found | ${GROUP_META.title}`,
-  )
+    member
+      ? `${member.name} (${member.pillar}) | ${GROUP_META.title}`
+      : `Member Not Found | ${GROUP_META.title}`,
+  );
 
   if (!member) {
     return (
@@ -47,21 +51,27 @@ export function MemberDetailPage() {
             No member matches “{slug}”.
           </h1>
           <p className="masthead-lead">
-            Return to the showcase to view all seven SUTD members.
+            Return to About Us to view all seven SUTD members.
           </p>
-          <TransitionLink to="/" direction="backward" className="primary-action-link">
+          <TransitionLink
+            to="/"
+            direction="backward"
+            className="primary-action-link"
+          >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            <span>Back to Showcase</span>
+            <span>Back to About Us</span>
           </TransitionLink>
         </section>
       </div>
-    )
+    );
   }
 
-  const prevMember = TEAM_MEMBERS[(memberIndex - 1 + TEAM_MEMBERS.length) % TEAM_MEMBERS.length]
-  const nextMember = TEAM_MEMBERS[(memberIndex + 1) % TEAM_MEMBERS.length]
+  const prevMember =
+    TEAM_MEMBERS[(memberIndex - 1 + TEAM_MEMBERS.length) % TEAM_MEMBERS.length];
+  const nextMember = TEAM_MEMBERS[(memberIndex + 1) % TEAM_MEMBERS.length];
   const isMorphTarget =
-    transitionState.mode === 'member' && transitionState.memberSlug === member.slug
+    transitionState.mode === "member" &&
+    transitionState.memberSlug === member.slug;
 
   return (
     <div className="page-shell detail-page-shell">
@@ -79,7 +89,7 @@ export function MemberDetailPage() {
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
             <span>
-              {prevMember.index} · {prevMember.pillar}
+              {prevMember.name} · {prevMember.pillar}
             </span>
           </TransitionLink>
 
@@ -93,7 +103,7 @@ export function MemberDetailPage() {
             className="pager-link"
           >
             <span>
-              {nextMember.index} · {nextMember.pillar}
+              {nextMember.name} · {nextMember.pillar}
             </span>
             <ArrowRight className="size-4" aria-hidden="true" />
           </TransitionLink>
@@ -103,7 +113,9 @@ export function MemberDetailPage() {
       <article
         className="detail-profile-card"
         style={
-          isMorphTarget ? ({ viewTransitionName: 'member-card' } as React.CSSProperties) : undefined
+          isMorphTarget
+            ? ({ viewTransitionName: "member-card" } as React.CSSProperties)
+            : undefined
         }
       >
         <header className="detail-profile-head">
@@ -111,7 +123,9 @@ export function MemberDetailPage() {
             className="member-index detail-index"
             style={
               isMorphTarget
-                ? ({ viewTransitionName: 'member-index' } as React.CSSProperties)
+                ? ({
+                    viewTransitionName: "member-index",
+                  } as React.CSSProperties)
                 : undefined
             }
           >
@@ -131,7 +145,7 @@ export function MemberDetailPage() {
           className="detail-name"
           style={
             isMorphTarget
-              ? ({ viewTransitionName: 'member-name' } as React.CSSProperties)
+              ? ({ viewTransitionName: "member-name" } as React.CSSProperties)
               : undefined
           }
         >
@@ -145,29 +159,43 @@ export function MemberDetailPage() {
           key={member.slug}
           className="detail-sections"
           variants={listStagger}
-          initial={shouldReduceMotion ? false : 'hidden'}
+          initial={shouldReduceMotion ? false : "hidden"}
           animate="visible"
         >
-          <section className="detail-section-block" aria-labelledby="detail-skills-heading">
+          <section
+            className="detail-section-block"
+            aria-labelledby="detail-skills-heading"
+          >
             <h2 id="detail-skills-heading" className="detail-section-title">
               Skillsets
             </h2>
             <ul className="detail-list">
               {member.skillsets.map((skill) => (
-                <motion.li key={skill} className="detail-list-item" variants={itemFade}>
+                <motion.li
+                  key={skill}
+                  className="detail-list-item"
+                  variants={itemFade}
+                >
                   {skill}
                 </motion.li>
               ))}
             </ul>
           </section>
 
-          <section className="detail-section-block" aria-labelledby="detail-interests-heading">
+          <section
+            className="detail-section-block"
+            aria-labelledby="detail-interests-heading"
+          >
             <h2 id="detail-interests-heading" className="detail-section-title">
               Interests
             </h2>
             <ul className="detail-list">
               {member.interests.map((interest) => (
-                <motion.li key={interest} className="detail-list-item" variants={itemFade}>
+                <motion.li
+                  key={interest}
+                  className="detail-list-item"
+                  variants={itemFade}
+                >
                   {interest}
                 </motion.li>
               ))}
@@ -176,5 +204,5 @@ export function MemberDetailPage() {
         </motion.div>
       </article>
     </div>
-  )
+  );
 }
