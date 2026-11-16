@@ -14,7 +14,7 @@ import {
   type ChapterLayoutVariant,
 } from "@/components/MemberChapter";
 import { PartnerSection } from "@/components/PartnerSection";
-import type { ActiveChapterDetail } from "@/components/SiteHeader";
+import { getSplashState, setSplashState } from "@/lib/splashBus";
 import { TransitionLink } from "@/components/TransitionLink";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useTransitionState } from "@/hooks/useTransitionMember";
@@ -46,7 +46,7 @@ export function RosterPage() {
     rawFilter && VALID_FILTERS.has(rawFilter) ? rawFilter : "All";
 
   const [activeChapter, setActiveChapter] = useState<string>("01");
-  const [showcaseInView, setShowcaseInView] = useState(false);
+  const [pastSplash, setPastSplash] = useState<boolean>(getSplashState);
   const [overviewTab, setOverviewTab] = useState<OverviewTab>(() =>
     hash === "#interests" ? "interests" : "summary",
   );
@@ -123,7 +123,6 @@ export function RosterPage() {
     const chapters = Array.from(
       document.querySelectorAll<HTMLElement>(".member-chapter"),
     );
-    const showcase = document.querySelector<HTMLElement>(".chapters-showcase");
     if (chapters.length === 0) return;
 
     let rafId = 0;
@@ -158,13 +157,10 @@ export function RosterPage() {
         setActiveChapter((prev) => (prev === nextChapter ? prev : nextChapter));
       }
 
-      if (showcase) {
-        const sRect = showcase.getBoundingClientRect();
-        const inView =
-          sRect.top <= window.innerHeight * 0.72 &&
-          sRect.bottom >= window.innerHeight * 0.25;
-        setShowcaseInView((prev) => (prev === inView ? prev : inView));
-      }
+      const hero = document.getElementById("builders");
+      const heroEntered =
+        hero != null && hero.getBoundingClientRect().top <= window.innerHeight * 0.72;
+      setPastSplash((prev) => (prev === heroEntered ? prev : heroEntered));
     };
 
     const scheduleSync = () => {
@@ -186,26 +182,8 @@ export function RosterPage() {
   }, []);
 
   useEffect(() => {
-    const member =
-      TEAM_MEMBERS.find((m) => m.index === activeChapter) ?? TEAM_MEMBERS[0];
-    const detail: ActiveChapterDetail = {
-      index: member.index,
-      name: member.name,
-      pillar: member.pillar,
-      visible: showcaseInView,
-    };
-    window.dispatchEvent(
-      new CustomEvent("capstone:active-chapter", { detail }),
-    );
-
-    return () => {
-      window.dispatchEvent(
-        new CustomEvent("capstone:active-chapter", {
-          detail: { ...detail, visible: false },
-        }),
-      );
-    };
-  }, [activeChapter, showcaseInView]);
+    setSplashState(pastSplash);
+  }, [pastSplash]);
 
   const scrollToElement = (id: string) => {
     const el = document.getElementById(id);
@@ -274,7 +252,29 @@ export function RosterPage() {
 
   return (
     <div className="showcase-page">
-      <section className="hero-masthead">
+      <section className="splash" aria-label="Introduction">
+        <div className="splash-inner">
+          <p className="splash-eyebrow">{GROUP_META.institution}</p>
+          <p className="splash-title" aria-label="Lockheed Summer Internship">
+            <span className="splash-title-big">Lockheed</span>
+            <span className="splash-title-sub">Summer Internship</span>
+          </p>
+          <p className="splash-lead">
+            One team across product, systems &amp; design, and code — scroll on
+            to meet the builders.
+          </p>
+          <button
+            type="button"
+            className="splash-cue"
+            onClick={() => scrollToElement("builders")}
+          >
+            <span>Meet the team</span>
+            <ArrowDown className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      </section>
+
+      <section className="hero-masthead" id="builders">
         <div className="hero-masthead-inner">
           <div className="hero-copy">
             <p className="masthead-eyebrow">
@@ -295,21 +295,21 @@ export function RosterPage() {
               <div className="hero-stat-item">
                 <dt className="hero-stat-label">Team</dt>
                 <dd className="hero-stat-value">
-                  <span className="hero-stat-num">07</span>
+                  <span className="hero-stat-num">7</span>
                   <span className="hero-stat-unit">builders</span>
                 </dd>
               </div>
               <div className="hero-stat-item">
                 <dt className="hero-stat-label">Architecture</dt>
                 <dd className="hero-stat-value">
-                  <span className="hero-stat-num">03</span>
+                  <span className="hero-stat-num">3</span>
                   <span className="hero-stat-unit">SUTD pillars</span>
                 </dd>
               </div>
               <div className="hero-stat-item">
                 <dt className="hero-stat-label">Delivery</dt>
                 <dd className="hero-stat-value">
-                  <span className="hero-stat-num">02</span>
+                  <span className="hero-stat-num">2</span>
                   <span className="hero-stat-unit">academic terms</span>
                 </dd>
               </div>
@@ -324,7 +324,7 @@ export function RosterPage() {
                   scrollToElement("chapter-01");
                 }}
               >
-                <span>Meet the 07</span>
+                <span>Meet the 7</span>
                 <ArrowDown className="size-4" aria-hidden="true" />
               </a>
 
@@ -369,7 +369,7 @@ export function RosterPage() {
                     }}
                   >
                     <span className="hero-spec-count">
-                      {String(spec.members.length).padStart(2, "0")}
+                      {spec.members.length}
                     </span>
                     <span className="hero-spec-detail">
                       <span className="hero-spec-full">{spec.fullName}</span>
@@ -470,7 +470,7 @@ export function RosterPage() {
                     scrollToElement("at-a-glance");
                   }}
                 >
-                  All 07
+                  All 7
                 </a>
               </li>
             </ul>
@@ -559,7 +559,7 @@ export function RosterPage() {
                       )}
                       <span className="filter-pill-label">{filter.label}</span>
                       <span className="filter-count">
-                        {String(pillarCounts[filter.id]).padStart(2, "0")}
+                        {pillarCounts[filter.id]}
                       </span>
                     </button>
                   );
@@ -616,18 +616,6 @@ export function RosterPage() {
                             }
                           >
                             <header className="member-card-head">
-                              <span
-                                className="member-index"
-                                style={
-                                  isMorphTarget
-                                    ? ({
-                                        viewTransitionName: "member-index",
-                                      } as React.CSSProperties)
-                                    : undefined
-                                }
-                              >
-                                {member.index}
-                              </span>
                               <span
                                 className="pillar-label"
                                 data-pillar={member.pillar}
@@ -705,7 +693,6 @@ export function RosterPage() {
                         className="member-interest-row"
                       >
                         <div className="interest-row-identity">
-                          <span className="member-index">{member.index}</span>
                           <div>
                             <TransitionLink
                               to={`/member/${member.slug}`}

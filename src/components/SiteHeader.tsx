@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-  useScroll,
-} from "motion/react";
+import { motion, useReducedMotion, useScroll } from "motion/react";
 import { Menu, X } from "lucide-react";
-import { GROUP_META, type Pillar } from "@/data/capstone";
+import { GROUP_META } from "@/data/capstone";
+import { getSplashState, subscribeSplashState } from "@/lib/splashBus";
 import {
   focusRouteHeading,
   prefersReducedMotion,
@@ -15,13 +11,6 @@ import {
 } from "@/lib/viewTransitions";
 import { ThemeToggle } from "./ThemeToggle";
 import { TransitionLink } from "./TransitionLink";
-
-export interface ActiveChapterDetail {
-  index: string;
-  name: string;
-  pillar: Pillar;
-  visible: boolean;
-}
 
 function isPopoverCurrentlyOpen(el: HTMLElement): boolean {
   try {
@@ -40,20 +29,14 @@ export function SiteHeader() {
   const innerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [chapterContext, setChapterContext] =
-    useState<ActiveChapterDetail | null>(null);
+  const [pastSplash, setPastSplash] = useState<boolean>(getSplashState);
   const lastMeasuredCollapsedWidth = useRef(0);
 
-  useEffect(() => {
-    const onChapterChange = (event: Event) => {
-      const custom = event as CustomEvent<ActiveChapterDetail>;
-      setChapterContext(custom.detail);
-    };
-    window.addEventListener("capstone:active-chapter", onChapterChange);
-    return () => {
-      window.removeEventListener("capstone:active-chapter", onChapterChange);
-    };
-  }, []);
+  useEffect(() => subscribeSplashState(setPastSplash), []);
+
+  // Off the roster route there is no splash section, so the header is
+  // always compact — derived during render instead of synced in an effect.
+  const headerSplash = pathname === "/" ? pastSplash : true;
 
   const closeCollapsedMenu = useCallback(() => {
     const menu = menuRef.current;
@@ -208,10 +191,12 @@ export function SiteHeader() {
     pathname === "/" && (hash === "#at-a-glance" || hash === "#interests");
   const isPartnerActive = pathname === "/" && hash === "#partner";
 
-  const showChapterContext = pathname === "/" && chapterContext?.visible;
-
   return (
-    <header ref={headerRef} className="site-header">
+    <header
+      ref={headerRef}
+      className="site-header"
+      data-splash={headerSplash ? "past" : "minimal"}
+    >
       <motion.div
         className="scroll-progress-bar"
         style={shouldReduceMotion ? undefined : { scaleX: scrollYProgress }}
@@ -261,7 +246,6 @@ export function SiteHeader() {
                 onBeforeNavigate={closeCollapsedMenu}
               >
                 <span>About Us</span>
-                <span className="nav-count">07</span>
               </TransitionLink>
             </li>
             <li>
@@ -288,26 +272,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="header-utility">
-          <AnimatePresence>
-            {showChapterContext && chapterContext && (
-              <motion.div
-                key={chapterContext.index}
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
-                transition={{ duration: 0.22 }}
-                className="header-chapter-context"
-                data-pillar={chapterContext.pillar}
-                aria-live="polite"
-              >
-                <span className="header-chapter-dot" aria-hidden="true" />
-                <span className="header-chapter-text">
-                  {chapterContext.index} / 07 · {chapterContext.name} ·{" "}
-                  {chapterContext.pillar}
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
           <ThemeToggle />
         </div>
       </div>

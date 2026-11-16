@@ -11,6 +11,12 @@ interface ArtifactFrameProps {
   subline?: string;
   tone?: "default" | "charcoal";
   className?: string;
+  /**
+   * "minimal" renders only the tag row and index numeral, so chapters can
+   * keep role / skillset / interest copy in a single canonical home instead
+   * of repeating it on every plate.
+   */
+  overlay?: "full" | "minimal";
 }
 
 export function ArtifactFrame({
@@ -24,6 +30,7 @@ export function ArtifactFrame({
   subline,
   tone = "default",
   className = "",
+  overlay = "full",
 }: ArtifactFrameProps) {
   const resolvedAlt =
     alt ?? member.artifacts?.alt ?? `${member.name} — ${member.role}`;
@@ -53,19 +60,22 @@ export function ArtifactFrame({
                   {plateLabel ?? `${member.pillar} · ${member.pillarFull}`}
                 </span>
               </span>
-              <span className="artifact-plate-index">{member.index} / 07</span>
             </div>
             <div className="artifact-plate-center">
-              <span className="artifact-plate-role">
-                {headline ?? member.role}
-              </span>
+              {overlay === "full" && (
+                <span className="artifact-plate-role">
+                  {headline ?? member.role}
+                </span>
+              )}
               <span className="artifact-plate-numeral">{member.index}</span>
             </div>
-            <div className="artifact-plate-bottom">
-              <span className="artifact-plate-spec">
-                {subline ?? member.skillsets.slice(0, 3).join(" · ")}
-              </span>
-            </div>
+            {overlay === "full" && (
+              <div className="artifact-plate-bottom">
+                <span className="artifact-plate-spec">
+                  {subline ?? member.skillsets.slice(0, 3).join(" · ")}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>

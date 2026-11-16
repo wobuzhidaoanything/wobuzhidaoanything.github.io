@@ -80,7 +80,7 @@ export function MemberDetailPage() {
       <div className="detail-top-bar">
         <TransitionLink to="/" direction="backward" className="back-link">
           <ArrowLeft className="size-4" aria-hidden="true" />
-          <span>All 07 Members</span>
+          <span>All 7 Members</span>
         </TransitionLink>
 
         <nav className="member-pager" aria-label="Member pagination">
@@ -94,10 +94,6 @@ export function MemberDetailPage() {
               {prevMember.name} · {prevMember.pillar}
             </span>
           </TransitionLink>
-
-          <span className="pager-status" aria-hidden="true">
-            {member.index} / 07
-          </span>
 
           <TransitionLink
             to={`/member/${nextMember.slug}`}
@@ -121,18 +117,6 @@ export function MemberDetailPage() {
         }
       >
         <header className="detail-profile-head">
-          <span
-            className="member-index detail-index"
-            style={
-              isMorphTarget
-                ? ({
-                    viewTransitionName: "member-index",
-                  } as React.CSSProperties)
-                : undefined
-            }
-          >
-            {member.index}
-          </span>
           <span className="pillar-label" data-pillar={member.pillar}>
             <span className="pillar-dot" aria-hidden="true" />
             <span>

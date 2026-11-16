@@ -94,7 +94,6 @@ export function MemberChapter({
           />
 
           <div className="chapter-meta">
-            <span className="chapter-index">{member.index} / 07</span>
             <span className="pillar-label" data-pillar={member.pillar}>
               <span className="pillar-dot" aria-hidden="true" />
               <span>
@@ -178,39 +177,149 @@ export function MemberChapter({
   );
 }
 
-function useMemberLenses(member: TeamMember) {
+type ChapterLens =
+  | { id: string; label: string; kind: "skillsets"; items: string[] }
+  | { id: string; label: string; kind: "interests"; items: string[] }
+  | { id: string; label: string; kind: "custom"; summary: string };
+
+/**
+ * Lens facets are the single canonical home for skillset / interest lists
+ * in the lens-driven variants. Fallbacks point at the member's own lists
+ * instead of re-pivoting role / bio / skillsets into paraphrased copies;
+ * author-supplied lens summaries pass through untouched.
+ */
+function useChapterLenses(member: TeamMember): ChapterLens[] {
   return useMemo(() => {
     if (member.artifacts?.lenses && member.artifacts.lenses.length > 0) {
       return member.artifacts.lenses.map((lens) => ({
-        ...lens,
-        headline: member.role,
-        subline: member.skillsets.slice(0, 3).join(" · "),
+        id: lens.id,
+        label: lens.label,
+        kind: "custom" as const,
+        summary: lens.summary,
       }));
     }
     return [
       {
-        id: "craft",
-        label: "Craft",
-        headline: member.role,
-        subline: member.skillsets.slice(0, 3).join(" · "),
-        summary: member.bio,
+        id: "skillsets",
+        label: "Skillsets",
+        kind: "skillsets" as const,
+        items: member.skillsets,
       },
       {
-        id: "toolchain",
-        label: "Toolchain",
-        headline: member.skillsets.slice(0, 2).join(" & "),
-        subline: member.skillsets.join(" · "),
-        summary: member.skillsets.join(" · "),
-      },
-      {
-        id: "role",
-        label: "Capstone Role",
-        headline: member.pillarFull,
-        subline: `${member.pillar} · ${member.interests.slice(0, 2).join(" · ")}`,
-        summary: `${member.pillarFull} — ${member.role}`,
+        id: "interests",
+        label: "Interests",
+        kind: "interests" as const,
+        items: member.interests,
       },
     ];
   }, [member]);
+}
+
+function LensStrip({
+  member,
+  lenses,
+  activeLensId,
+  onSelect,
+  shouldReduceMotion,
+  pillPrefix,
+  groupLabel,
+}: {
+  member: TeamMember;
+  lenses: ChapterLens[];
+  activeLensId: string;
+  onSelect: (id: string) => void;
+  shouldReduceMotion: boolean;
+  pillPrefix: string;
+  groupLabel: string;
+}) {
+  return (
+    <div
+      className="perspective-lens-strip"
+      role="group"
+      aria-label={groupLabel}
+    >
+      {lenses.map((lens) => {
+        const active = lens.id === activeLensId;
+        return (
+          <button
+            key={lens.id}
+            type="button"
+            aria-pressed={active}
+            className="perspective-lens-btn"
+            onClick={() => onSelect(lens.id)}
+          >
+            {active && (
+              <motion.span
+                layoutId={`${pillPrefix}-${member.id}`}
+                className="perspective-lens-pill"
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 420, damping: 36 }
+                }
+                aria-hidden="true"
+              />
+            )}
+            <span className="perspective-lens-label">{lens.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function LensReadout({
+  lens,
+  interestsKicker,
+  shouldReduceMotion,
+}: {
+  lens: ChapterLens;
+  interestsKicker: string;
+  shouldReduceMotion: boolean;
+}) {
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={lens.id}
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
+        transition={{ duration: 0.2 }}
+        className="perspective-readout"
+      >
+        {lens.kind === "skillsets" && (
+          <>
+            <h3 className="chapter-kicker">Skillsets</h3>
+            <ul className="chapter-skills-list">
+              {lens.items.map((skill, idx) => (
+                <li key={skill} className="chapter-skill-item">
+                  <span className="chapter-skill-num">0{idx + 1}</span>
+                  <span className="chapter-skill-name">{skill}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {lens.kind === "interests" && (
+          <>
+            <h3 className="chapter-kicker">{interestsKicker}</h3>
+            <ul className="chapter-interest-tags">
+              {lens.items.map((interest) => (
+                <li key={interest} className="chapter-interest-tag">
+                  {interest}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {lens.kind === "custom" && (
+          <p className="perspective-lens-summary">
+            <strong>{lens.label}:</strong> {lens.summary}
+          </p>
+        )}
+      </motion.div>
+    </AnimatePresence>
+  );
 }
 
 function PerspectiveLensStage({
@@ -222,8 +331,8 @@ function PerspectiveLensStage({
   scrollYProgress: MotionValue<number>;
   shouldReduceMotion: boolean;
 }) {
-  const lenses = useMemberLenses(member);
-  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "craft");
+  const lenses = useChapterLenses(member);
+  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "skillsets");
   const currentLens = lenses.find((l) => l.id === activeLensId) ?? lenses[0];
   const mediaY = useTransform(scrollYProgress, [0, 1], ["3%", "-3%"]);
 
@@ -238,95 +347,28 @@ function PerspectiveLensStage({
             member={member}
             src={member.artifacts?.heroImage}
             aspectRatio="16/10"
-            plateLabel={`${member.pillar} · ${currentLens.label}`}
-            headline={currentLens.headline}
-            subline={currentLens.subline}
+            plateLabel={member.pillar}
+            overlay="minimal"
             className="perspective-artifact"
           />
         </motion.div>
 
         <div className="perspective-controls">
-          <div
-            className="perspective-lens-strip"
-            role="group"
-            aria-label="Perspective lens"
-          >
-            {lenses.map((lens) => {
-              const active = lens.id === activeLensId;
-              return (
-                <button
-                  key={lens.id}
-                  type="button"
-                  aria-pressed={active}
-                  className="perspective-lens-btn"
-                  onClick={() => setActiveLensId(lens.id)}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId={`perspective-lens-${member.id}`}
-                      className="perspective-lens-pill"
-                      transition={
-                        shouldReduceMotion
-                          ? { duration: 0 }
-                          : { type: "spring", stiffness: 420, damping: 36 }
-                      }
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="perspective-lens-label">{lens.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentLens.id}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
-              className="perspective-readout"
-            >
-              <p className="perspective-lens-summary">
-                <strong>{currentLens.label}:</strong> {currentLens.summary}
-              </p>
-            </motion.div>
-          </AnimatePresence>
+          <LensStrip
+            member={member}
+            lenses={lenses}
+            activeLensId={activeLensId}
+            onSelect={setActiveLensId}
+            shouldReduceMotion={shouldReduceMotion}
+            pillPrefix="perspective-lens"
+            groupLabel="Perspective lens"
+          />
+          <LensReadout
+            lens={currentLens}
+            interestsKicker="Interests & Studio Focus"
+            shouldReduceMotion={shouldReduceMotion}
+          />
         </div>
-      </ScrollBeat>
-
-      <ScrollBeat
-        className="chapter-beat chapter-beat-card"
-        shouldReduceMotion={shouldReduceMotion}
-      >
-        <h3 className="chapter-kicker">Skillsets</h3>
-        <ul className="chapter-skills-list">
-          {member.skillsets.map((skill, idx) => (
-            <li key={skill} className="chapter-skill-item">
-              <span className="chapter-skill-num">0{idx + 1}</span>
-              <span className="chapter-skill-name">{skill}</span>
-            </li>
-          ))}
-        </ul>
-      </ScrollBeat>
-
-      <ScrollBeat
-        className="chapter-beat chapter-beat-card"
-        shouldReduceMotion={shouldReduceMotion}
-      >
-        <h3 className="chapter-kicker">Interests &amp; Studio Focus</h3>
-        <p className="chapter-interests-line">
-          Exploring {member.interests.slice(0, 2).join(" and ").toLowerCase()}{" "}
-          alongside {member.role.toLowerCase()}.
-        </p>
-        <ul className="chapter-interest-tags">
-          {member.interests.map((interest) => (
-            <li key={interest} className="chapter-interest-tag">
-              {interest}
-            </li>
-          ))}
-        </ul>
       </ScrollBeat>
     </div>
   );
@@ -356,9 +398,8 @@ function DiptychCollageStage({
               member={member}
               src={member.artifacts?.heroImage}
               aspectRatio="4/5"
-              plateLabel={`${member.pillar} · ${member.pillarFull}`}
-              headline={member.role}
-              subline={member.skillsets.slice(0, 3).join(" · ")}
+              plateLabel={member.pillar}
+              overlay="minimal"
             />
           </motion.div>
 
@@ -370,9 +411,8 @@ function DiptychCollageStage({
               member={member}
               src={member.artifacts?.secondaryImage}
               aspectRatio="16/10"
-              plateLabel={`${member.pillar} · Studio Focus`}
-              headline={member.skillsets.slice(0, 2).join(" & ")}
-              subline={member.interests.join(" · ")}
+              plateLabel="Studio"
+              overlay="minimal"
             />
           </motion.div>
         </div>
@@ -398,7 +438,6 @@ function DiptychCollageStage({
         shouldReduceMotion={shouldReduceMotion}
       >
         <h3 className="chapter-kicker">Studio &amp; Beyond</h3>
-        <p className="chapter-interests-line">{member.interests.join(" · ")}</p>
         <ul className="chapter-interest-tags">
           {member.interests.map((interest) => (
             <li key={interest} className="chapter-interest-tag">
@@ -443,14 +482,12 @@ function CharcoalCarouselStage({
         id: `skill-${skill}`,
         tag: `0${idx + 1} · Core Skill`,
         title: skill,
-        detail: `${member.pillar} application within ${member.role.toLowerCase()}.`,
       }));
     }
     return member.interests.map((interest, idx) => ({
       id: `interest-${interest}`,
       tag: `0${idx + 1} · Studio & Beyond`,
       title: interest,
-      detail: `Explored alongside ${member.skillsets[idx % member.skillsets.length]}.`,
     }));
   }, [activeTab, member]);
 
@@ -618,9 +655,8 @@ function CharcoalCarouselStage({
             member={member}
             src={member.artifacts?.heroImage}
             aspectRatio="16/10"
-            plateLabel={`${member.pillar} · ${member.pillarFull}`}
-            headline={member.role}
-            subline={member.skillsets.slice(0, 3).join(" · ")}
+            plateLabel={member.pillar}
+            overlay="minimal"
             tone="charcoal"
           />
         </motion.div>
@@ -708,7 +744,6 @@ function CharcoalCarouselStage({
               >
                 <span className="peek-card-tag">{card.tag}</span>
                 <h3 className="peek-card-title">{card.title}</h3>
-                <p className="peek-card-detail">{card.detail}</p>
               </article>
             ))}
           </div>
@@ -732,21 +767,6 @@ function CharcoalCarouselStage({
         </section>
       </ScrollBeat>
 
-      <ScrollBeat
-        className="chapter-beat chapter-spec-grid"
-        shouldReduceMotion={shouldReduceMotion}
-      >
-        <div className="chapter-beat-card">
-          <h3 className="chapter-kicker">Core Capabilities</h3>
-          <p className="chapter-inline-specs">{member.skillsets.join(" · ")}</p>
-        </div>
-        <div className="chapter-beat-card">
-          <h3 className="chapter-kicker">Studio Interests</h3>
-          <p className="chapter-interests-line">
-            {member.interests.join(" · ")}
-          </p>
-        </div>
-      </ScrollBeat>
     </div>
   );
 }
@@ -760,8 +780,8 @@ function EditorialSpotlightStage({
   scrollYProgress: MotionValue<number>;
   shouldReduceMotion: boolean;
 }) {
-  const lenses = useMemberLenses(member);
-  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "craft");
+  const lenses = useChapterLenses(member);
+  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "skillsets");
   const currentLens = lenses.find((l) => l.id === activeLensId) ?? lenses[0];
   const frameScale = useTransform(scrollYProgress, [0, 0.35], [0.96, 1]);
 
@@ -776,95 +796,27 @@ function EditorialSpotlightStage({
             member={member}
             src={member.artifacts?.heroImage}
             aspectRatio="16/9"
-            plateLabel={`${member.pillar} · ${currentLens.label}`}
-            headline={currentLens.headline}
-            subline={currentLens.subline}
+            plateLabel={member.pillar}
+            overlay="minimal"
           />
         </motion.div>
 
         <div className="perspective-controls">
-          <div
-            className="perspective-lens-strip"
-            role="group"
-            aria-label="Perspective lens"
-          >
-            {lenses.map((lens) => {
-              const active = lens.id === activeLensId;
-              return (
-                <button
-                  key={lens.id}
-                  type="button"
-                  aria-pressed={active}
-                  className="perspective-lens-btn"
-                  onClick={() => setActiveLensId(lens.id)}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId={`perspective-lens-${member.id}`}
-                      className="perspective-lens-pill"
-                      transition={
-                        shouldReduceMotion
-                          ? { duration: 0 }
-                          : { type: "spring", stiffness: 420, damping: 36 }
-                      }
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="perspective-lens-label">{lens.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentLens.id}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
-              className="perspective-readout"
-            >
-              <p className="perspective-lens-summary">
-                <strong>{currentLens.label}:</strong> {currentLens.summary}
-              </p>
-            </motion.div>
-          </AnimatePresence>
+          <LensStrip
+            member={member}
+            lenses={lenses}
+            activeLensId={activeLensId}
+            onSelect={setActiveLensId}
+            shouldReduceMotion={shouldReduceMotion}
+            pillPrefix="spotlight-lens"
+            groupLabel="Spotlight lens"
+          />
+          <LensReadout
+            lens={currentLens}
+            interestsKicker="Interests & Exploration"
+            shouldReduceMotion={shouldReduceMotion}
+          />
         </div>
-      </ScrollBeat>
-
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <h3 className="chapter-kicker">Skillsets</h3>
-        <ul className="spotlight-skill-grid">
-          {member.skillsets.map((skill, idx) => (
-            <li key={skill} className="spotlight-skill-card">
-              <span className="chapter-skill-num">0{idx + 1}</span>
-              <span className="spotlight-skill-title">{skill}</span>
-              <span className="spotlight-skill-meta">
-                {member.pillar} · {member.role}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </ScrollBeat>
-
-      <ScrollBeat
-        className="chapter-beat chapter-beat-card"
-        shouldReduceMotion={shouldReduceMotion}
-      >
-        <h3 className="chapter-kicker">Interests &amp; Exploration</h3>
-        <p className="chapter-interests-line">
-          Investigating{" "}
-          {member.interests.slice(0, 2).join(" and ").toLowerCase()} in support
-          of {member.pillarFull.toLowerCase()}.
-        </p>
-        <ul className="chapter-interest-tags">
-          {member.interests.map((interest) => (
-            <li key={interest} className="chapter-interest-tag">
-              {interest}
-            </li>
-          ))}
-        </ul>
       </ScrollBeat>
     </div>
   );

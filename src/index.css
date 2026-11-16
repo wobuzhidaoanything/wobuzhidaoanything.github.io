@@ -285,7 +285,6 @@
 .chapter-index,
 .chapter-skill-num,
 .dock-num,
-.nav-count,
 .filter-count,
 .pager-status,
 .pillar-label,
@@ -306,6 +305,15 @@
   background-color: color-mix(in oklab, var(--bg) 94%, transparent);
   backdrop-filter: blur(14px);
   border-block-end: 1px solid var(--border-card);
+  transition:
+    background-color 0.32s ease,
+    border-color 0.32s ease;
+
+  &[data-splash="minimal"] {
+    background-color: transparent;
+    backdrop-filter: none;
+    border-block-end-color: transparent;
+  }
 
   &.is-measuring * {
     transition: none !important;
@@ -446,48 +454,6 @@
   pointer-events: none;
 }
 
-.header-chapter-context {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding-inline: 0.875rem;
-  padding-block: 0.34rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border-card);
-  background-color: var(--surface);
-  font-family: var(--font-sans);
-  font-size: 0.78125rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-  white-space: nowrap;
-
-  @container site-header (inline-size < 64rem) {
-    display: none;
-  }
-}
-
-.header-chapter-dot {
-  inline-size: 0.4375rem;
-  block-size: 0.4375rem;
-  border-radius: 999px;
-  background-color: var(--accent);
-  flex-shrink: 0;
-}
-
-.header-chapter-context[data-pillar="CSD"] .header-chapter-dot {
-  background-color: var(--pillar-csd);
-}
-
-.header-chapter-context[data-pillar="EPD"] .header-chapter-dot {
-  background-color: var(--pillar-epd);
-}
-
-.header-chapter-context[data-pillar="ESD"] .header-chapter-dot {
-  background-color: var(--pillar-esd);
-}
-
 .header-inner {
   display: flex;
   align-items: center;
@@ -523,9 +489,20 @@
   padding-block: 0.25rem;
   color: var(--ink);
   text-decoration: none;
+  transition:
+    opacity 0.32s ease,
+    translate 0.32s ease;
 
   @supports (text-box: trim-start cap text) {
     gap: 0.125rem;
+  }
+
+  /* Splash state: the splash carries the big Lockheed wordmark, so the
+     header keeps its space but yields the stage until the hero enters. */
+  .site-header[data-splash="minimal"] & {
+    opacity: 0;
+    translate: 0 0.45rem;
+    pointer-events: none;
   }
 }
 
@@ -557,8 +534,6 @@
 .nav-link {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem;
   inline-size: 100%;
   min-block-size: 2.5rem;
   padding-inline: 0.875rem;
@@ -594,14 +569,6 @@
   &[aria-current="page"] {
     background-color: transparent;
   }
-}
-
-.nav-count {
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent);
 }
 
 .header-utility {
@@ -693,6 +660,105 @@
    Flagship Product Hero Masthead
    ========================================================================== */
 
+/* ==========================================================================
+   Splash — full-viewport Lockheed wordmark before the builders hero
+   ========================================================================== */
+
+.splash {
+  container: splash / inline-size;
+  border-block-end: 1px solid var(--border-card);
+}
+
+.splash-inner {
+  inline-size: min(100%, var(--page-max));
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+  padding-block: clamp(2rem, 6dvb, 4rem);
+  min-block-size: calc(100svb - 6rem);
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: clamp(1rem, 2.5cqi, 1.75rem);
+}
+
+.splash-eyebrow {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: clamp(0.8125rem, 0.75rem + 0.4cqi, 1rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.splash-title {
+  margin: 0;
+  display: grid;
+  justify-items: start;
+  gap: 0.1em;
+}
+
+.splash-title-big {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  font-size: clamp(2.5rem, 0.5rem + 17cqi, 11.5rem);
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.splash-title-sub {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(1.5rem, 1.1rem + 3.5cqi, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--accent);
+}
+
+.splash-lead {
+  margin: 0;
+  font-size: clamp(1rem, 0.92rem + 0.6cqi, 1.25rem);
+  line-height: 1.6;
+  color: var(--ink-secondary);
+  max-inline-size: 44ch;
+}
+
+.splash-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 2.75rem;
+  padding-inline: 1.375rem;
+  padding-block: 0.6rem;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-control);
+  background-color: var(--ink);
+  color: var(--bg);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    scale 0.14s ease;
+
+  &:hover {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  &:active {
+    scale: 0.985;
+  }
+}
+
 .hero-masthead {
   container: hero / inline-size;
   display: grid;
@@ -701,6 +767,7 @@
   min-block-size: min(72dvb, 42rem);
   padding-block: clamp(3rem, 7.5dvb, 5.75rem);
   border-block-end: 1px solid var(--border-card);
+  scroll-margin-top: 5rem;
 }
 
 .hero-masthead-inner {
@@ -1443,7 +1510,9 @@
   inset-block-end: 0.75rem;
   z-index: 30;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
   padding-inline: 1rem;
   padding-block: 0.5rem;
   pointer-events: none;
@@ -1612,10 +1681,33 @@
   position: relative;
   z-index: 1;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.25rem 0.75rem;
+}
+
+.artifact-plate-bottom {
+  flex-wrap: wrap;
+}
+
+.artifact-plate-top {
+  /* One line: the index must never drop onto the numeral below. */
+  flex-wrap: nowrap;
+}
+
+.artifact-plate-top .artifact-plate-tag {
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.artifact-plate-top .artifact-plate-tag > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-plate-top .artifact-plate-index {
+  flex-shrink: 0;
 }
 
 .artifact-plate-tag {
@@ -3426,6 +3518,11 @@ html:active-view-transition-type(backward)::view-transition-new(page-main) {
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+  .site-header,
+  .site-brand {
+    transition: none !important;
+  }
+
   .peek-carousel {
     scroll-behavior: auto !important;
   }
@@ -3467,6 +3564,7 @@ html:active-view-transition-type(backward)::view-transition-new(page-main) {
   .member-card,
   .detail-profile-card,
   .chapter-dock,
+  .splash-cue,
   .chapter-beat-card,
   .chapter-interest-tag,
   .spotlight-skill-card,
