@@ -12,6 +12,7 @@ import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import type { TeamMember } from "@/data/capstone";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
 import { TransitionLink } from "@/components/TransitionLink";
+import { PillarBadge } from "@/components/ui/pillar-badge";
 import { useTransitionState } from "@/hooks/useTransitionMember";
 
 export type ChapterLayoutVariant =
@@ -443,12 +444,9 @@ export function MemberChapter({
             >
               {member.index} / 07
             </span>
-            <span className="pillar-label" data-pillar={member.pillar}>
-              <span className="pillar-dot" aria-hidden="true" />
-              <span>
-                {member.pillar} · {member.pillarFull}
-              </span>
-            </span>
+            <PillarBadge pillar={member.pillar}>
+              {member.pillar} · {member.pillarFull}
+            </PillarBadge>
           </motion.div>
 
           <motion.h2
@@ -511,12 +509,9 @@ export function MemberChapter({
             data-pillar={member.pillar}
             aria-hidden="true"
           />
-          <span className="pillar-label" data-pillar={member.pillar}>
-            <span className="pillar-dot" aria-hidden="true" />
-            <span>
-              {member.pillar} · {member.pillarFull}
-            </span>
-          </span>
+          <PillarBadge pillar={member.pillar}>
+            {member.pillar} · {member.pillarFull}
+          </PillarBadge>
           <p className="rail-name">{member.name}</p>
           <p className="chapter-role">{member.role}</p>
           <TransitionLink

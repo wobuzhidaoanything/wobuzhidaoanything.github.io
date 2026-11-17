@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { motion, useReducedMotion, useScroll } from "motion/react";
 import { Menu, X } from "lucide-react";
+import { cn } from "cn";
 import { GROUP_META } from "@/data/capstone";
 import { getSplashState, subscribeSplashState } from "@/lib/splashBus";
 import {
@@ -19,6 +20,20 @@ function isPopoverCurrentlyOpen(el: HTMLElement): boolean {
     return el.classList.contains(":popover-open");
   }
 }
+
+const navLinkStyles = cn(
+  "inline-flex w-full items-center min-h-10 px-3.5 py-2 rounded-control",
+  "type-ui font-semibold text-ink-secondary transition-colors duration-150",
+  "hover:text-ink hover:bg-surface-muted",
+  "aria-[current=page]:text-ink aria-[current=page]:font-bold",
+  "aria-[current=page]:bg-surface-muted aria-[current=page]:underline",
+  "aria-[current=page]:decoration-accent aria-[current=page]:decoration-[2.5px]",
+  "aria-[current=page]:underline-offset-[0.38rem]",
+  "nav-link",
+  "pointer-coarse:min-h-11",
+  "group-data-[wide]/header:w-auto",
+  "group-data-[wide]/header:aria-[current=page]:bg-transparent",
+);
 
 export function SiteHeader() {
   const { pathname, hash } = useLocation();
@@ -62,7 +77,7 @@ export function SiteHeader() {
 
     const measureLayout = (forceMeasure = false) => {
       const currentWidth = header.clientWidth;
-      const wasWide = header.classList.contains("is-wide");
+      const wasWide = header.hasAttribute("data-wide");
 
       if (
         !forceMeasure &&
@@ -75,18 +90,18 @@ export function SiteHeader() {
       const wasPopoverOpen =
         menu.hasAttribute("popover") && isPopoverCurrentlyOpen(menu);
 
-      header.classList.add("is-measuring");
-      header.classList.add("is-wide");
+      header.setAttribute("data-measuring", "");
+      header.setAttribute("data-wide", "");
       menu.removeAttribute("popover");
 
       const fitsInline = inner.scrollWidth <= inner.clientWidth;
 
       if (fitsInline) {
-        header.classList.add("is-wide");
+        header.setAttribute("data-wide", "");
         menu.removeAttribute("popover");
         setMenuOpen(false);
       } else {
-        header.classList.remove("is-wide");
+        header.removeAttribute("data-wide");
         menu.setAttribute("popover", "auto");
         lastMeasuredCollapsedWidth.current = currentWidth;
 
@@ -101,7 +116,7 @@ export function SiteHeader() {
 
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        header.classList.remove("is-measuring");
+        header.removeAttribute("data-measuring");
       });
     };
 
@@ -194,34 +209,72 @@ export function SiteHeader() {
   return (
     <header
       ref={headerRef}
-      className="site-header"
+      className={cn(
+        "site-header group/header @container/site-header sticky top-0 z-40",
+        "border-b border-edge",
+        "bg-header backdrop-blur-[14px]",
+        "transition-[background-color,border-color] duration-300",
+        "data-[splash=minimal]:bg-transparent",
+        "data-[splash=minimal]:backdrop-blur-none",
+        "data-[splash=minimal]:border-transparent",
+      )}
       data-splash={headerSplash ? "past" : "minimal"}
     >
       <motion.div
-        className="scroll-progress-bar"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[2.5px] origin-left bg-accent"
         style={shouldReduceMotion ? undefined : { scaleX: scrollYProgress }}
         aria-hidden="true"
       />
-      <a href="#main-content" className="skip-link visually-hidden">
+      <a
+        href="#main-content"
+        className={cn(
+          "sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-100",
+          "focus:rounded-control focus:bg-ink focus:px-4 focus:py-2.5",
+          "focus:type-ui focus:font-medium focus:text-page focus:no-underline",
+        )}
+      >
         Skip to main content
       </a>
 
-      <div ref={innerRef} className="header-inner">
+      <div
+        ref={innerRef}
+        className="header-inner shell flex min-h-[var(--header-h)] items-center justify-between gap-[clamp(0.5rem,2dvw,1.25rem)] py-3"
+      >
         <TransitionLink
           to="/"
           direction="backward"
-          className="site-brand"
+          className={cn(
+            "site-brand inline-flex min-w-0 min-h-11 flex-col items-start justify-center py-1",
+            "gap-[0.15rem] supports-[text-box:trim-start_cap_text]:gap-0.5",
+            "text-ink no-underline transition-[opacity,translate] duration-300",
+            "group-data-[splash=minimal]/header:pointer-events-none",
+            "group-data-[splash=minimal]/header:opacity-0",
+            "group-data-[splash=minimal]/header:translate-y-[0.45rem]",
+          )}
           onClick={handleTeamClick}
           onBeforeNavigate={closeCollapsedMenu}
         >
-          <span className="brand-title">{GROUP_META.code}</span>
-          <span className="brand-subline">{GROUP_META.institution}</span>
+          <span className="font-serif type-brand font-semibold [text-box:trim-start_cap_text]">
+            {GROUP_META.code}
+          </span>
+          <span className="font-sans type-brand-sub font-semibold uppercase text-ink-secondary [text-box:trim-both_cap_alphabetic]">
+            {GROUP_META.institution}
+          </span>
         </TransitionLink>
 
-        <nav className="site-nav" aria-label="Primary">
+        <nav className="ms-auto" aria-label="Primary">
           <button
             type="button"
-            className="menu-button"
+            className={cn(
+              "menu-toggle inline-flex items-center gap-2 min-h-10 px-3.5 py-2",
+              "rounded-control border border-control bg-surface text-ink",
+              "type-ui font-semibold cursor-pointer",
+              "transition-[background-color,border-color,scale] duration-150",
+              "hover:bg-surface-muted hover:border-ink active:scale-[0.98]",
+              "pointer-coarse:min-h-11",
+              "[anchor-name:--menu-button]",
+              "group-data-[wide]/header:hidden",
+            )}
             popoverTarget="site-menu"
             popoverTargetAction="toggle"
             aria-controls="site-menu"
@@ -235,13 +288,18 @@ export function SiteHeader() {
             <span>Menu</span>
           </button>
 
-          <ul id="site-menu" ref={menuRef} className="site-menu" popover="auto">
+          <ul
+            id="site-menu"
+            ref={menuRef}
+            className="site-menu-panel"
+            popover="auto"
+          >
             <li>
               <TransitionLink
                 to="/"
                 direction="backward"
                 aria-current={isTeamActive ? "page" : undefined}
-                className="nav-link"
+                className={navLinkStyles}
                 onClick={handleTeamClick}
                 onBeforeNavigate={closeCollapsedMenu}
               >
@@ -252,7 +310,7 @@ export function SiteHeader() {
               <a
                 href="/#at-a-glance"
                 aria-current={isOverviewActive ? "page" : undefined}
-                className="nav-link"
+                className={navLinkStyles}
                 onClick={(e) => handleAnchorLink(e, "at-a-glance")}
               >
                 <span>Summary</span>
@@ -262,7 +320,7 @@ export function SiteHeader() {
               <a
                 href="/#partner"
                 aria-current={isPartnerActive ? "page" : undefined}
-                className="nav-link"
+                className={navLinkStyles}
                 onClick={(e) => handleAnchorLink(e, "partner")}
               >
                 <span>Work With Us</span>
@@ -271,7 +329,7 @@ export function SiteHeader() {
           </ul>
         </nav>
 
-        <div className="header-utility">
+        <div className="flex shrink-0 items-center gap-2.5">
           <ThemeToggle />
         </div>
       </div>

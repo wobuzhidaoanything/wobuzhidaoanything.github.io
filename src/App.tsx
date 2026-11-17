@@ -24,10 +24,10 @@ function AppShell() {
   }, []);
 
   return (
-    <div className="app-frame">
+    <div className="grid min-h-[100dvb] grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto]">
       <SiteHeader />
       <main
-        className="site-main"
+        className="site-main w-full min-w-0"
         style={
           transitionState.mode !== "filter"
             ? ({ viewTransitionName: "page-main" } as React.CSSProperties)

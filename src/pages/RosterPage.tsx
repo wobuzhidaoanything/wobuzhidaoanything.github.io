@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowDown, ArrowRight } from "lucide-react";
+import { cn } from "cn";
 import {
   GROUP_META,
   PILLAR_FILTERS,
@@ -16,6 +17,7 @@ import {
 import { PartnerSection } from "@/components/PartnerSection";
 import { getSplashState, setSplashState } from "@/lib/splashBus";
 import { TransitionLink } from "@/components/TransitionLink";
+import { PillarBadge } from "@/components/ui/pillar-badge";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useTransitionState } from "@/hooks/useTransitionMember";
 import { prefersReducedMotion } from "@/lib/viewTransitions";
@@ -35,6 +37,41 @@ const CHAPTER_VARIANTS: ChapterLayoutVariant[] = [
 ];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+
+const accentByPillar: Record<Pillar, string> = {
+  CSD: "text-pillar-csd",
+  EPD: "text-pillar-epd",
+  ESD: "text-pillar-esd",
+};
+
+const dotByPillar: Record<Pillar, string> = {
+  CSD: "bg-pillar-csd",
+  EPD: "bg-pillar-epd",
+  ESD: "bg-pillar-esd",
+};
+
+const primaryCueStyles = cn(
+  "inline-flex items-center gap-2 min-h-11 px-5.5 py-2.5",
+  "rounded-control border border-ink bg-ink text-page type-body-sm font-semibold no-underline",
+  "transition-[background-color,border-color,color,scale] duration-150",
+  "hover:bg-accent hover:border-accent hover:text-accent-ink active:scale-[0.985]",
+);
+
+const secondaryCueStyles = cn(
+  "inline-flex items-center gap-[0.45rem] min-h-11 px-4.5 py-2.5",
+  "rounded-control border border-control bg-surface text-ink type-body-sm font-semibold no-underline",
+  "transition-[background-color,border-color,color,scale] duration-150",
+  "hover:bg-surface-muted hover:border-ink active:scale-[0.985]",
+);
+
+const interestRowStyles = cn(
+  "member-interest-row group/row relative grid min-w-0 items-center border-b border-rule py-6",
+  "grid-cols-[minmax(14rem,1fr)_minmax(0,1.4fr)_auto] gap-x-8 gap-y-4",
+  "transition-[background-color,opacity] duration-150",
+  "hover:bg-surface-muted/75 focus-within:bg-surface-muted/75",
+  "@max-[50rem]/roster:grid-cols-[minmax(12rem,1fr)_minmax(0,1.5fr)]",
+  "@max-[36rem]/roster:grid-cols-[minmax(0,1fr)] @max-[36rem]/roster:gap-y-2.5",
+);
 
 export function RosterPage() {
   useDocumentTitle(`${GROUP_META.title} | Team & Skillsets`);
@@ -159,7 +196,8 @@ export function RosterPage() {
 
       const hero = document.getElementById("builders");
       const heroEntered =
-        hero != null && hero.getBoundingClientRect().top <= window.innerHeight * 0.72;
+        hero != null &&
+        hero.getBoundingClientRect().top <= window.innerHeight * 0.72;
       setPastSplash((prev) => (prev === heroEntered ? prev : heroEntered));
     };
 
@@ -252,20 +290,29 @@ export function RosterPage() {
 
   return (
     <div className="showcase-page">
-      <section className="splash" aria-label="Introduction">
-        <div className="splash-inner">
-          <p className="splash-eyebrow">{GROUP_META.institution}</p>
-          <p className="splash-title" aria-label="Lockheed Summer Internship">
-            <span className="splash-title-big">Lockheed</span>
-            <span className="splash-title-sub">Summer Internship</span>
+      <section className="splash @container/splash border-b border-edge">
+        <div className="shell grid min-h-[calc(100svb-6rem)] content-center justify-items-start gap-[clamp(1rem,2.5cqi,1.75rem)] py-[clamp(2rem,6dvb,4rem)]">
+          <p className="m-0 type-body font-semibold tracking-[0.08em] uppercase text-ink-secondary">
+            {GROUP_META.institution}
           </p>
-          <p className="splash-lead">
+          <p
+            className="m-0 grid justify-items-start gap-[0.1em]"
+            aria-label="Lockheed Summer Internship"
+          >
+            <span className="font-serif type-display font-semibold text-wrap-balance text-ink">
+              Lockheed
+            </span>
+            <span className="font-serif type-title-sub italic font-medium text-accent">
+              Summer Internship
+            </span>
+          </p>
+          <p className="m-0 max-w-[44ch] type-body-lg text-ink-secondary">
             One team across product, systems &amp; design, and code. Scroll on
             to find out more about us.
           </p>
           <button
             type="button"
-            className="splash-cue"
+            className={cn("splash-cue", primaryCueStyles)}
             onClick={() => scrollToElement("builders")}
           >
             <span>Meet the team</span>
@@ -274,51 +321,77 @@ export function RosterPage() {
         </div>
       </section>
 
-      <section className="hero-masthead" id="builders">
-        <div className="hero-masthead-inner">
-          <div className="hero-copy">
-            <p className="masthead-eyebrow">
+      <section
+        className="hero-masthead @container/hero grid scroll-mt-20 grid-cols-1 items-center border-b border-edge py-[clamp(3rem,7.5dvb,5.75rem)] min-h-[min(72dvb,42rem)]"
+        id="builders"
+      >
+        <div className="shell grid min-w-0 grid-cols-1 items-center gap-[clamp(2rem,4cqi,3.75rem)] @min-[52rem]/hero:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <div className="min-w-0">
+            <p className="mt-0 mb-5 type-ui-sm font-semibold tracking-[0.04em] uppercase text-ink-secondary">
               {GROUP_META.institution} · {GROUP_META.pillarsLabel}
             </p>
 
             <h1
               id="main-content"
               tabIndex={-1}
-              className="masthead-title hero-title"
+              className="m-0 max-w-[16ch] font-serif type-title-1 font-semibold focus:outline-none [&_em]:font-medium [&_em]:italic [&_em]:text-accent"
             >
               Seven builders, <em>three pillars.</em>
             </h1>
 
-            <p className="masthead-lead">{GROUP_META.overview}</p>
+            <p className="mt-6 m-0 max-w-[48ch] type-body-lg text-ink-secondary">
+              {GROUP_META.overview}
+            </p>
 
-            <dl className="hero-stat-strip" aria-label="Capstone key figures">
-              <div className="hero-stat-item">
-                <dt className="hero-stat-label">Team</dt>
-                <dd className="hero-stat-value">
-                  <span className="hero-stat-num">7</span>
-                  <span className="hero-stat-unit">builders</span>
+            <dl
+              className="mt-7 grid list-none grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-x-6 gap-y-4 border-t border-rule pt-6 @min-[40rem]/hero:grid-cols-3"
+              aria-label="Capstone key figures"
+            >
+              <div className="grid content-start gap-1">
+                <dt className="type-micro font-semibold tracking-[0.05em] uppercase text-ink-muted">
+                  Team
+                </dt>
+                <dd className="m-0 flex flex-wrap items-baseline gap-[0.4rem]">
+                  <span className="font-serif type-figure font-[540] tabular text-ink">
+                    7
+                  </span>
+                  <span className="font-serif type-body-sm italic font-medium text-ink-secondary">
+                    builders
+                  </span>
                 </dd>
               </div>
-              <div className="hero-stat-item">
-                <dt className="hero-stat-label">Architecture</dt>
-                <dd className="hero-stat-value">
-                  <span className="hero-stat-num">3</span>
-                  <span className="hero-stat-unit">SUTD pillars</span>
+              <div className="grid content-start gap-1">
+                <dt className="type-micro font-semibold tracking-[0.05em] uppercase text-ink-muted">
+                  Architecture
+                </dt>
+                <dd className="m-0 flex flex-wrap items-baseline gap-[0.4rem]">
+                  <span className="font-serif type-figure font-[540] tabular text-ink">
+                    3
+                  </span>
+                  <span className="font-serif type-body-sm italic font-medium text-ink-secondary">
+                    SUTD pillars
+                  </span>
                 </dd>
               </div>
-              <div className="hero-stat-item">
-                <dt className="hero-stat-label">Delivery</dt>
-                <dd className="hero-stat-value">
-                  <span className="hero-stat-num">2</span>
-                  <span className="hero-stat-unit">academic terms</span>
+              <div className="grid content-start gap-1">
+                <dt className="type-micro font-semibold tracking-[0.05em] uppercase text-ink-muted">
+                  Delivery
+                </dt>
+                <dd className="m-0 flex flex-wrap items-baseline gap-[0.4rem]">
+                  <span className="font-serif type-figure font-[540] tabular text-ink">
+                    2
+                  </span>
+                  <span className="font-serif type-body-sm italic font-medium text-ink-secondary">
+                    academic terms
+                  </span>
                 </dd>
               </div>
             </dl>
 
-            <div className="hero-actions">
+            <div className="mt-9 flex flex-wrap items-center gap-x-4 gap-y-3.5">
               <a
                 href="#chapter-01"
-                className="hero-primary-cue"
+                className={primaryCueStyles}
                 onClick={(e) => {
                   e.preventDefault();
                   scrollToElement("chapter-01");
@@ -330,7 +403,7 @@ export function RosterPage() {
 
               <a
                 href="#at-a-glance"
-                className="hero-secondary-cue"
+                className={secondaryCueStyles}
                 onClick={(e) => {
                   e.preventDefault();
                   scrollToElement("at-a-glance");
@@ -343,24 +416,30 @@ export function RosterPage() {
           </div>
 
           <aside
-            className="hero-spec-panel"
+            className="hero-spec-panel grid min-w-0 rounded-card border border-edge bg-surface shadow-panel"
             aria-label="Team discipline architecture"
           >
-            <div className="hero-spec-header">
-              <span className="hero-spec-kicker">
+            <div className="grid gap-[0.3rem] border-b border-rule px-[clamp(1.25rem,3cqi,1.75rem)] pt-[clamp(1.125rem,2.5cqi,1.5rem)] pb-[clamp(0.875rem,2cqi,1.125rem)]">
+              <span className="type-micro font-semibold tabular tracking-[0.05em] uppercase text-ink-muted">
                 {GROUP_META.code} · Sep 2027 – Apr 2028
               </span>
-              <h2 className="hero-spec-title">
+              <h2 className="m-0 font-serif type-heading font-[560] text-ink [&_em]:font-medium [&_em]:italic [&_em]:text-accent">
                 Three pillars, <em>one system.</em>
               </h2>
             </div>
 
-            <ul className="hero-spec-list">
+            <ul className="grid list-none p-0">
               {pillarSpecs.map((spec) => (
                 <li key={spec.pillar}>
                   <button
                     type="button"
-                    className="hero-spec-row"
+                    className={cn(
+                      "hero-spec-row group/spec-row grid w-full cursor-pointer items-center border-0 border-b border-rule",
+                      "grid-cols-[clamp(2.35rem,3.8cqi,3rem)_minmax(0,1fr)_auto] gap-x-4 gap-y-3",
+                      "bg-transparent px-[clamp(1.25rem,3cqi,1.75rem)] py-[clamp(0.95rem,2.2cqi,1.3rem)]",
+                      "text-start text-ink transition-[background-color,scale] duration-150",
+                      "hover:bg-surface-muted active:scale-[0.992]",
+                    )}
                     data-pillar={spec.pillar}
                     onClick={() => {
                       handleFilterChange(spec.pillar);
@@ -368,26 +447,43 @@ export function RosterPage() {
                       scrollToElement("at-a-glance");
                     }}
                   >
-                    <span className="hero-spec-count">
+                    <span className="font-serif type-figure font-medium tabular leading-none tracking-[-0.03em] text-ink transition-colors duration-150 group-hover/spec-row:text-accent">
                       {spec.members.length}
                     </span>
-                    <span className="hero-spec-detail">
-                      <span className="hero-spec-full">{spec.fullName}</span>
-                      <span className="hero-spec-meta-line">
-                        <span className="hero-spec-tag">
-                          <span className="pillar-dot" aria-hidden="true" />
+                    <span className="grid min-w-0 gap-[0.3rem]">
+                      <span className="font-serif type-role font-[560] text-ink">
+                        {spec.fullName}
+                      </span>
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-[0.35rem]">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-[0.35rem] type-ui-sm font-semibold tracking-[0.04em]",
+                            accentByPillar[spec.pillar],
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "size-[0.45rem] rounded-full",
+                              dotByPillar[spec.pillar],
+                            )}
+                            aria-hidden="true"
+                          />
                           <span>{spec.pillar}</span>
                         </span>
-                        <span className="hero-spec-sep" aria-hidden="true">
+                        <span className="text-ink-muted" aria-hidden="true">
                           ·
                         </span>
-                        <span className="hero-spec-members">
+                        <span className="type-ui-sm text-ink-secondary">
                           {spec.members.map((m) => m.name).join(" · ")}
                         </span>
                       </span>
                     </span>
                     <ArrowRight
-                      className="hero-spec-arrow size-4"
+                      className={cn(
+                        "size-4 text-ink-muted transition-[color,translate] duration-150",
+                        "group-hover/spec-row:text-accent",
+                        "motion-safe:group-hover/spec-row:translate-x-[0.2em]",
+                      )}
                       aria-hidden="true"
                     />
                   </button>
@@ -397,17 +493,19 @@ export function RosterPage() {
 
             <a
               href="#partner"
-              className="hero-spec-footer"
+              className="hero-spec-footer group/footer-link flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-ee-card rounded-es-card border-t border-rule px-[clamp(1.25rem,3cqi,1.75rem)] py-[clamp(0.875rem,2cqi,1.125rem)] type-ui-sm font-medium text-ink-secondary no-underline transition-[background-color,color,scale] duration-150 hover:bg-surface-muted hover:text-ink active:scale-[0.992]"
               onClick={(e) => {
                 e.preventDefault();
                 scrollToElement("partner");
               }}
             >
               <span>Ready to collaborate?</span>
-              <span className="hero-spec-foot-link">
-                <span>Work With Us</span>
+              <span className="inline-flex items-center gap-[0.35rem] font-semibold text-accent">
+                <span className="group-hover/footer-link:underline group-hover/footer-link:underline-offset-4">
+                  Work With Us
+                </span>
                 <ArrowRight
-                  className="hero-spec-foot-arrow size-3.5"
+                  className="size-3.5 transition-transform duration-200 group-hover/footer-link:translate-x-[0.2em]"
                   aria-hidden="true"
                 />
               </span>
@@ -416,7 +514,7 @@ export function RosterPage() {
         </div>
       </section>
 
-      <div className="chapters-showcase" aria-label="Team member chapters">
+      <div className="chapters-showcase relative" aria-label="Team member chapters">
         {TEAM_MEMBERS.map((member, idx) => (
           <MemberChapter
             key={member.id}
@@ -426,9 +524,12 @@ export function RosterPage() {
           />
         ))}
 
-        <div className="chapter-dock-wrap">
-          <nav className="chapter-dock" aria-label="Chapter quick navigation">
-            <ul>
+        <div className="pointer-events-none sticky bottom-3 z-30 flex flex-col items-center gap-2 px-4 py-2">
+          <nav
+            className="chapter-dock pointer-events-auto max-w-[calc(100dvw-1.5rem)] overflow-x-auto rounded-full border border-edge bg-surface/95 p-[clamp(0.3rem,0.8dvw,0.4rem)] shadow-float backdrop-blur-[14px] [scrollbar-width:none]"
+            aria-label="Chapter quick navigation"
+          >
+            <ul className="flex list-none items-center gap-[clamp(0.125rem,0.4dvw,0.25rem)] p-0">
               {TEAM_MEMBERS.map((member) => {
                 const isActive = activeChapter === member.index;
                 return (
@@ -437,7 +538,7 @@ export function RosterPage() {
                       href={`#chapter-${member.index}`}
                       aria-current={isActive ? "location" : undefined}
                       aria-label={`Jump to ${member.name} (${member.pillar})`}
-                      className="dock-link"
+                      className="dock-link relative inline-flex min-w-[clamp(1.95rem,1.65rem+1.2dvw,2.35rem)] min-h-9 items-center justify-center rounded-full px-[clamp(0.4rem,0.3rem+0.6dvw,0.65rem)] type-micro font-semibold tabular text-ink-secondary no-underline transition-colors duration-150 hover:text-ink aria-[current=location]:font-bold aria-[current=location]:text-page"
                       onClick={(e) => {
                         e.preventDefault();
                         scrollToElement(`chapter-${member.index}`);
@@ -446,7 +547,7 @@ export function RosterPage() {
                       {isActive && (
                         <motion.span
                           layoutId="chapter-dock-pill"
-                          className="dock-active-pill"
+                          className="absolute inset-0 z-0 rounded-full bg-ink"
                           transition={{
                             type: "spring",
                             stiffness: 420,
@@ -455,16 +556,19 @@ export function RosterPage() {
                           aria-hidden="true"
                         />
                       )}
-                      <span className="dock-num">{member.index}</span>
+                      <span className="relative z-1">{member.index}</span>
                     </a>
                   </li>
                 );
               })}
-              <li className="dock-divider" aria-hidden="true" />
+              <li
+                className="mx-1 h-[1.125rem] w-px shrink-0 bg-edge"
+                aria-hidden="true"
+              />
               <li>
                 <a
                   href="#at-a-glance"
-                  className="dock-jump-link"
+                  className="inline-flex min-h-9 items-center rounded-full px-[clamp(0.6rem,0.45rem+0.8dvw,0.9rem)] type-micro font-semibold whitespace-nowrap text-ink-secondary no-underline transition-colors duration-150 hover:bg-surface-muted hover:text-ink"
                   onClick={(e) => {
                     e.preventDefault();
                     scrollToElement("at-a-glance");
@@ -478,27 +582,30 @@ export function RosterPage() {
         </div>
       </div>
 
-      <div className="page-shell bottom-overview-shell">
+      <div className="bottom-overview-shell shell pt-[clamp(3.5rem,8dvb,6rem)] pb-[clamp(4.5rem,9dvb,7.5rem)]">
         <section
           id="at-a-glance"
-          className="roster-section"
+          className="roster-section @container/roster scroll-mt-20 pt-[clamp(2rem,5dvb,3.5rem)]"
           aria-labelledby="team-heading"
         >
-          <div className="section-bar">
+          <div className="mb-[clamp(1.75rem,3.5dvb,2.5rem)] grid gap-[clamp(1.25rem,3dvb,1.75rem)]">
             <div>
-              <h2 id="team-heading" className="section-title">
+              <h2
+                id="team-heading"
+                className="m-0 font-serif type-heading-lg font-semibold"
+              >
                 Team at a Glance
               </h2>
-              <p className="section-subtitle">
+              <p className="mt-2 m-0 max-w-[52ch] type-body-sm text-ink-secondary">
                 {overviewTab === "summary"
                   ? "Filter by SUTD pillar or open a member profile."
                   : "What each of us explores inside studio and on our own time."}
               </p>
             </div>
 
-            <div className="overview-controls">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-4">
               <div
-                className="overview-tablist"
+                className="overview-tablist relative inline-flex max-w-full items-center gap-1 overflow-x-auto border-b border-rule [scrollbar-width:none]"
                 role="tablist"
                 aria-label="Team overview mode"
               >
@@ -509,7 +616,7 @@ export function RosterPage() {
                   role="tab"
                   aria-selected={overviewTab === "summary"}
                   tabIndex={overviewTab === "summary" ? 0 : -1}
-                  className="overview-tab"
+                  className="overview-tab relative inline-flex min-h-10 flex-none cursor-pointer items-center justify-center border-0 bg-transparent px-4 py-2 type-body-sm font-semibold whitespace-nowrap text-ink-secondary transition-colors duration-150 hover:text-ink aria-[selected=true]:text-ink pointer-coarse:min-h-11"
                   onClick={() => switchOverviewTab("summary")}
                   onKeyDown={handleOverviewTabKeyDown}
                 >
@@ -522,7 +629,7 @@ export function RosterPage() {
                   role="tab"
                   aria-selected={overviewTab === "interests"}
                   tabIndex={overviewTab === "interests" ? 0 : -1}
-                  className="overview-tab"
+                  className="overview-tab relative inline-flex min-h-10 flex-none cursor-pointer items-center justify-center border-0 bg-transparent px-4 py-2 type-body-sm font-semibold whitespace-nowrap text-ink-secondary transition-colors duration-150 hover:text-ink aria-[selected=true]:text-ink pointer-coarse:min-h-11"
                   onClick={() => switchOverviewTab("interests")}
                   onKeyDown={handleOverviewTabKeyDown}
                 >
@@ -531,7 +638,7 @@ export function RosterPage() {
               </div>
 
               <div
-                className="filter-rail"
+                className="filter-rail inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-control bg-surface-muted p-1"
                 role="group"
                 aria-label="Filter team members by SUTD pillar"
               >
@@ -543,12 +650,12 @@ export function RosterPage() {
                       type="button"
                       aria-pressed={pressed}
                       onClick={() => handleFilterChange(filter.id)}
-                      className="filter-pill"
+                      className="filter-pill relative inline-flex min-h-[2.375rem] cursor-pointer items-center gap-[0.45rem] rounded-full border-0 bg-transparent px-[0.9rem] py-[0.35rem] type-ui font-semibold text-ink-secondary transition-colors duration-150 hover:text-ink aria-[pressed=true]:font-bold aria-[pressed=true]:text-ink pointer-coarse:min-h-11"
                     >
                       {pressed && (
                         <motion.span
                           layoutId="roster-filter-capsule"
-                          className="filter-pill-capsule"
+                          className="absolute inset-0 z-0 rounded-full border border-edge bg-surface shadow-chip"
                           transition={{
                             type: "spring",
                             stiffness: 420,
@@ -557,8 +664,8 @@ export function RosterPage() {
                           aria-hidden="true"
                         />
                       )}
-                      <span className="filter-pill-label">{filter.label}</span>
-                      <span className="filter-count">
+                      <span className="relative z-1">{filter.label}</span>
+                      <span className="relative z-1 type-micro font-bold tabular text-ink-secondary">
                         {pillarCounts[filter.id]}
                       </span>
                     </button>
@@ -568,7 +675,7 @@ export function RosterPage() {
             </div>
           </div>
 
-          <p className="visually-hidden" aria-live="polite">
+          <p className="sr-only" aria-live="polite">
             Showing {filteredMembers.length}{" "}
             {activeFilter === "All"
               ? "team members across all pillars"
@@ -576,17 +683,17 @@ export function RosterPage() {
             .
           </p>
 
-          <div className="overview-panels">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
             <div
               ref={summaryPanelRef}
               id="overview-panel-summary"
               role="tabpanel"
               aria-labelledby="overview-tab-summary"
-              className="overview-panel"
+              className="col-start-1 row-start-1 min-w-0"
               hidden={overviewTab !== "summary"}
             >
-              <div className="overview-panel-inner">
-                <ul className="member-grid">
+              <div className="pt-1">
+                <ul className="grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,19rem),1fr))] gap-[clamp(1.25rem,2.5dvw,2.25rem)] p-0 pt-3">
                   <AnimatePresence mode="popLayout" initial={false}>
                     {filteredMembers.map((member) => {
                       const isMorphTarget =
@@ -602,10 +709,19 @@ export function RosterPage() {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.98 }}
                           transition={{ duration: 0.28, ease: EASE }}
-                          className="member-grid-cell"
+                          className="flex min-w-0"
                         >
                           <article
-                            className="member-card"
+                            className={cn(
+                              "member-card group/card @container/member-card relative grid h-full w-full min-w-0",
+                              "grid-rows-[auto_auto_1fr_auto] gap-y-[clamp(0.875rem,3cqi,1.125rem)]",
+                              "rounded-card border border-edge bg-surface p-[clamp(1.375rem,5.5cqi,2.35rem)]",
+                              "transition-[background-color,border-color,box-shadow,translate] duration-200",
+                              "has-[a.card-link:hover]:border-ink has-[a.card-link:hover]:shadow-raised",
+                              "motion-safe:has-[a.card-link:hover]:-translate-y-[0.15em]",
+                              "has-[a.card-link:focus-visible]:outline has-[a.card-link:focus-visible]:outline-[3px]",
+                              "has-[a.card-link:focus-visible]:outline-accent has-[a.card-link:focus-visible]:outline-offset-[3px]",
+                            )}
                             data-pillar={member.pillar}
                             style={
                               isMorphTarget
@@ -615,27 +731,20 @@ export function RosterPage() {
                                 : undefined
                             }
                           >
-                            <header className="member-card-head">
-                              <span
-                                className="pillar-label"
-                                data-pillar={member.pillar}
-                              >
-                                <span
-                                  className="pillar-dot"
-                                  aria-hidden="true"
-                                />
-                                <span>{member.pillar}</span>
-                              </span>
+                            <header className="flex items-center justify-between gap-4">
+                              <PillarBadge pillar={member.pillar}>
+                                {member.pillar}
+                              </PillarBadge>
                             </header>
 
-                            <hgroup className="member-card-heading">
-                              <h3 className="member-name-wrap">
+                            <hgroup className="grid gap-[0.35rem]">
+                              <h3 className="m-0 w-fit font-serif type-name font-[580]">
                                 <TransitionLink
                                   to={`/member/${member.slug}`}
                                   direction="forward"
                                   memberSlug={member.slug}
                                   transitionSource="card"
-                                  className="card-link"
+                                  className="card-link text-inherit no-underline after:absolute after:inset-0 focus-visible:outline-none"
                                   style={
                                     isMorphTarget
                                       ? ({
@@ -647,19 +756,26 @@ export function RosterPage() {
                                   {member.name}
                                 </TransitionLink>
                               </h3>
-                              <p className="member-role">{member.role}</p>
+                              <p className="m-0 font-serif type-role italic font-medium text-ink">
+                                {member.role}
+                              </p>
                             </hgroup>
 
-                            <p className="member-summary">{member.bio}</p>
+                            <p className="m-0 type-body text-ink-secondary">
+                              {member.bio}
+                            </p>
 
-                            <footer className="member-card-foot">
-                              <p className="member-capabilities">
+                            <footer className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-3 border-t border-rule pt-5 @max-[20rem]/member-card:flex-col @max-[20rem]/member-card:items-start">
+                              <p className="m-0 type-body-sm text-ink-secondary">
                                 {member.skillsets.join(" · ")}
                               </p>
 
-                              <span className="card-cta" aria-hidden="true">
+                              <span
+                                className="ms-auto inline-flex items-center gap-[0.35rem] type-ui font-semibold text-ink transition-colors duration-150 group-has-[a.card-link:hover]/card:text-accent @max-[20rem]/member-card:ms-0"
+                                aria-hidden="true"
+                              >
                                 <span>Profile</span>
-                                <ArrowRight className="size-4" />
+                                <ArrowRight className="size-4 transition-transform duration-200 group-has-[a.card-link:hover]/card:translate-x-[0.22em]" />
                               </span>
                             </footer>
                           </article>
@@ -676,11 +792,11 @@ export function RosterPage() {
               id="overview-panel-interests"
               role="tabpanel"
               aria-labelledby="overview-tab-interests"
-              className="overview-panel"
+              className="col-start-1 row-start-1 min-w-0"
               hidden={overviewTab !== "interests"}
             >
-              <div className="overview-panel-inner">
-                <ul className="member-interests-list">
+              <div className="pt-1">
+                <ul className="member-interests-list min-w-0 list-none border-t border-edge p-0">
                   <AnimatePresence mode="popLayout" initial={false}>
                     {filteredMembers.map((member) => (
                       <motion.li
@@ -690,35 +806,43 @@ export function RosterPage() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.24, ease: EASE }}
-                        className="member-interest-row"
+                        className={interestRowStyles}
                       >
-                        <div className="interest-row-identity">
+                        <div className="flex min-w-0 items-baseline gap-3.5 [&>div]:min-w-0">
                           <div>
                             <TransitionLink
                               to={`/member/${member.slug}`}
                               direction="forward"
-                              className="interest-member-name"
+                              className="font-serif type-name-sm font-[580] text-ink no-underline hover:text-accent hover:underline hover:underline-offset-4"
                             >
                               {member.name}
                             </TransitionLink>
-                            <p className="interest-member-pillar">
+                            <p className="mt-[0.2rem] m-0 type-ui text-ink-secondary">
                               {member.pillar} · {member.role}
                             </p>
                           </div>
                         </div>
 
-                        <p className="interest-row-values">
+                        <p className="m-0 type-body text-ink-secondary">
                           {member.interests.join(" · ")}
                         </p>
 
                         <aside
-                          className="interest-row-preview"
+                          className={cn(
+                            "interest-row-preview grid justify-items-end gap-[0.2rem] rounded-control border border-edge bg-surface",
+                            "px-[0.85rem] py-[0.55rem] text-end",
+                            "pointer-events-none opacity-0 translate-x-[0.4em]",
+                            "transition-[opacity,translate] duration-200",
+                            "group-hover/row:translate-x-0 group-hover/row:opacity-100",
+                            "group-focus-within/row:translate-x-0 group-focus-within/row:opacity-100",
+                            "@max-[50rem]/roster:hidden",
+                          )}
                           aria-hidden="true"
                         >
-                          <span className="interest-preview-tag">
+                          <span className="type-micro font-semibold tracking-[0.04em] uppercase text-accent">
                             {member.pillar} · Core
                           </span>
-                          <span className="interest-preview-note">
+                          <span className="type-micro whitespace-nowrap text-ink-secondary">
                             {member.skillsets.slice(0, 3).join(" · ")}
                           </span>
                         </aside>
