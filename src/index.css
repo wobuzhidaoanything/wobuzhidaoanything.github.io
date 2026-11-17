@@ -1373,6 +1373,9 @@
   gap: 0.875rem;
   justify-items: start;
   visibility: hidden;
+  /* While undocked the rail track is 0 wide; clip so its hidden content
+     cannot widen the document on narrower desktops. */
+  overflow: clip;
 
   @container chapter (inline-size >= 52rem) {
     position: sticky;
@@ -1414,6 +1417,10 @@
 
   .chapter-rail {
     display: none;
+  }
+
+  .chapter-stage {
+    --stage-cap: none;
   }
 
   .chapter-intro .chapter-identity {
@@ -1577,13 +1584,46 @@
 .chapter-stage {
   container: chapter-stage / inline-size;
   min-inline-size: 0;
+  inline-size: 100%;
+  max-inline-size: var(--stage-max, var(--stage-cap, none));
+  margin-inline: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: clamp(2.75rem, 6dvb, 4.5rem);
 }
 
 /* Variant character: the intro keeps each member's original formatting, and
-   the docked rail holds the outer edge while the stage expresses the design. */
+   the docked rail holds the outer edge while the stage expresses the design.
+   The caps hold each stage at its original column proportion while the intro
+   is still full width, so the frames never balloon before the rail docks. */
+
+.member-chapter[data-variant="split"] {
+  --stage-cap: 32rem;
+}
+
+.member-chapter[data-variant="split-reverse"] {
+  --stage-cap: 32rem;
+}
+
+.member-chapter[data-variant="split-wide"] {
+  --stage-cap: 39rem;
+}
+
+.member-chapter[data-variant="offset"] {
+  --stage-cap: 36rem;
+}
+
+.member-chapter[data-variant="inset"] {
+  --stage-cap: 30rem;
+}
+
+.member-chapter[data-variant="compact-band"] {
+  --stage-cap: 56rem;
+}
+
+.member-chapter[data-variant="monumental"] {
+  --stage-cap: 56rem;
+}
 
 .member-chapter[data-variant="offset"] .chapter-stage {
   padding-block-start: clamp(1.5rem, 4.5cqi, 4.5rem);

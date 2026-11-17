@@ -136,6 +136,7 @@ export function MemberChapter({
     const railNameEl = rail.querySelector<HTMLElement>(".rail-name");
     const railRoleEl = rail.querySelector<HTMLElement>(".chapter-role");
     const railLinkEl = rail.querySelector<HTMLElement>(".chapter-profile-link");
+    const stage = body.querySelector<HTMLElement>(".chapter-stage");
     const fadeEls = [...identity.querySelectorAll<HTMLElement>("[data-morph-fade]")];
     const rowEls = [...identity.children] as HTMLElement[];
     if (
@@ -146,7 +147,8 @@ export function MemberChapter({
       !trackEl ||
       !railNameEl ||
       !railRoleEl ||
-      !railLinkEl
+      !railLinkEl ||
+      !stage
     )
       return;
 
@@ -154,13 +156,14 @@ export function MemberChapter({
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
     let introH = 0;
-    let introPadEnd = 0;
     let introW = 0;
+    let slotOff = 0;
     let offX = 0;
     let offY = 0;
     let railW = 0;
     let gapMax = 0;
-    let dockDepth = 315;
+    let stageCap = 0;
+    let stageDocked = 0;
     let stickyTop = 0;
     let fsNameI = 0;
     let fsNameR = 0;
@@ -176,7 +179,6 @@ export function MemberChapter({
       identity.style.top = "";
       identity.style.width = "";
       identity.style.visibility = "";
-      identity.style.opacity = "";
       identity.style.gap = "";
       identity.dataset.flight = "0";
       rowEls.forEach((el) => {
@@ -192,26 +194,22 @@ export function MemberChapter({
       });
       trackEl.style.opacity = "";
       slot.style.height = "";
-      slot.style.paddingBlockEnd = "";
       body.style.setProperty("--rail-w", "0px");
       body.style.setProperty("--rail-gap", "0px");
+      body.style.setProperty("--stage-max", "");
       rail.style.visibility = "hidden";
-      rail.style.opacity = "";
-      rail.style.transform = "";
       const cs = getComputedStyle(body);
       const pad =
         parseFloat(cs.paddingInlineStart) + parseFloat(cs.paddingInlineEnd);
       const avail = body.clientWidth - pad;
       gapMax = Math.min(76, Math.max(40, section.clientWidth * 0.05));
       railW = (avail - gapMax) / 4;
-      const pinTravel = body.offsetHeight - rail.offsetHeight;
-      dockDepth = Math.min(
-        window.innerHeight * 0.35,
-        Math.max(window.innerHeight * 0.12, pinTravel - 160),
-      );
+      stageDocked = avail - railW - gapMax;
+      const capRaw = getComputedStyle(stage).maxInlineSize;
+      stageCap = capRaw === "none" ? avail : Math.min(parseFloat(capRaw), avail);
       stickyTop = parseFloat(getComputedStyle(rail).insetBlockStart) || 96;
+      slotOff = slot.offsetTop;
       introH = slot.offsetHeight;
-      introPadEnd = parseFloat(getComputedStyle(slot).paddingBlockEnd) || 0;
       introW = identity.offsetWidth;
       offX = identity.offsetLeft;
       offY = identity.offsetTop;
@@ -235,7 +233,6 @@ export function MemberChapter({
       identity.style.top = "";
       identity.style.width = "";
       identity.style.visibility = "";
-      identity.style.opacity = "";
       identity.style.gap = "";
       identity.style.setProperty("--flight", "0");
       nameEl.style.fontSize = "";
@@ -257,89 +254,71 @@ export function MemberChapter({
         el.style.marginBlockStart = "";
       });
       slot.style.height = "";
-      slot.style.paddingBlockEnd = "";
       body.style.setProperty("--rail-w", "0px");
       body.style.setProperty("--rail-gap", "0px");
+      body.style.setProperty("--stage-max", "");
       rail.style.visibility = "hidden";
-      rail.style.opacity = "";
-      rail.style.transform = "";
     };
 
-    const frame = (foldRaw: number, dockRaw: number) => {
+    const frame = (raw: number) => {
       const docked = getComputedStyle(rail).display !== "none";
       if (!docked) {
         reset();
         return;
       }
-      const pf = clamp01(foldRaw);
-      const pd = clamp01(dockRaw);
-      const mf = pf * pf * (3 - 2 * pf);
-      const md = pd * pd * (3 - 2 * pd);
+      const p = clamp01(raw);
+      const m = p * p * (3 - 2 * p);
 
       if (shouldReduceMotion) {
-        if (mf > 0.5) {
+        if (p >= 1) {
           identity.style.visibility = "hidden";
-          identity.style.opacity = "0";
-          slot.style.height = "0px";
-          slot.style.paddingBlockEnd = "0px";
-        } else {
-          identity.style.visibility = "";
-          identity.style.opacity = "";
-          slot.style.height = "";
-          slot.style.paddingBlockEnd = "";
-        }
-        if (md > 0.5) {
+          slot.style.height = `${introH}px`;
           body.style.setProperty("--rail-w", `${railW}px`);
           body.style.setProperty("--rail-gap", `${gapMax}px`);
+          body.style.setProperty("--stage-max", `${stageDocked}px`);
           rail.style.visibility = "visible";
-          rail.style.opacity = "1";
-          rail.style.transform = "none";
         } else {
-          body.style.setProperty("--rail-w", "0px");
-          body.style.setProperty("--rail-gap", "0px");
-          rail.style.visibility = "hidden";
-          rail.style.opacity = "0";
+          reset();
         }
         return;
       }
 
-      if (mf <= 0.001 && md <= 0.001) {
+      if (m <= 0.001) {
         reset();
         return;
       }
 
       const slotRect = slot.getBoundingClientRect();
       const railRect = rail.getBoundingClientRect();
-      const finalRailLeft =
+      const railLeft =
         resolvedPinSide === "right" ? railRect.right - railW : railRect.left;
-      const x = lerp(slotRect.left + offX, finalRailLeft, mf);
-      const y = lerp(slotRect.top + offY, Math.max(railRect.top, stickyTop), mf);
-      const w = lerp(introW, railW, mf);
+      const x = lerp(slotRect.left + offX, railLeft, m);
+      const y = lerp(slotRect.top + offY, Math.max(railRect.top, stickyTop), p);
+      const w = lerp(introW, railW, m);
 
       identity.dataset.flight = "1";
       identity.style.position = "fixed";
       identity.style.left = `${x}px`;
       identity.style.top = `${y}px`;
       identity.style.width = `${w}px`;
-      identity.style.visibility = mf >= 0.999 ? "hidden" : "visible";
-      identity.style.opacity = String(clamp01(1 - mf * 1.25));
+      identity.style.visibility = m >= 0.999 ? "hidden" : "visible";
       identity.style.setProperty(
         "--flight",
-        String(clamp01(Math.min(mf * 5, (1 - mf) * 5))),
+        String(clamp01(Math.min(m * 5, (1 - m) * 5))),
       );
       identity.style.gap = "0px";
-      const rowGap = lerp(18, 14, mf);
+      const rowGap = lerp(18, 14, m);
       rowEls.forEach((el, i) => {
         el.style.marginBlockEnd = i === rowEls.length - 1 ? "0px" : `${rowGap}px`;
       });
-      nameEl.style.fontSize = `${lerp(fsNameI, fsNameR, mf)}px`;
-      nameEl.style.marginBlockStart = `${4 * (1 - mf)}px`;
-      roleEl.style.fontSize = `${lerp(fsRoleI, fsRoleR, mf)}px`;
-      linkEl.style.fontSize = `${lerp(fsLinkI, fsLinkR, mf)}px`;
-      actionsEl.style.marginBlockStart = `${12 * (1 - mf)}px`;
-      trackEl.style.opacity = String(mf);
-      trackEl.style.marginBlockStart = `${12 * mf}px`;
-      const fade = clamp01(1 - mf * 1.8);
+      nameEl.style.fontSize = `${lerp(fsNameI, fsNameR, m)}px`;
+      nameEl.style.marginBlockStart = `${4 * (1 - m)}px`;
+      roleEl.style.fontSize = `${lerp(fsRoleI, fsRoleR, m)}px`;
+      linkEl.style.fontSize = `${lerp(fsLinkI, fsLinkR, m)}px`;
+      actionsEl.style.marginBlockStart = `${12 * (1 - m)}px`;
+      trackEl.style.opacity = String(m);
+      trackEl.style.marginBlockStart = `${12 * m}px`;
+      const fade = clamp01(1 - m * 1.8);
       fadeEls.forEach((el, i) => {
         const box = fadeBox[i];
         el.style.opacity = String(fade);
@@ -349,25 +328,22 @@ export function MemberChapter({
         el.style.marginBlockStart = `${box.mt * fade}px`;
         el.style.display = fade <= 0 ? "none" : "";
       });
-      slot.style.height = `${introH * (1 - mf)}px`;
-      slot.style.paddingBlockEnd = `${introPadEnd * (1 - mf)}px`;
-      body.style.setProperty("--rail-w", `${railW * md}px`);
-      body.style.setProperty("--rail-gap", `${gapMax * md}px`);
-      rail.style.visibility = md > 0.001 ? "visible" : "hidden";
-      rail.style.opacity = String(md);
-      rail.style.transform =
-        md >= 0.999
-          ? "none"
-          : `translateX(${(1 - md) * (resolvedPinSide === "right" ? 12 : -12)}%)`;
+      // The vacated intro keeps its height so the stage rises into the dock
+      // instead of being yanked up under the header mid-flight.
+      slot.style.height = `${introH}px`;
+      body.style.setProperty("--rail-w", `${railW * m}px`);
+      body.style.setProperty("--rail-gap", `${gapMax * m}px`);
+      body.style.setProperty(
+        "--stage-max",
+        `${lerp(stageCap, stageDocked, m)}px`,
+      );
+      rail.style.visibility = m >= 0.999 ? "visible" : "hidden";
     };
 
     const liveP = () => {
-      const vh = window.innerHeight;
       const top = section.getBoundingClientRect().top;
-      return {
-        fold: clamp01((vh * 0.7 - top) / (vh * 0.4)),
-        dock: clamp01(-top / dockDepth),
-      };
+      const span = Math.max(1, introH - offY);
+      return clamp01((stickyTop - slotOff - offY - top) / span);
     };
 
     let raf = 0;
@@ -378,45 +354,37 @@ export function MemberChapter({
       if (getComputedStyle(rail).display === "none") {
         if (!mobileSettled) {
           mobileSettled = true;
-          frame(0, 0);
+          frame(0);
         }
         return;
       }
       mobileSettled = false;
-      const { fold, dock } = liveP();
-      const mf = fold * fold * (3 - 2 * fold);
-      const md = dock * dock * (3 - 2 * dock);
-      const active =
-        (mf > 0.001 && mf < 0.999) || (md > 0.001 && md < 0.999);
-      const key = fold + dock;
-      if (active || Math.abs(key - lastP) > 0.0005) {
-        lastP = key;
-        frame(fold, dock);
+      const p = liveP();
+      const m = p * p * (3 - 2 * p);
+      const inFlight = m > 0.001 && m < 0.999;
+      if (inFlight || Math.abs(p - lastP) > 0.0005) {
+        lastP = p;
+        frame(p);
       }
     };
 
     measure();
-    {
-      const { fold, dock } = liveP();
-      frame(fold, dock);
-    }
+    frame(liveP());
     raf = requestAnimationFrame(tick);
     let lastW = section.clientWidth;
     const ro = new ResizeObserver(() => {
-      if (section.clientWidth !== lastW || liveP().fold <= 0.001) {
+      if (section.clientWidth !== lastW || liveP() <= 0.001) {
         lastW = section.clientWidth;
         measure();
       }
-      const { fold, dock } = liveP();
-      frame(fold, dock);
+      frame(liveP());
     });
     ro.observe(section);
     let fontsDone = false;
     document.fonts?.ready.then(() => {
       fontsDone = true;
       measure();
-      const { fold, dock } = liveP();
-      frame(fold, dock);
+      frame(liveP());
     });
     return () => {
       cancelAnimationFrame(raf);
