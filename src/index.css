@@ -1202,9 +1202,11 @@
   padding-block: clamp(5.5rem, 12dvb, 9.5rem);
   border-block-end: 1px solid var(--border-card);
   background-color: var(--bg);
+  --halo: var(--bg);
 
   &[data-pin="right"]:not([data-surface="charcoal"]) {
     background-color: var(--chapter-alt);
+    --halo: var(--chapter-alt);
   }
 
   &[data-surface="charcoal"] {
@@ -1326,13 +1328,13 @@
   margin-inline: auto;
   padding-inline: var(--page-gutter);
   display: grid;
-  grid-template-columns: minmax(0, 0.5fr) minmax(0, 1.5fr);
-  gap: clamp(2.5rem, 5cqi, 4.75rem);
+  grid-template-columns: minmax(0, var(--rail-w, 0px)) minmax(0, 1fr);
+  gap: var(--rail-gap, 0px);
   align-items: start;
 }
 
 .member-chapter[data-pin="right"] .chapter-body {
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.5fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--rail-w, 0px));
 
   & .chapter-stage {
     order: -1;
@@ -1340,9 +1342,29 @@
 }
 
 .chapter-identity {
+  --flight: 0;
   min-inline-size: 0;
   display: grid;
   gap: 1.125rem;
+  border-radius: calc(0.625rem * var(--flight));
+  box-shadow:
+    0 0 0 calc(1rem * var(--flight)) var(--halo),
+    0 0.875rem 2.25rem rgb(0 0 0 / calc(0.12 * var(--flight)));
+}
+
+.member-chapter,
+.member-chapter * {
+  overflow-anchor: none;
+}
+
+.chapter-identity[data-flight="1"] {
+  z-index: 45;
+  margin: 0;
+  max-inline-size: none;
+}
+
+.chapter-identity .chapter-pin-track {
+  opacity: 0;
 }
 
 .chapter-rail {
@@ -1350,6 +1372,7 @@
   display: grid;
   gap: 0.875rem;
   justify-items: start;
+  visibility: hidden;
 
   @container chapter (inline-size >= 52rem) {
     position: sticky;
@@ -1435,6 +1458,7 @@
 
 .chapter-index {
   width: fit-content;
+  white-space: nowrap;
   font-family: var(--font-serif);
   font-optical-sizing: auto;
   font-size: 0.9375rem;

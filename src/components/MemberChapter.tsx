@@ -97,18 +97,16 @@ export function MemberChapter({
   const shouldReduceMotion = Boolean(useReducedMotion());
   const transitionState = useTransitionState();
   const sectionRef = useRef<HTMLElement>(null);
-  const introRef = useRef<HTMLDivElement>(null);
+  const introSlotRef = useRef<HTMLDivElement>(null);
+  const identityRef = useRef<HTMLDivElement>(null);
+  const railRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start 80%", "end 25%"],
   });
   const pinProgress = useTransform(scrollYProgress, [0.06, 0.88], [0, 1]);
-
-  const { scrollYProgress: handoffProgress } = useScroll({
-    target: introRef,
-    offset: ["start 45%", "end 15%"],
-  });
 
   const isCharcoalBand =
     layoutVariant === "offset" || layoutVariant === "compact-band";
@@ -117,21 +115,263 @@ export function MemberChapter({
   const introAlign =
     layoutVariant === "monumental" ? "center" : resolvedPinSide;
 
-  const railOpacity = useTransform(handoffProgress, [0.45, 0.92], [0, 1]);
-  const railVisibility = useTransform(railOpacity, (v) =>
-    v > 0.02 ? "visible" : "hidden",
-  );
-  const railX = useTransform(
-    handoffProgress,
-    [0.45, 0.92],
-    [resolvedPinSide === "left" ? "16%" : "-16%", "0%"],
-  );
-  const introNameScale = useTransform(handoffProgress, [0.35, 1], [1, 0.86]);
-
   const isMorphTarget =
     transitionState.mode === "member" &&
     transitionState.memberSlug === member.slug &&
     transitionState.source === "chapter";
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    const slot = introSlotRef.current;
+    const identity = identityRef.current;
+    const rail = railRef.current;
+    const body = bodyRef.current;
+    if (!section || !slot || !identity || !rail || !body) return;
+
+    const nameEl = identity.querySelector<HTMLElement>(".chapter-name");
+    const roleEl = identity.querySelector<HTMLElement>(".chapter-role");
+    const linkEl = identity.querySelector<HTMLElement>(".chapter-profile-link");
+    const actionsEl = identity.querySelector<HTMLElement>(".chapter-actions");
+    const trackEl = identity.querySelector<HTMLElement>("[data-morph-in]");
+    const railNameEl = rail.querySelector<HTMLElement>(".rail-name");
+    const railRoleEl = rail.querySelector<HTMLElement>(".chapter-role");
+    const railLinkEl = rail.querySelector<HTMLElement>(".chapter-profile-link");
+    const fadeEls = [...identity.querySelectorAll<HTMLElement>("[data-morph-fade]")];
+    const rowEls = [...identity.children] as HTMLElement[];
+    if (
+      !nameEl ||
+      !roleEl ||
+      !linkEl ||
+      !actionsEl ||
+      !trackEl ||
+      !railNameEl ||
+      !railRoleEl ||
+      !railLinkEl
+    )
+      return;
+
+    const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+    let introH = 0;
+    let introW = 0;
+    let offX = 0;
+    let offY = 0;
+    let railW = 0;
+    let gapMax = 0;
+    let stickyTop = 0;
+    let fsNameI = 0;
+    let fsNameR = 0;
+    let fsRoleI = 0;
+    let fsRoleR = 0;
+    let fsLinkI = 0;
+    let fsLinkR = 0;
+    let fadeBox: { h: number; w: number; mt: number }[] = [];
+
+    const measure = () => {
+      identity.style.position = "";
+      identity.style.left = "";
+      identity.style.top = "";
+      identity.style.width = "";
+      identity.style.visibility = "";
+      identity.style.gap = "";
+      identity.dataset.flight = "0";
+      rowEls.forEach((el) => {
+        el.style.marginBlockEnd = "";
+        el.style.marginBlockStart = "";
+      });
+      fadeEls.forEach((el) => {
+        el.style.opacity = "";
+        el.style.height = "";
+        el.style.width = "";
+        el.style.display = "";
+        el.style.overflow = "";
+      });
+      trackEl.style.opacity = "";
+      slot.style.height = "";
+      body.style.setProperty("--rail-w", "0px");
+      body.style.setProperty("--rail-gap", "0px");
+      rail.style.visibility = "hidden";
+      const cs = getComputedStyle(body);
+      const pad =
+        parseFloat(cs.paddingInlineStart) + parseFloat(cs.paddingInlineEnd);
+      const avail = body.clientWidth - pad;
+      gapMax = Math.min(76, Math.max(40, section.clientWidth * 0.05));
+      railW = (avail - gapMax) / 4;
+      stickyTop = parseFloat(getComputedStyle(rail).insetBlockStart) || 96;
+      introH = slot.offsetHeight;
+      introW = identity.offsetWidth;
+      offX = identity.offsetLeft;
+      offY = identity.offsetTop;
+      fsNameI = parseFloat(getComputedStyle(nameEl).fontSize);
+      fsNameR = parseFloat(getComputedStyle(railNameEl).fontSize);
+      fsRoleI = parseFloat(getComputedStyle(roleEl).fontSize);
+      fsRoleR = parseFloat(getComputedStyle(railRoleEl).fontSize);
+      fsLinkI = parseFloat(getComputedStyle(linkEl).fontSize);
+      fsLinkR = parseFloat(getComputedStyle(railLinkEl).fontSize);
+      fadeBox = fadeEls.map((el) => ({
+        h: el.offsetHeight,
+        w: el.offsetWidth,
+        mt: parseFloat(getComputedStyle(el).marginBlockStart) || 0,
+      }));
+    };
+
+    const reset = () => {
+      identity.dataset.flight = "0";
+      identity.style.position = "";
+      identity.style.left = "";
+      identity.style.top = "";
+      identity.style.width = "";
+      identity.style.visibility = "";
+      identity.style.gap = "";
+      identity.style.setProperty("--flight", "0");
+      nameEl.style.fontSize = "";
+      nameEl.style.marginBlockStart = "";
+      roleEl.style.fontSize = "";
+      linkEl.style.fontSize = "";
+      actionsEl.style.marginBlockStart = "";
+      trackEl.style.opacity = "";
+      trackEl.style.marginBlockStart = "";
+      rowEls.forEach((el) => {
+        el.style.marginBlockEnd = "";
+      });
+      fadeEls.forEach((el) => {
+        el.style.opacity = "";
+        el.style.height = "";
+        el.style.width = "";
+        el.style.display = "";
+        el.style.overflow = "";
+        el.style.marginBlockStart = "";
+      });
+      slot.style.height = "";
+      body.style.setProperty("--rail-w", "0px");
+      body.style.setProperty("--rail-gap", "0px");
+      rail.style.visibility = "hidden";
+    };
+
+    const frame = (raw: number) => {
+      const docked = getComputedStyle(rail).display !== "none";
+      if (!docked) {
+        reset();
+        return;
+      }
+      const p = clamp01(raw);
+      const m = p * p * (3 - 2 * p);
+
+      if (shouldReduceMotion) {
+        if (m > 0.5) {
+          identity.style.visibility = "hidden";
+          slot.style.height = "0px";
+          body.style.setProperty("--rail-w", `${railW}px`);
+          body.style.setProperty("--rail-gap", `${gapMax}px`);
+          rail.style.visibility = "visible";
+        } else {
+          reset();
+        }
+        return;
+      }
+
+      if (m <= 0.001) {
+        reset();
+        return;
+      }
+
+      const slotRect = slot.getBoundingClientRect();
+      const railRect = rail.getBoundingClientRect();
+      const x = lerp(slotRect.left + offX, railRect.left, m);
+      const y = lerp(slotRect.top + offY, Math.max(railRect.top, stickyTop), m);
+      const w = lerp(introW, railW, m);
+
+      identity.dataset.flight = "1";
+      identity.style.position = "fixed";
+      identity.style.left = `${x}px`;
+      identity.style.top = `${y}px`;
+      identity.style.width = `${w}px`;
+      identity.style.visibility = m >= 0.999 ? "hidden" : "visible";
+      identity.style.setProperty(
+        "--flight",
+        String(clamp01(Math.min(m * 5, (1 - m) * 5))),
+      );
+      identity.style.gap = "0px";
+      const rowGap = lerp(18, 14, m);
+      rowEls.forEach((el, i) => {
+        el.style.marginBlockEnd = i === rowEls.length - 1 ? "0px" : `${rowGap}px`;
+      });
+      nameEl.style.fontSize = `${lerp(fsNameI, fsNameR, m)}px`;
+      nameEl.style.marginBlockStart = `${4 * (1 - m)}px`;
+      roleEl.style.fontSize = `${lerp(fsRoleI, fsRoleR, m)}px`;
+      linkEl.style.fontSize = `${lerp(fsLinkI, fsLinkR, m)}px`;
+      actionsEl.style.marginBlockStart = `${12 * (1 - m)}px`;
+      trackEl.style.opacity = String(m);
+      trackEl.style.marginBlockStart = `${12 * m}px`;
+      const fade = clamp01(1 - m * 1.8);
+      fadeEls.forEach((el, i) => {
+        const box = fadeBox[i];
+        el.style.opacity = String(fade);
+        el.style.overflow = "hidden";
+        el.style.height = `${box.h * fade}px`;
+        el.style.width = `${box.w * fade}px`;
+        el.style.marginBlockStart = `${box.mt * fade}px`;
+        el.style.display = fade <= 0 ? "none" : "";
+      });
+      slot.style.height = `${introH * (1 - m)}px`;
+      body.style.setProperty("--rail-w", `${railW * m}px`);
+      body.style.setProperty("--rail-gap", `${gapMax * m}px`);
+      rail.style.visibility = m >= 0.999 ? "visible" : "hidden";
+    };
+
+    const liveP = () => {
+      const vh = window.innerHeight;
+      const top = section.getBoundingClientRect().top;
+      return clamp01((vh * 0.62 - top) / (vh * 0.5));
+    };
+
+    let raf = 0;
+    let lastP = -1;
+    let mobileSettled = false;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      if (getComputedStyle(rail).display === "none") {
+        if (!mobileSettled) {
+          mobileSettled = true;
+          frame(0);
+        }
+        return;
+      }
+      mobileSettled = false;
+      const p = liveP();
+      const m = p * p * (3 - 2 * p);
+      const inFlight = m > 0.001 && m < 0.999;
+      if (inFlight || Math.abs(p - lastP) > 0.0005) {
+        lastP = p;
+        frame(p);
+      }
+    };
+
+    measure();
+    frame(liveP());
+    raf = requestAnimationFrame(tick);
+    let lastW = section.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (section.clientWidth !== lastW || liveP() <= 0.001) {
+        lastW = section.clientWidth;
+        measure();
+      }
+      frame(liveP());
+    });
+    ro.observe(section);
+    let fontsDone = false;
+    document.fonts?.ready.then(() => {
+      fontsDone = true;
+      measure();
+      frame(liveP());
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      if (!fontsDone) reset();
+    };
+  }, [shouldReduceMotion, member.slug]);
 
   return (
     <section
@@ -144,8 +384,9 @@ export function MemberChapter({
       data-pillar={member.pillar}
       aria-labelledby={`chapter-heading-${member.index}`}
     >
-      <div className="chapter-intro" ref={introRef} data-align={introAlign}>
+      <div className="chapter-intro" ref={introSlotRef} data-align={introAlign}>
         <motion.div
+          ref={identityRef}
           className="chapter-identity"
           variants={containerVariants}
           initial={shouldReduceMotion ? false : "hidden"}
@@ -164,9 +405,14 @@ export function MemberChapter({
             aria-hidden="true"
           />
 
-          <motion.div className="chapter-meta" variants={riseVariants}>
+          <motion.div
+            className="chapter-meta"
+            data-morph-fade
+            variants={riseVariants}
+          >
             <span
               className="chapter-index"
+              data-morph-fade
               style={
                 isMorphTarget
                   ? ({
@@ -190,29 +436,20 @@ export function MemberChapter({
             className="chapter-name"
             variants={riseVariants}
             style={
-              {
-                ...(isMorphTarget
-                  ? { viewTransitionName: "member-name" }
-                  : {}),
-                ...(shouldReduceMotion
-                  ? {}
-                  : {
-                      scale: introNameScale,
-                      transformOrigin:
-                        introAlign === "center"
-                          ? "50% 0%"
-                          : introAlign === "right"
-                            ? "100% 0%"
-                            : "0% 0%",
-                    }),
-              } as React.CSSProperties & { scale: MotionValue<number> }
+              isMorphTarget
+                ? ({ viewTransitionName: "member-name" } as React.CSSProperties)
+                : undefined
             }
           >
             {member.name}
           </motion.h2>
 
           {member.fullName && (
-            <motion.p className="chapter-fullname" variants={riseVariants}>
+            <motion.p
+              className="chapter-fullname"
+              data-morph-fade
+              variants={riseVariants}
+            >
               {member.fullName}
             </motion.p>
           )}
@@ -221,7 +458,7 @@ export function MemberChapter({
             {member.role}
           </motion.p>
 
-          <motion.p className="chapter-bio" variants={riseVariants}>
+          <motion.p className="chapter-bio" data-morph-fade variants={riseVariants}>
             {member.bio}
           </motion.p>
 
@@ -237,19 +474,18 @@ export function MemberChapter({
               <ArrowRight className="size-4" aria-hidden="true" />
             </TransitionLink>
           </motion.div>
+
+          <div className="chapter-pin-track" data-morph-in aria-hidden="true">
+            <motion.span
+              className="chapter-pin-progress"
+              style={shouldReduceMotion ? undefined : { scaleX: pinProgress }}
+            />
+          </div>
         </motion.div>
       </div>
 
-      <div className="chapter-body">
-        <motion.aside
-          className="chapter-rail"
-          aria-hidden="true"
-          style={
-            shouldReduceMotion
-              ? undefined
-              : { opacity: railOpacity, x: railX, visibility: railVisibility }
-          }
-        >
+      <div className="chapter-body" ref={bodyRef}>
+        <aside className="chapter-rail" ref={railRef} aria-hidden="true">
           <div
             className="chapter-accent-rule"
             data-pillar={member.pillar}
@@ -280,7 +516,7 @@ export function MemberChapter({
               style={shouldReduceMotion ? undefined : { scaleX: pinProgress }}
             />
           </div>
-        </motion.aside>
+        </aside>
 
         <div className="chapter-stage">
           {(layoutVariant === "split" || layoutVariant === "split-wide") && (
