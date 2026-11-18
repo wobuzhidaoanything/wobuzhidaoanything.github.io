@@ -62,7 +62,7 @@ export function MemberDetailPage() {
 
   useDocumentTitle(
     member
-      ? `${member.fullName ?? member.name} (${member.pillar}) | ${GROUP_META.title}`
+      ? `${member.name} (${member.pillar}) | ${GROUP_META.title}`
       : `Member Not Found | ${GROUP_META.title}`,
   );
 
@@ -161,7 +161,7 @@ export function MemberDetailPage() {
               : undefined
           }
         >
-          {member.fullName ?? member.name}
+          {member.name}
         </h1>
 
         {member.minor && (

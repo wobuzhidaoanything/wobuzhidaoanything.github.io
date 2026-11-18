@@ -69,7 +69,6 @@ export function UpdateDetailsPage() {
 
   const [password, setPassword] = useState("");
   const [name, setName] = useState(firstMember?.name ?? "");
-  const [fullName, setFullName] = useState(firstMember?.fullName ?? "");
   const [pillar, setPillar] = useState<Pillar>(firstMember?.pillar ?? "CSD");
   const [pillarFull, setPillarFull] = useState(firstMember?.pillarFull ?? "");
   const [minor, setMinor] = useState(firstMember?.minor ?? "");
@@ -122,7 +121,6 @@ export function UpdateDetailsPage() {
     if (!next) return;
     setMemberId(nextId);
     setName(next.name);
-    setFullName(next.fullName ?? "");
     setPillar(next.pillar);
     setPillarFull(next.pillarFull);
     setMinor(next.minor ?? "");
@@ -169,7 +167,6 @@ export function UpdateDetailsPage() {
       id: member.id,
       index: member.index,
       name: name.trim(),
-      fullName: fullName.trim() || undefined,
       pillar,
       pillarFull: pillarFull.trim(),
       minor: minor.trim() || undefined,
@@ -378,21 +375,6 @@ export function UpdateDetailsPage() {
                 Name is required.
               </span>
             ) : null}
-          </div>
-
-          <div className={fieldStyles}>
-            <label htmlFor="member-fullname" className={labelStyles}>
-              Full legal name
-            </label>
-            <input
-              id="member-fullname"
-              name="fullName"
-              type="text"
-              autoComplete="name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className={inputStyles}
-            />
           </div>
 
           <div className="grid gap-[1rem] min-[48rem]:grid-cols-2" style={{ gap: "1rem" }}>

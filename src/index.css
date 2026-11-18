@@ -922,16 +922,6 @@
   will-change: transform;
 }
 
-.chapter-fullname {
-  margin: -0.625rem 0 0;
-  font-family: var(--font-mono);
-  font-size: clamp(0.75rem, 0.7rem + 0.3cqi, 0.875rem);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-secondary);
-}
-
 .chapter-role {
   margin: 0;
   font-family: var(--font-serif);

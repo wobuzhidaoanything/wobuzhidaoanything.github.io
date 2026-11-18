@@ -65,8 +65,6 @@ function sanitizeMember(input, fallback) {
     skillsets: list(input.skillsets),
     interests: list(input.interests),
   };
-  if (typeof input.fullName === "string" && input.fullName.trim())
-    member.fullName = input.fullName.trim();
   if (typeof input.minor === "string" && input.minor.trim()) member.minor = input.minor.trim();
   const tools = list(input.tools);
   if (tools.length) member.tools = tools;

@@ -40,9 +40,8 @@ export interface TeamMember {
   skillsets: string[];
   interests: string[];
   artifacts?: MemberArtifacts;
-  // Profile template fields: photo → artifacts.heroImage, NAME → fullName,
+  // Profile template fields: photo → artifacts.heroImage,
   // MAJOR → pillar + minor, skills → skillsets / tools / projects.
-  fullName?: string;
   minor?: string;
   tools?: string[];
   projects?: MemberProject[];

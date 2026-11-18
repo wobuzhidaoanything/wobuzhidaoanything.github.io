@@ -462,16 +462,6 @@ export function MemberChapter({
             {member.name}
           </motion.h2>
 
-          {member.fullName && (
-            <motion.p
-              className="chapter-fullname"
-              data-morph-fade
-              variants={riseVariants}
-            >
-              {member.fullName}
-            </motion.p>
-          )}
-
           <motion.p className="chapter-role" variants={riseVariants}>
             {member.role}
           </motion.p>
