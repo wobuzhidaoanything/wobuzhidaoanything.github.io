@@ -180,7 +180,7 @@ export function UpdateDetailsPage() {
     if (!workerConfigured) {
       setStatus({
         kind: "error",
-        text: "Worker URL is not configured yet — set VITE_UPDATE_WORKER_URL and rebuild.",
+        text: "Worker URL is not configured yet: set VITE_UPDATE_WORKER_URL and rebuild.",
       });
       return;
     }
@@ -461,7 +461,7 @@ export function UpdateDetailsPage() {
 
           <div className={fieldStyles}>
             <label htmlFor="member-skills" className={labelStyles}>
-              Skillsets — one per line
+              Skillsets: one per line
             </label>
             <textarea
               id="member-skills"
@@ -475,7 +475,7 @@ export function UpdateDetailsPage() {
 
           <div className={fieldStyles}>
             <label htmlFor="member-tools" className={labelStyles}>
-              Tools — one per line
+              Tools: one per line
             </label>
             <textarea
               id="member-tools"
@@ -489,7 +489,7 @@ export function UpdateDetailsPage() {
 
           <div className={fieldStyles}>
             <label htmlFor="member-interests" className={labelStyles}>
-              Interests — one per line
+              Interests: one per line
             </label>
             <textarea
               id="member-interests"
@@ -503,7 +503,7 @@ export function UpdateDetailsPage() {
 
           <div className={fieldStyles}>
             <label htmlFor="member-projects" className={labelStyles}>
-              Projects — one per line as “Title | Description”
+              Projects: one per line as “Title | Description”
             </label>
             <textarea
               id="member-projects"

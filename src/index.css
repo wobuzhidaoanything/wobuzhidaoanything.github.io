@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   Tier 1 — literal palette
+   Tier 1: literal palette
    One pair per scheme, never consumed by utilities directly. The tier-2
    semantic layer below composes them with `light-dark()`, so a scoped
    override (the charcoal chapter bands) still reaches every utility.
@@ -83,7 +83,7 @@
      face: body inherits Geist's ratio, which would otherwise inflate every
      serif heading by roughly 9%. */
 
-  /* Display & titles — serif */
+  /* Display & titles: serif */
   --type-display: clamp(2.5rem, 0.5rem + 17cqi, 11.5rem);
   --type-display--leading: 0.95;
   --type-display--tracking: -0.04em;
@@ -112,7 +112,7 @@
   --type-brand-sub--leading: 1.15;
   --type-brand-sub--tracking: 0.06em;
 
-  /* Headings — serif */
+  /* Headings: serif */
   --type-heading-lg: clamp(1.625rem, 1.3rem + 1.2cqi, 2.25rem);
   --type-heading-lg--leading: 1.15;
   --type-heading-lg--tracking: -0.026em;
@@ -145,7 +145,7 @@
   --type-numeral--leading: 0.88;
   --type-numeral--tracking: -0.04em;
 
-  /* Running text — sans */
+  /* Running text: sans */
   --type-body-lg: clamp(1rem, 0.94rem + 0.4cqi, 1.1875rem);
   --type-body-lg--leading: 1.68;
   --type-body: 1rem;
@@ -177,7 +177,7 @@
 }
 
 /* ==========================================================================
-   Tier 2 — semantic tokens.
+   Tier 2: semantic tokens.
    Unlayered on purpose: these are custom-property declarations only, and the
    charcoal bands need to shadow them for their own subtree.
    ========================================================================== */
@@ -293,7 +293,7 @@
 }
 
 /* ==========================================================================
-   Base — element defaults only. No `*` reset: Tailwind's preflight owns that.
+   Base: element defaults only. No `*` reset. Tailwind's preflight owns that.
    ========================================================================== */
 
 @layer base {
@@ -517,14 +517,14 @@
 }
 
 /* ==========================================================================
-   Legacy surface styles — being converted to utilities surface by surface.
+   Legacy surface styles. Being converted to utilities surface by surface.
    Everything below this banner is scheduled for deletion.
    ========================================================================== */
 
 @layer components {
 
 /* ==========================================================================
-   Header — measured state and the anchored popover panel
+   Header: measured state and the anchored popover panel
    The wide/narrow switch and the splash fade read values only JS can measure;
    the popover's open state and ::backdrop come from `:popover-open`. None of
    that can be a utility, so it lives here. Visible styling is utilities.
@@ -1831,7 +1831,7 @@ html:active-view-transition-type(backward)::view-transition-new(page-main) {
 }
 
 /* ==========================================================================
-   Overview tabs — the indicator follows the selected tab
+   Overview tabs: the indicator follows the selected tab
    An anchor-positioned ::before can only live in CSS; everything visible
    about the tabs themselves is utilities in RosterPage.tsx.
    ========================================================================== */
@@ -1869,7 +1869,7 @@ html:active-view-transition-type(backward)::view-transition-new(page-main) {
 }
 
 /* ==========================================================================
-   Interest rows — hovering one row dims the others
+   Interest rows: hovering one row dims the others
    ========================================================================== */
 
 @media (hover: hover) {
