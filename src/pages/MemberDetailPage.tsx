@@ -2,7 +2,8 @@ import { useParams } from "react-router";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { cn } from "cn";
-import { GROUP_META, TEAM_MEMBERS } from "@/data/capstone";
+import { GROUP_META } from "@/data/capstone";
+import { useLiveMembers } from "@/hooks/useLiveMembers";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
 import { TransitionLink } from "@/components/TransitionLink";
 import { PillarBadge } from "@/components/ui/pillar-badge";
@@ -53,6 +54,7 @@ const numberedItemStyles = "flex items-baseline gap-3.5";
 
 export function MemberDetailPage() {
   const { slug } = useParams<{ slug: string }>();
+  const { members: TEAM_MEMBERS } = useLiveMembers();
   const shouldReduceMotion = useReducedMotion();
   const memberIndex = TEAM_MEMBERS.findIndex(
     (m) => m.slug === slug || m.id === slug,

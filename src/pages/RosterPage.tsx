@@ -3,13 +3,8 @@ import { useLocation, useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowDown, ArrowRight } from "lucide-react";
 import { cn } from "cn";
-import {
-  GROUP_META,
-  PILLAR_FILTERS,
-  TEAM_MEMBERS,
-  type FilterOption,
-  type Pillar,
-} from "@/data/capstone";
+import { GROUP_META, PILLAR_FILTERS, type FilterOption, type Pillar } from "@/data/capstone";
+import { useLiveMembers } from "@/hooks/useLiveMembers";
 import {
   MemberChapter,
   type ChapterLayoutVariant,
@@ -75,6 +70,7 @@ const interestRowStyles = cn(
 
 export function RosterPage() {
   useDocumentTitle(`${GROUP_META.title} | Team & Skillsets`);
+  const { members: TEAM_MEMBERS } = useLiveMembers();
 
   const { hash } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,7 +103,7 @@ export function RosterPage() {
   const filteredMembers = useMemo(() => {
     if (activeFilter === "All") return TEAM_MEMBERS;
     return TEAM_MEMBERS.filter((m) => m.pillar === activeFilter);
-  }, [activeFilter]);
+  }, [activeFilter, TEAM_MEMBERS]);
 
   useEffect(() => {
     if (!hash) return;
@@ -258,7 +254,7 @@ export function RosterPage() {
       }
     }
     return specs;
-  }, []);
+  }, [TEAM_MEMBERS]);
 
   const switchOverviewTab = (next: OverviewTab, moveFocus = false) => {
     setOverviewTab(next);

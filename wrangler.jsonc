@@ -7,5 +7,11 @@
     "GITHUB_REPO": "wobuzhidaoanything/wobuzhidaoanything.github.io",
     "GITHUB_BRANCH": "main",
     "GITHUB_PATH": "src/data/members.json"
-  }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "CAPSTONE_STORE",
+      "id": "79e157b6ad5e422c8899b65c647aaf2e"
+    }
+  ]
 }

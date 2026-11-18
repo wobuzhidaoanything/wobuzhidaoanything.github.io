@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { GROUP_META, TEAM_MEMBERS } from "@/data/capstone";
+import { GROUP_META } from "@/data/capstone";
+import { useLiveMembers } from "@/hooks/useLiveMembers";
+import { resolveImageSrc, UPDATE_WORKER_URL } from "@/lib/media";
 import type { Pillar, TeamMember } from "@/data/capstone";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-
-const DEFAULT_UPDATE_WORKER_URL = "https://capstone-update.jhyap.workers.dev";
-const UPDATE_WORKER_URL: string = ((import.meta.env
-  .VITE_UPDATE_WORKER_URL ?? "") as string) || DEFAULT_UPDATE_WORKER_URL;
 
 const PILLARS: { id: Pillar; label: string }[] = [
   { id: "CSD", label: "CSD · Computer Science & Design" },
@@ -63,6 +61,7 @@ export function UpdateDetailsPage() {
     };
   }, []);
 
+  const { members: TEAM_MEMBERS } = useLiveMembers();
   const firstMember = TEAM_MEMBERS[0];
   const [memberId, setMemberId] = useState<string>(firstMember?.id ?? "");
   const member = TEAM_MEMBERS.find((m) => m.id === memberId);
@@ -82,6 +81,10 @@ export function UpdateDetailsPage() {
     null,
   );
   const [submitting, setSubmitting] = useState(false);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [secondaryFile, setSecondaryFile] = useState<File | null>(null);
+  const [uploadingSlot, setUploadingSlot] = useState<"hero" | "secondary" | null>(null);
+  const [photoStatus, setPhotoStatus] = useState<string | null>(null);
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
@@ -153,12 +156,92 @@ export function UpdateDetailsPage() {
     setTools(listToText(next.tools));
     setProjectsText(projectsToText(next));
     setStatus(null);
+    setPhotoStatus(null);
+    setHeroFile(null);
+    setSecondaryFile(null);
     setNameTouched(false);
   }
 
   const passwordInvalid = passwordTouched && password.length === 0;
   const nameInvalid = nameTouched && name.trim().length === 0;
   const workerConfigured = Boolean(UPDATE_WORKER_URL);
+
+  async function compressPhoto(file: File): Promise<File> {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const maxSide = 1600;
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const blob = await new Promise<Blob | null>((done) =>
+        canvas.toBlob(done, "image/jpeg", 0.85),
+      );
+      if (!blob) return file;
+      return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+    } catch {
+      return file;
+    }
+  }
+
+  async function handlePhotoUpload(slot: "hero" | "secondary") {
+    const file = slot === "hero" ? heroFile : secondaryFile;
+    setPhotoStatus(null);
+    if (!member) {
+      setPhotoStatus("Select a member first.");
+      return;
+    }
+    if (!file) {
+      setPhotoStatus("Choose a photo first.");
+      return;
+    }
+    if (password.length === 0) {
+      setPhotoStatus("Enter the group password.");
+      return;
+    }
+    setUploadingSlot(slot);
+    try {
+      const compressed = await compressPhoto(file);
+      if (compressed.size > 5 * 1024 * 1024) {
+        setPhotoStatus("Image is too large after compression (max 5 MB).");
+        return;
+      }
+      const formData = new FormData();
+      formData.set("password", password);
+      formData.set("memberId", member.id);
+      formData.set("slot", slot);
+      formData.set("file", compressed);
+      const response = await fetch(`${UPDATE_WORKER_URL.replace(/\/$/, "")}/photos`, {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok || !payload.ok) {
+        if (response.status === 401) {
+          setPassword("");
+          setPasswordTouched(false);
+          setGateError("Incorrect password. Enter it again.");
+          setUnlocked(false);
+          setPhotoStatus("Incorrect password. Upload cancelled.");
+        } else {
+          setPhotoStatus(payload.error ?? `Upload failed (${response.status}).`);
+        }
+      } else {
+        setPhotoStatus(slot === "hero" ? "Hero photo saved. It is live now." : "Secondary photo saved. It is live now.");
+        if (slot === "hero") setHeroFile(null);
+        else setSecondaryFile(null);
+      }
+    } catch {
+      setPhotoStatus("Network error. Check your connection and try again.");
+    } finally {
+      setUploadingSlot(null);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -198,6 +281,7 @@ export function UpdateDetailsPage() {
       interests: textToList(interests),
       tools: textToList(tools).length > 0 ? textToList(tools) : undefined,
       projects: textToProjects(projectsText).length > 0 ? textToProjects(projectsText) : undefined,
+      artifacts: member.artifacts,
     };
 
     setSubmitting(true);
@@ -223,7 +307,7 @@ export function UpdateDetailsPage() {
       } else {
         setStatus({
           kind: "success",
-          text: "Saved. The site will redeploy in about a minute.",
+          text: "Saved. The site shows the update within a minute.",
         });
       }
     } catch {
@@ -514,6 +598,84 @@ export function UpdateDetailsPage() {
               className={inputStyles}
             />
           </div>
+
+          <fieldset className="m-0 grid gap-3 border-0 p-0">
+            <legend className={labelStyles}>Photos</legend>
+            <p className="m-0 type-ui-sm text-ink-secondary">
+              Stored in a private KV store and served only through the Worker. Photos go live right away.
+            </p>
+            <div className="grid gap-3 min-[48rem]:grid-cols-2">
+              <div className={fieldStyles}>
+                <label htmlFor="hero-photo" className={labelStyles}>
+                  Hero photo
+                </label>
+                <input
+                  id="hero-photo"
+                  name="heroPhoto"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => setHeroFile(e.target.files?.[0] ?? null)}
+                  className={inputStyles}
+                />
+                {member?.artifacts?.heroImage ? (
+                  <img
+                    src={resolveImageSrc(member.artifacts.heroImage)}
+                    alt={`Current hero photo for ${member.name}`}
+                    className="block w-full rounded-control border border-edge object-cover"
+                    loading="lazy"
+                  />
+                ) : null}
+                {heroFile ? (
+                  <span className="type-ui-sm text-ink-secondary">{heroFile.name}</span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void handlePhotoUpload("hero")}
+                  disabled={uploadingSlot !== null}
+                  className="inline-flex min-h-11 w-fit items-center gap-2 rounded-control border border-ink bg-surface px-5 py-2.5 type-ui font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:min-h-11"
+                >
+                  {uploadingSlot === "hero" ? "Uploading…" : "Upload hero photo"}
+                </button>
+              </div>
+              <div className={fieldStyles}>
+                <label htmlFor="secondary-photo" className={labelStyles}>
+                  Secondary photo
+                </label>
+                <input
+                  id="secondary-photo"
+                  name="secondaryPhoto"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => setSecondaryFile(e.target.files?.[0] ?? null)}
+                  className={inputStyles}
+                />
+                {member?.artifacts?.secondaryImage ? (
+                  <img
+                    src={resolveImageSrc(member.artifacts.secondaryImage)}
+                    alt={`Current secondary photo for ${member.name}`}
+                    className="block w-full rounded-control border border-edge object-cover"
+                    loading="lazy"
+                  />
+                ) : null}
+                {secondaryFile ? (
+                  <span className="type-ui-sm text-ink-secondary">{secondaryFile.name}</span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void handlePhotoUpload("secondary")}
+                  disabled={uploadingSlot !== null}
+                  className="inline-flex min-h-11 w-fit items-center gap-2 rounded-control border border-ink bg-surface px-5 py-2.5 type-ui font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:min-h-11"
+                >
+                  {uploadingSlot === "secondary" ? "Uploading…" : "Upload secondary photo"}
+                </button>
+              </div>
+            </div>
+            {photoStatus ? (
+              <p aria-live="polite" className="m-0 type-ui-sm text-ink-secondary">
+                {photoStatus}
+              </p>
+            ) : null}
+          </fieldset>
 
           <div aria-live="polite">
             {status ? (

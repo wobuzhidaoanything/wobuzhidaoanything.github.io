@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import type { Pillar, TeamMember } from "@/data/capstone";
+import { resolveImageSrc } from "@/lib/media";
 
 interface ArtifactFrameProps {
   member: TeamMember;
@@ -63,6 +64,7 @@ export function ArtifactFrame({
   const resolvedAlt =
     alt ?? member.artifacts?.alt ?? `${member.name}: ${member.role}`;
   const resolvedCaption = caption ?? member.artifacts?.caption;
+  const resolvedSrc = resolveImageSrc(src ?? member.artifacts?.heroImage);
 
   return (
     <figure
@@ -83,9 +85,9 @@ export function ArtifactFrame({
           aspectClasses[aspectRatio],
         )}
       >
-        {src ? (
+        {resolvedSrc ? (
           <img
-            src={src}
+            src={resolvedSrc}
             alt={resolvedAlt}
             className="block size-full object-cover"
             loading="lazy"

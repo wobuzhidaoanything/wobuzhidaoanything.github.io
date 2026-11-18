@@ -64,7 +64,7 @@ export const GROUP_META = {
   pillarsLabel: "EPD · ESD · CSD",
   overview:
     "Seven final-year students from the Singapore University of Technology and Design across Engineering Product Development, Engineering Systems and Design, and Computer Science and Design.",
-  note: "Placeholder bios, skillsets & contact: update details in src/data/members.json.",
+  note: "Placeholder bios, skillsets & contact: update details via the private editor at /update_details.",
 };
 
 export const PARTNER_OUTREACH = {
