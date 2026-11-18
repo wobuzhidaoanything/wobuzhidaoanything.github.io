@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { MotionConfig } from "motion/react";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { Outlet, RouterProvider, createBrowserRouter } from "react-router";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useTransitionState } from "@/hooks/useTransitionMember";
@@ -35,25 +35,31 @@ function AppShell() {
             : undefined
         }
       >
-        <Routes>
-          <Route path="/" element={<RosterPage />} />
-          <Route path="/member/:slug" element={<MemberDetailPage />} />
-          <Route path="/licenses" element={<LicensesPage />} />
-          <Route path="/update_details" element={<UpdateDetailsPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <Outlet />
       </main>
       <SiteFooter />
     </div>
   );
 }
 
+// Data router so the editor can block navigation with useBlocker while dirty.
+const router = createBrowserRouter([
+  {
+    element: <AppShell />,
+    children: [
+      { path: "/", element: <RosterPage /> },
+      { path: "/member/:slug", element: <MemberDetailPage /> },
+      { path: "/licenses", element: <LicensesPage /> },
+      { path: "/update_details", element: <UpdateDetailsPage /> },
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
+]);
+
 export function App() {
   return (
     <MotionConfig reducedMotion="user">
-      <BrowserRouter>
-        <AppShell />
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </MotionConfig>
   );
 }

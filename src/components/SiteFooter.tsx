@@ -14,6 +14,13 @@ export function SiteFooter() {
             {GROUP_META.note}
           </span>
           <TransitionLink
+            to="/update_details"
+            direction="forward"
+            className="site-license-link inline-flex min-h-9 items-center type-ui-sm font-semibold text-ink underline decoration-edge underline-offset-4 transition-colors duration-150 hover:text-accent hover:decoration-accent"
+          >
+            Update details
+          </TransitionLink>
+          <TransitionLink
             to="/licenses"
             direction="forward"
             className="site-license-link inline-flex min-h-9 items-center type-ui-sm font-semibold text-ink underline decoration-edge underline-offset-4 transition-colors duration-150 hover:text-accent hover:decoration-accent"

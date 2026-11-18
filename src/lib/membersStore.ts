@@ -1,0 +1,91 @@
+import { TEAM_MEMBERS, type TeamMember } from "@/data/capstone";
+import { membersUrl } from "@/lib/media";
+
+export interface MembersState {
+  members: TeamMember[];
+  loading: boolean;
+  usingFallback: boolean;
+  fetchedAt: number | null;
+}
+
+let state: MembersState = {
+  members: TEAM_MEMBERS,
+  loading: true,
+  usingFallback: true,
+  fetchedAt: null,
+};
+
+const listeners = new Set<() => void>();
+let inflight: Promise<void> | null = null;
+const FRESH_MS = 30_000;
+
+function set(next: MembersState) {
+  state = next;
+  for (const listener of listeners) listener();
+}
+
+export function subscribeMembers(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function getMembersState(): MembersState {
+  return state;
+}
+
+function toMemberSlug(name: string, fallbackId: string): string {
+  const base = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return base || fallbackId;
+}
+
+export function normalizeMembers(raw: unknown): TeamMember[] | null {
+  if (!Array.isArray(raw)) return null;
+  const seen = new Set<string>();
+  const members: TeamMember[] = [];
+  for (const entry of raw as (Omit<TeamMember, "slug"> & { slug?: string })[]) {
+    if (!entry || typeof entry.id !== "string" || typeof entry.name !== "string") continue;
+    const baseSlug = entry.slug ?? toMemberSlug(entry.name, entry.id);
+    const slug = seen.has(baseSlug) ? `${baseSlug}-${entry.index}` : baseSlug;
+    seen.add(slug);
+    members.push({ ...entry, slug });
+  }
+  return members.length ? members : null;
+}
+
+export async function refreshMembers(force = false): Promise<void> {
+  if (!force && state.fetchedAt && Date.now() - state.fetchedAt < FRESH_MS) return;
+  if (inflight) return inflight;
+  inflight = (async () => {
+    try {
+      const res = await fetch(membersUrl(), { cache: "no-store" });
+      if (!res.ok) throw new Error(`members fetch failed (${res.status})`);
+      const normalized = normalizeMembers((await res.json()) as unknown);
+      if (normalized) {
+        set({ members: normalized, loading: false, usingFallback: false, fetchedAt: Date.now() });
+      } else {
+        set({ ...state, loading: false });
+      }
+    } catch {
+      set({ ...state, loading: false, usingFallback: true });
+    } finally {
+      inflight = null;
+    }
+  })();
+  return inflight;
+}
+
+export function applyLocalMember(member: TeamMember) {
+  const exists = state.members.some((m) => m.id === member.id);
+  // Replace, never merge: a save response omits cleared fields (artifacts,
+  // minor, tools, projects), and merging would resurrect the old values.
+  const members = exists
+    ? state.members.map((m) => (m.id === member.id ? member : m))
+    : [...state.members, member];
+  set({ ...state, members });
+}

@@ -87,6 +87,7 @@ export function ArtifactFrame({
       >
         {resolvedSrc ? (
           <img
+            key={member.version ?? 0}
             src={resolvedSrc}
             alt={resolvedAlt}
             className="block size-full object-cover"

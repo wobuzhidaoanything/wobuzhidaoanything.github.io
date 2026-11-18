@@ -51,6 +51,31 @@
   --palette-pillar-esd-light: #3d4e75;
   --palette-pillar-esd-dark: #a2b7e3;
 
+  /* Status hues: success/info borrow the pillar families; danger is a true
+     red, deliberately distinct from the terracotta brand accent. */
+  --palette-success-light: #2e6b4e;
+  --palette-success-dark: #86cfae;
+  --palette-success-surface-light: #e4efe6;
+  --palette-success-surface-dark: #1c2b23;
+
+  --palette-danger-light: #a72c1e;
+  --palette-danger-dark: #f0705c;
+  --palette-danger-surface-light: #f7e5e0;
+  --palette-danger-surface-dark: #2e1d19;
+
+  --palette-warning-light: #8a6100;
+  --palette-warning-dark: #e0b34e;
+  --palette-warning-surface-light: #f3ead2;
+  --palette-warning-surface-dark: #2b2517;
+
+  --palette-info-light: #3d4e75;
+  --palette-info-dark: #a2b7e3;
+  --palette-info-surface-light: #e4e9f3;
+  --palette-info-surface-dark: #1c2230;
+
+  --palette-scrim-light: #0e0e0d6b;
+  --palette-scrim-dark: #000000a3;
+
   --palette-scroll-track-light: #efece3;
   --palette-scroll-track-dark: #161614;
   --palette-scroll-thumb-light: #6b675e;
@@ -231,6 +256,28 @@
     var(--palette-pillar-esd-dark)
   );
 
+  --success: light-dark(var(--palette-success-light), var(--palette-success-dark));
+  --success-surface: light-dark(
+    var(--palette-success-surface-light),
+    var(--palette-success-surface-dark)
+  );
+  --danger: light-dark(var(--palette-danger-light), var(--palette-danger-dark));
+  --danger-surface: light-dark(
+    var(--palette-danger-surface-light),
+    var(--palette-danger-surface-dark)
+  );
+  --warning: light-dark(var(--palette-warning-light), var(--palette-warning-dark));
+  --warning-surface: light-dark(
+    var(--palette-warning-surface-light),
+    var(--palette-warning-surface-dark)
+  );
+  --info: light-dark(var(--palette-info-light), var(--palette-info-dark));
+  --info-surface: light-dark(
+    var(--palette-info-surface-light),
+    var(--palette-info-surface-dark)
+  );
+  --scrim: light-dark(var(--palette-scrim-light), var(--palette-scrim-dark));
+
   --scrollbar-track: light-dark(
     var(--palette-scroll-track-light),
     var(--palette-scroll-track-dark)
@@ -274,6 +321,14 @@
   --color-pillar-csd: var(--pillar-csd);
   --color-pillar-epd: var(--pillar-epd);
   --color-pillar-esd: var(--pillar-esd);
+  --color-success: var(--success);
+  --color-success-surface: var(--success-surface);
+  --color-danger: var(--danger);
+  --color-danger-surface: var(--danger-surface);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
   --color-header: color-mix(in oklab, var(--bg) 94%, transparent);
   --color-scrollbar-thumb: var(--scrollbar-thumb);
   --color-scrollbar-track: var(--scrollbar-track);
@@ -1882,6 +1937,44 @@ html:active-view-transition-type(backward)::view-transition-new(page-main) {
 }
 
 /* ==========================================================================
+   Editor mechanisms: native confirm dialog and the sticky action bar.
+   Both are stateful surfaces a utility cannot express (::backdrop, [open]).
+   ========================================================================== */
+
+.editor-dialog {
+  inline-size: min(26rem, calc(100% - 2rem));
+  max-block-size: calc(100dvb - 2rem);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-panel);
+}
+
+.editor-dialog::backdrop {
+  background: var(--scrim);
+}
+
+.editor-dialog[open] {
+  animation: editor-dialog-in 0.28s var(--ease-brand);
+}
+
+@keyframes editor-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.98);
+  }
+}
+
+.editor-action-bar {
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  backdrop-filter: blur(10px);
+  padding-block-end: env(safe-area-inset-bottom);
+}
+
+/* ==========================================================================
    Mode overrides: motion, pointer, forced colors
    The `[hook]` classes below carry no styling of their own; they exist so a
    mode-wide override has a stable target to name.
@@ -1891,6 +1984,10 @@ html:active-view-transition-type(backward)::view-transition-new(page-main) {
   .site-header,
   .site-brand {
     transition: none !important;
+  }
+
+  .editor-dialog[open] {
+    animation: none !important;
   }
 
   .peek-carousel {
@@ -1927,7 +2024,8 @@ html:active-view-transition-type(backward)::view-transition-new(page-main) {
     .partner-card,
     .license-notice-box,
     .copy-email-pill,
-    .artifact-frame-media
+    .artifact-frame-media,
+    .editor-dialog
   ) {
     border: 1px solid CanvasText;
   }

@@ -45,6 +45,9 @@ export interface TeamMember {
   minor?: string;
   tools?: string[];
   projects?: MemberProject[];
+  // Live-store metadata (absent on the bundled fallback copy).
+  version?: number;
+  updatedAt?: string;
 }
 
 export const PILLAR_FILTERS: {
