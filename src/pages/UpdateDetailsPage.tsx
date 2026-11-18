@@ -86,6 +86,7 @@ export function UpdateDetailsPage() {
   const [nameTouched, setNameTouched] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [gateError, setGateError] = useState<string | null>(null);
+  const [gateChecking, setGateChecking] = useState(false);
   const gatePasswordRef = useRef<HTMLInputElement | null>(null);
   const memberSelectRef = useRef<HTMLSelectElement | null>(null);
 
@@ -97,15 +98,36 @@ export function UpdateDetailsPage() {
     }
   }, [unlocked]);
 
-  function handleUnlock(event: FormEvent<HTMLFormElement>) {
+  async function handleUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordTouched(true);
     if (password.length === 0) {
       setGateError("Enter the group password.");
       return;
     }
+    if (!workerConfigured) {
+      setGateError("Save service is not configured yet.");
+      return;
+    }
+    setGateChecking(true);
     setGateError(null);
-    setUnlocked(true);
+    try {
+      const response = await fetch(UPDATE_WORKER_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password, verifyOnly: true }),
+      });
+      const payload = (await response.json()) as { ok?: boolean; error?: string };
+      if (response.ok && payload.ok) {
+        setUnlocked(true);
+      } else {
+        setGateError(payload.error ?? "Incorrect password. Enter it again.");
+      }
+    } catch {
+      setGateError("Network error. Check your connection and try again.");
+    } finally {
+      setGateChecking(false);
+    }
   }
 
   function handleLock() {
@@ -273,6 +295,7 @@ export function UpdateDetailsPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => setPasswordTouched(true)}
                 required
+                disabled={gateChecking}
                 aria-invalid={passwordInvalid}
                 aria-describedby={passwordInvalid || gateError ? "password-error" : undefined}
                 className={inputStyles}
@@ -285,9 +308,10 @@ export function UpdateDetailsPage() {
             </div>
             <button
               type="submit"
-              className="inline-flex min-h-11 w-fit items-center gap-2 rounded-control border border-ink bg-ink px-5 py-2.5 type-ui font-semibold text-surface transition-[background-color,scale] hover:opacity-90 active:scale-[0.985] pointer-coarse:min-h-11"
+              disabled={gateChecking}
+              className="inline-flex min-h-11 w-fit items-center gap-2 rounded-control border border-ink bg-ink px-5 py-2.5 type-ui font-semibold text-surface transition-[background-color,scale] hover:opacity-90 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:min-h-11"
             >
-              Unlock editor
+              {gateChecking ? "Checking…" : "Unlock editor"}
             </button>
           </form>
         ) : (

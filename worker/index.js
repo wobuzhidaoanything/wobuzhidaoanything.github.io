@@ -92,6 +92,7 @@ export default {
     }
     if (!timingSafeEqual(body.password, env.FORM_PASSWORD))
       return json({ ok: false, error: "Invalid password" }, 401);
+    if (body.verifyOnly === true) return json({ ok: true });
     if (!body.memberId || typeof body.memberId !== "string")
       return json({ ok: false, error: "Missing memberId" }, 400);
 
