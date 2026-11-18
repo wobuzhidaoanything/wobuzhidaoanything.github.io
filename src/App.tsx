@@ -9,6 +9,7 @@ import { LicensesPage } from "@/pages/LicensesPage";
 import { MemberDetailPage } from "@/pages/MemberDetailPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { RosterPage } from "@/pages/RosterPage";
+import { UpdateDetailsPage } from "@/pages/UpdateDetailsPage";
 
 function AppShell() {
   const transitionState = useTransitionState();
@@ -38,6 +39,7 @@ function AppShell() {
           <Route path="/" element={<RosterPage />} />
           <Route path="/member/:slug" element={<MemberDetailPage />} />
           <Route path="/licenses" element={<LicensesPage />} />
+          <Route path="/update_details" element={<UpdateDetailsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

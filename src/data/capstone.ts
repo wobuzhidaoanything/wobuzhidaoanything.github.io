@@ -65,7 +65,7 @@ export const GROUP_META = {
   pillarsLabel: "EPD · ESD · CSD",
   overview:
     "Seven final-year students from the Singapore University of Technology and Design across Engineering Product Development, Engineering Systems and Design, and Computer Science and Design.",
-  note: "Placeholder bios, skillsets & contact: update details in src/data/capstone.ts.",
+  note: "Placeholder bios, skillsets & contact: update details in src/data/members.json.",
 };
 
 export const PARTNER_OUTREACH = {
@@ -134,182 +134,14 @@ function toMemberSlug(name: string, fallbackId: string): string {
   return base || fallbackId;
 }
 
-// Nicholas's profile reflects his submitted template details (Nov 2026); the
-// other six members keep pillar-matched placeholders pending their submissions.
-const RAW_TEAM_MEMBERS: TeamMemberInput[] = [
-  {
-    id: "member-01",
-    index: "01",
-    name: "Soe Khant",
-    pillar: "ESD",
-    pillarFull: "Engineering Systems & Design",
-    role: "Optimization & Modeling",
-    bio: "Focuses on operations research, discrete-event simulation, and decision analytics.",
-    skillsets: [
-      "Optimization",
-      "Simulation",
-      "Python",
-      "Queueing Models",
-      "Data Analysis",
-    ],
-    interests: [
-      "Urban Systems",
-      "Operations Research",
-      "Cartography",
-      "Running",
-    ],
-  },
-  {
-    id: "member-02",
-    index: "02",
-    name: "Jin Hng",
-    pillar: "CSD",
-    pillarFull: "Computer Science & Design",
-    role: "Frontend & Interaction",
-    bio: "Focuses on web interfaces, interaction design, and accessible user experiences.",
-    skillsets: [
-      "React",
-      "TypeScript",
-      "Tailwind CSS",
-      "UI Systems",
-      "Accessibility",
-    ],
-    interests: [
-      "Interaction Design",
-      "Typography",
-      "Photography",
-      "Specialty Coffee",
-    ],
-  },
-  {
-    id: "member-03",
-    index: "03",
-    name: "Harsha",
-    pillar: "CSD",
-    pillarFull: "Computer Science & Design",
-    role: "Backend & Infrastructure",
-    bio: "Focuses on APIs, distributed services, databases, and reliable deployment workflows.",
-    skillsets: ["Node.js", "Go", "PostgreSQL", "Docker", "Distributed Systems"],
-    interests: [
-      "Systems Architecture",
-      "Embedded Linux",
-      "Self-Hosting",
-      "Hiking",
-    ],
-  },
-  {
-    id: "member-04",
-    index: "04",
-    name: "Vikas",
-    pillar: "CSD",
-    pillarFull: "Computer Science & Design",
-    role: "Applied AI & Data",
-    bio: "Focuses on machine learning models, computer vision, and practical evaluation pipelines.",
-    skillsets: [
-      "PyTorch",
-      "Computer Vision",
-      "ONNX",
-      "Time-Series ML",
-      "Model Evaluation",
-    ],
-    interests: [
-      "Edge AI",
-      "Multimodal Models",
-      "Badminton",
-      "Music Production",
-    ],
-  },
-  {
-    id: "member-05",
-    index: "05",
-    name: "Nicholas",
-    fullName: "Nicholas Enrique Selvaraj",
-    pillar: "EPD",
-    pillarFull: "Engineering Product Development",
-    minor: "Design, Technology & Society",
-    role: "Mechanical Design & Prototyping",
-    bio: "Focuses on CAD-driven product design and FDM rapid prototyping, building accessible hardware from landscaping safety guards to low-cost prosthetics.",
-    skillsets: [
-      "CAD/3D Modelling (Fusion 360)",
-      "Rapid Prototyping & Additive Manufacturing (FDM 3D Printing)",
-      "Engineering Drawing & Product Design",
-      "Basic Electronics & Systems Control",
-      "HTML/CSS/JS (Web Development)",
-    ],
-    tools: [
-      "Fusion 360",
-      "Microsoft Office (Word, Excel, PowerPoint)",
-      "GitHub",
-    ],
-    projects: [
-      {
-        title: "Guard-Damp-It!",
-        detail:
-          "Smart weedwhacker safety guard designed for landscaping injury prevention, fabricated with 3D printing.",
-      },
-      {
-        title: "Prosthetic Socket System",
-        detail:
-          "Low-cost 3D-printed prosthetic solution focused on accessibility.",
-      },
-      {
-        title: "Liquid Metal Flexible Antenna",
-        detail:
-          "EGaIn-in-PDMS antenna design for wearable and flexible electronics.",
-      },
-      {
-        title: "RSAF Medic",
-        detail:
-          "National Service with the Republic of Singapore Air Force.",
-      },
-    ],
-    interests: ["Robotics", "Industrial Design", "Cycling", "Woodworking"],
-  },
-  {
-    id: "member-06",
-    index: "06",
-    name: "Jayden",
-    pillar: "EPD",
-    pillarFull: "Engineering Product Development",
-    role: "Electronics & Embedded Systems",
-    bio: "Focuses on PCB design, sensor acquisition, power electronics, and low-level firmware.",
-    skillsets: [
-      "KiCad PCB",
-      "Embedded C",
-      "FreeRTOS",
-      "Sensor Fusion",
-      "Signal Processing",
-    ],
-    interests: [
-      "Open Hardware",
-      "Analog Circuits",
-      "Bouldering",
-      "Film Photography",
-    ],
-  },
-  {
-    id: "member-07",
-    index: "07",
-    name: "Harish",
-    pillar: "EPD",
-    pillarFull: "Engineering Product Development",
-    role: "Product Design & Prototyping",
-    bio: "Focuses on industrial design, physical prototyping, control systems, and field validation.",
-    skillsets: [
-      "Product Design",
-      "CAD Modeling",
-      "Rapid Prototyping",
-      "Control Systems",
-      "Testing & QA",
-    ],
-    interests: [
-      "Human-Centered Design",
-      "Autonomous Systems",
-      "Sustainability",
-      "Cooking",
-    ],
-  },
-];
+// Single source of truth for member details lives in members.json so the
+// update_details form can write it via the Worker. Keep the JSON shape in
+// sync with TeamMemberInput below.
+import rawMembersJson from "./members.json" with { type: "json" };
+
+const RAW_TEAM_MEMBERS: TeamMemberInput[] =
+  rawMembersJson as unknown as TeamMemberInput[];
+
 
 const seenSlugs = new Set<string>();
 export const TEAM_MEMBERS: TeamMember[] = RAW_TEAM_MEMBERS.map((member) => {
