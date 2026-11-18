@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { GROUP_META, TEAM_MEMBERS } from "@/data/capstone";
 import type { Pillar, TeamMember } from "@/data/capstone";
@@ -85,6 +85,37 @@ export function UpdateDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const gatePasswordRef = useRef<HTMLInputElement | null>(null);
+  const memberSelectRef = useRef<HTMLSelectElement | null>(null);
+
+  useEffect(() => {
+    if (unlocked) {
+      memberSelectRef.current?.focus();
+    } else {
+      gatePasswordRef.current?.focus();
+    }
+  }, [unlocked]);
+
+  function handleUnlock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordTouched(true);
+    if (password.length === 0) {
+      setGateError("Enter the group password.");
+      return;
+    }
+    setGateError(null);
+    setUnlocked(true);
+  }
+
+  function handleLock() {
+    setPassword("");
+    setPasswordTouched(false);
+    setGateError(null);
+    setStatus({ kind: "success", text: "Editor locked." });
+    setUnlocked(false);
+  }
 
   function handleMemberChange(nextId: string) {
     const next = TEAM_MEMBERS.find((m) => m.id === nextId);
@@ -111,7 +142,6 @@ export function UpdateDetailsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPasswordTouched(true);
     setNameTouched(true);
     setStatus(null);
     if (!member) {
@@ -119,7 +149,8 @@ export function UpdateDetailsPage() {
       return;
     }
     if (password.length === 0) {
-      setStatus({ kind: "error", text: "Enter the group password." });
+      setUnlocked(false);
+      setGateError("Enter the group password.");
       return;
     }
     if (name.trim().length === 0) {
@@ -159,10 +190,17 @@ export function UpdateDetailsPage() {
       });
       const payload = (await response.json()) as { ok?: boolean; error?: string };
       if (!response.ok || !payload.ok) {
-        setStatus({
-          kind: "error",
-          text: payload.error ?? `Save failed (${response.status}).`,
-        });
+        if (response.status === 401) {
+          setPassword("");
+          setPasswordTouched(false);
+          setGateError("Incorrect password. Enter it again.");
+          setUnlocked(false);
+        } else {
+          setStatus({
+            kind: "error",
+            text: payload.error ?? `Save failed (${response.status}).`,
+          });
+        }
       } else {
         setStatus({
           kind: "success",
@@ -212,6 +250,50 @@ export function UpdateDetailsPage() {
           </p>
         ) : null}
 
+        {!unlocked ? (
+          <form
+            aria-labelledby="unlock-form-heading"
+            onSubmit={handleUnlock}
+            method="POST"
+            action={UPDATE_WORKER_URL ?? "#"}
+            className="grid gap-[clamp(1rem,3cqi,1.5rem)]"
+          >
+            <h2 id="unlock-form-heading" className="sr-only">
+              Unlock editor
+            </h2>
+            <div className={fieldStyles}>
+              <label htmlFor="group-password" className={labelStyles}>
+                Group password <span aria-hidden="true">*</span>
+              </label>
+              <input
+                id="group-password"
+                ref={gatePasswordRef}
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                enterKeyHint="go"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onBlur={() => setPasswordTouched(true)}
+                required
+                aria-invalid={passwordInvalid}
+                aria-describedby={passwordInvalid || gateError ? "password-error" : undefined}
+                className={inputStyles}
+              />
+              {(passwordInvalid || gateError) && (
+                <span id="password-error" className="type-ui-sm text-accent">
+                  {gateError ?? "Enter the group password."}
+                </span>
+              )}
+            </div>
+            <button
+              type="submit"
+              className="inline-flex min-h-11 w-fit items-center gap-2 rounded-control border border-ink bg-ink px-5 py-2.5 type-ui font-semibold text-surface transition-[background-color,scale] hover:opacity-90 active:scale-[0.985] pointer-coarse:min-h-11"
+            >
+              Unlock editor
+            </button>
+          </form>
+        ) : (
         <form
           aria-labelledby="update-form-heading"
           onSubmit={handleSubmit}
@@ -229,6 +311,7 @@ export function UpdateDetailsPage() {
             </label>
             <select
               id="member-select"
+              ref={memberSelectRef}
               name="member"
               value={memberId}
               onChange={(e) => handleMemberChange(e.target.value)}
@@ -243,28 +326,15 @@ export function UpdateDetailsPage() {
             </select>
           </div>
 
-          <div className={fieldStyles}>
-            <label htmlFor="group-password" className={labelStyles}>
-              Group password <span aria-hidden="true">*</span>
-            </label>
-            <input
-              id="group-password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onBlur={() => setPasswordTouched(true)}
-              required
-              aria-invalid={passwordInvalid}
-              aria-describedby={passwordInvalid ? "password-error" : undefined}
-              className={inputStyles}
-            />
-            {passwordInvalid ? (
-              <span id="password-error" className="type-ui-sm text-accent">
-                Enter the group password.
-              </span>
-            ) : null}
+          <div className="inline-flex min-h-11 w-fit items-center gap-3 type-ui text-ink-secondary">
+            <span>Unlocked for this session.</span>
+            <button
+              type="button"
+              onClick={handleLock}
+              className="inline-flex min-h-10 items-center gap-1.5 px-2 type-ui font-semibold text-accent no-underline hover:underline hover:underline-offset-4 pointer-coarse:min-h-11"
+            >
+              Lock editor
+            </button>
           </div>
 
           <fieldset className="m-0 grid gap-3 border-0 p-0">
@@ -455,6 +525,7 @@ export function UpdateDetailsPage() {
             {submitting ? "Saving…" : "Save changes"}
           </button>
         </form>
+        )}
       </article>
     </div>
   );
