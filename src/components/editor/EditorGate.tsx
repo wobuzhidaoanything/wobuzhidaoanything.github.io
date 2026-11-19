@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Eye, EyeOff, LoaderCircle, Lock } from "lucide-react";
-import { cn } from "cn";
 import { fetchHealth } from "@/lib/editorApi";
 import { unlockEditor } from "@/lib/editorSession";
 import { StatusMessage, type StatusTone } from "./StatusMessage";
@@ -128,32 +127,6 @@ export function EditorGate({ notice, onUnlocked }: EditorGateProps) {
           {checking ? "Checking…" : "Unlock editor"}
         </button>
       </form>
-
-      <p className="m-0 inline-flex items-center gap-2 type-ui-sm text-ink-secondary" role="status">
-        <span
-          className={cn(
-            "size-2 shrink-0 rounded-full",
-            health === "online"
-              ? "bg-success"
-              : health === "checking"
-                ? "bg-ink-muted"
-                : health === "unconfigured"
-                  ? "bg-danger"
-                  : "bg-warning",
-          )}
-          aria-hidden="true"
-        />
-        {health === "checking"
-          ? "Contacting the save service…"
-          : health === "online"
-            ? "Save service online"
-            : health === "unconfigured"
-              ? "The save service is not configured on this deployment."
-              : "Can't reach the save service. Check your connection."}
-      </p>
-      <p className="m-0 type-ui-sm text-ink-muted">
-        Ask a teammate for the group password. Saved edits publish to the live site.
-      </p>
     </div>
   );
 }

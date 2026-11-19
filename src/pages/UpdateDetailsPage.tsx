@@ -417,10 +417,6 @@ export function UpdateDetailsPage() {
         >
           Update Details
         </h1>
-        <p className="mt-1.5 max-w-[56ch] type-body text-ink-secondary">
-          Choose a member, then manage what appears on their profile. Changes publish to the live
-          site when you save. This page is hidden from search engines.
-        </p>
 
         {!session.unlocked ? (
           <EditorGate notice={gateNotice} onUnlocked={handleUnlocked} />
