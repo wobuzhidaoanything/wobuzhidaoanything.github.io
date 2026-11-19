@@ -1,1169 +1,391 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-  type MotionValue,
-  type Variants,
-} from "motion/react";
-import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
-import type { TeamMember } from "@/data/capstone";
+import { motion, useReducedMotion, type Variants } from "motion/react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { cn } from "cn";
+import type { Pillar, TeamMember } from "@/data/capstone";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
+import { MemberLinksRow } from "@/components/MemberLinksRow";
 import { TransitionLink } from "@/components/TransitionLink";
 import { PillarBadge } from "@/components/ui/pillar-badge";
 import { useTransitionState } from "@/hooks/useTransitionMember";
+import { isValidHttpUrl } from "@/lib/editorForm";
 
-export type ChapterLayoutVariant =
-  | "split"
-  | "split-reverse"
-  | "offset"
-  | "monumental"
-  | "split-wide"
-  | "inset"
-  | "compact-band";
+export type ChapterSurfaceTone = "default" | "alt" | "charcoal";
 
 interface MemberChapterProps {
   member: TeamMember;
-  layoutVariant: ChapterLayoutVariant;
+  displayIndex: string;
+  totalCount: number;
+  surfaceTone?: ChapterSurfaceTone;
   pinSide?: "left" | "right";
 }
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-const containerVariants: Variants = {
+const identityStagger: Variants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: 0.05,
+      staggerChildren: 0.055,
       delayChildren: 0.02,
     },
   },
 };
 
-const riseVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
+const stageStagger: Variants = {
+  hidden: {},
   visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.36, ease: EASE },
+    transition: {
+      staggerChildren: 0.07,
+      delayChildren: 0.05,
+    },
   },
 };
 
-const ruleVariants: Variants = {
+const riseItem: Variants = {
+  hidden: { opacity: 0, y: "14%" },
+  visible: {
+    opacity: 1,
+    y: "0%",
+    transition: { duration: 0.42, ease: EASE },
+  },
+};
+
+const stageBlock: Variants = {
+  hidden: { opacity: 0, y: "3.5%", scale: 0.99 },
+  visible: {
+    opacity: 1,
+    y: "0%",
+    scale: 1,
+    transition: { duration: 0.46, ease: EASE },
+  },
+};
+
+const ruleReveal: Variants = {
   hidden: { scaleX: 0, opacity: 0 },
   visible: {
     scaleX: 1,
     opacity: 1,
-    transition: { duration: 0.34, ease: EASE },
+    transition: { duration: 0.4, ease: EASE },
   },
 };
 
-function ScrollBeat({
-  children,
-  className = "chapter-beat",
-  shouldReduceMotion,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  shouldReduceMotion: boolean;
-}) {
-  const beatRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: beatRef,
-    offset: ["start 96%", "start 66%"],
-  });
-  const beatY = useTransform(scrollYProgress, [0, 1], ["2.5%", "0%"]);
-  const beatScale = useTransform(scrollYProgress, [0, 1], [0.98, 1]);
+const ruleByPillar: Record<Pillar, string> = {
+  CSD: "bg-pillar-csd",
+  EPD: "bg-pillar-epd",
+  ESD: "bg-pillar-esd",
+};
 
-  return (
-    <motion.div
-      ref={beatRef}
-      className={className}
-      style={
-        shouldReduceMotion ? undefined : { y: beatY, scale: beatScale }
-      }
-    >
-      {children}
-    </motion.div>
+const kickerStyles =
+  "m-0 type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted";
+
+function hasAnyMemberLink(links?: TeamMember["links"]): boolean {
+  if (!links) return false;
+  return Boolean(
+    (links.github && isValidHttpUrl(links.github)) ||
+      (links.linkedin && isValidHttpUrl(links.linkedin)) ||
+      (links.portfolio && isValidHttpUrl(links.portfolio)) ||
+      links.email,
   );
 }
 
 export function MemberChapter({
   member,
-  layoutVariant,
-  pinSide,
+  displayIndex,
+  totalCount,
+  surfaceTone = "default",
+  pinSide = "left",
 }: MemberChapterProps) {
   const shouldReduceMotion = Boolean(useReducedMotion());
   const transitionState = useTransitionState();
-  const sectionRef = useRef<HTMLElement>(null);
-  const introSlotRef = useRef<HTMLDivElement>(null);
-  const identityRef = useRef<HTMLDivElement>(null);
-  const railRef = useRef<HTMLElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
+  const totalFormatted = String(totalCount).padStart(2, "0");
 
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start 80%", "end 25%"],
-  });
-  const pinProgress = useTransform(scrollYProgress, [0.06, 0.88], [0, 1]);
+  const hasSkills = member.skillsets.length > 0;
+  const hasTools = Boolean(member.tools && member.tools.length > 0);
+  const hasInterests = member.interests.length > 0;
+  const projects = member.projects ?? [];
+  const hasProjects = projects.length > 0;
+  const hasLinks = hasAnyMemberLink(member.links);
+  const hasDetails = hasSkills || hasTools || hasInterests || hasProjects;
 
-  const isCharcoalBand =
-    layoutVariant === "offset" || layoutVariant === "compact-band";
-  const resolvedPinSide =
-    pinSide ?? (Number(member.index) % 2 === 0 ? "right" : "left");
-  const introAlign =
-    layoutVariant === "monumental" ? "center" : resolvedPinSide;
-
+  const isFilterTransition = transitionState.mode === "filter";
   const isMorphTarget =
     transitionState.mode === "member" &&
     transitionState.memberSlug === member.slug &&
     transitionState.source === "chapter";
 
-  useEffect(() => {
-    const section = sectionRef.current;
-    const slot = introSlotRef.current;
-    const identity = identityRef.current;
-    const rail = railRef.current;
-    const body = bodyRef.current;
-    if (!section || !slot || !identity || !rail || !body) return;
-
-    const nameEl = identity.querySelector<HTMLElement>(".chapter-name");
-    const roleEl = identity.querySelector<HTMLElement>(".chapter-role");
-    const linkEl = identity.querySelector<HTMLElement>(".chapter-profile-link");
-    const actionsEl = identity.querySelector<HTMLElement>(".chapter-actions");
-    const trackEl = identity.querySelector<HTMLElement>("[data-morph-in]");
-    const railNameEl = rail.querySelector<HTMLElement>(".rail-name");
-    const railRoleEl = rail.querySelector<HTMLElement>(".chapter-role");
-    const railLinkEl = rail.querySelector<HTMLElement>(".chapter-profile-link");
-    const stage = body.querySelector<HTMLElement>(".chapter-stage");
-    const fadeEls = [...identity.querySelectorAll<HTMLElement>("[data-morph-fade]")];
-    const rowEls = [...identity.children] as HTMLElement[];
-    if (
-      !nameEl ||
-      !roleEl ||
-      !linkEl ||
-      !actionsEl ||
-      !trackEl ||
-      !railNameEl ||
-      !railRoleEl ||
-      !railLinkEl ||
-      !stage
-    )
-      return;
-
-    const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-    let introH = 0;
-    let introW = 0;
-    let slotOff = 0;
-    let offX = 0;
-    let offY = 0;
-    let railW = 0;
-    let gapMax = 0;
-    let stageCap = 0;
-    let stageDocked = 0;
-    let stickyTop = 0;
-    let fsNameI = 0;
-    let fsNameR = 0;
-    let fsRoleI = 0;
-    let fsRoleR = 0;
-    let fsLinkI = 0;
-    let fsLinkR = 0;
-    let fadeBox: { h: number; w: number; mt: number }[] = [];
-
-    const measure = () => {
-      identity.style.position = "";
-      identity.style.left = "";
-      identity.style.top = "";
-      identity.style.width = "";
-      identity.style.visibility = "";
-      identity.style.gap = "";
-      identity.dataset.flight = "0";
-      rowEls.forEach((el) => {
-        el.style.marginBlockEnd = "";
-        el.style.marginBlockStart = "";
-      });
-      fadeEls.forEach((el) => {
-        el.style.opacity = "";
-        el.style.height = "";
-        el.style.width = "";
-        el.style.display = "";
-        el.style.overflow = "";
-      });
-      trackEl.style.opacity = "";
-      slot.style.height = "";
-      body.style.setProperty("--rail-w", "0px");
-      body.style.setProperty("--rail-gap", "0px");
-      body.style.setProperty("--stage-max", "");
-      rail.style.visibility = "hidden";
-      const cs = getComputedStyle(body);
-      const pad =
-        parseFloat(cs.paddingInlineStart) + parseFloat(cs.paddingInlineEnd);
-      const avail = body.clientWidth - pad;
-      gapMax = Math.min(76, Math.max(40, section.clientWidth * 0.05));
-      railW = (avail - gapMax) / 4;
-      stageDocked = avail - railW - gapMax;
-      const capRaw = getComputedStyle(stage).maxInlineSize;
-      stageCap = capRaw === "none" ? avail : Math.min(parseFloat(capRaw), avail);
-      stickyTop = parseFloat(getComputedStyle(rail).insetBlockStart) || 96;
-      slotOff = slot.offsetTop;
-      introH = slot.offsetHeight;
-      introW = identity.offsetWidth;
-      offX = identity.offsetLeft;
-      offY = identity.offsetTop;
-      fsNameI = parseFloat(getComputedStyle(nameEl).fontSize);
-      fsNameR = parseFloat(getComputedStyle(railNameEl).fontSize);
-      fsRoleI = parseFloat(getComputedStyle(roleEl).fontSize);
-      fsRoleR = parseFloat(getComputedStyle(railRoleEl).fontSize);
-      fsLinkI = parseFloat(getComputedStyle(linkEl).fontSize);
-      fsLinkR = parseFloat(getComputedStyle(railLinkEl).fontSize);
-      fadeBox = fadeEls.map((el) => ({
-        h: el.offsetHeight,
-        w: el.offsetWidth,
-        mt: parseFloat(getComputedStyle(el).marginBlockStart) || 0,
-      }));
-    };
-
-    const reset = () => {
-      identity.dataset.flight = "0";
-      identity.style.position = "";
-      identity.style.left = "";
-      identity.style.top = "";
-      identity.style.width = "";
-      identity.style.visibility = "";
-      identity.style.gap = "";
-      identity.style.setProperty("--flight", "0");
-      nameEl.style.fontSize = "";
-      nameEl.style.marginBlockStart = "";
-      roleEl.style.fontSize = "";
-      linkEl.style.fontSize = "";
-      actionsEl.style.marginBlockStart = "";
-      trackEl.style.opacity = "";
-      trackEl.style.marginBlockStart = "";
-      rowEls.forEach((el) => {
-        el.style.marginBlockEnd = "";
-      });
-      fadeEls.forEach((el) => {
-        el.style.opacity = "";
-        el.style.height = "";
-        el.style.width = "";
-        el.style.display = "";
-        el.style.overflow = "";
-        el.style.marginBlockStart = "";
-      });
-      slot.style.height = "";
-      body.style.setProperty("--rail-w", "0px");
-      body.style.setProperty("--rail-gap", "0px");
-      body.style.setProperty("--stage-max", "");
-      rail.style.visibility = "hidden";
-    };
-
-    const frame = (raw: number) => {
-      const docked = getComputedStyle(rail).display !== "none";
-      if (!docked) {
-        reset();
-        return;
-      }
-      const p = clamp01(raw);
-      const m = p * p * (3 - 2 * p);
-
-      if (shouldReduceMotion) {
-        if (p >= 1) {
-          identity.style.visibility = "hidden";
-          slot.style.height = `${introH}px`;
-          body.style.setProperty("--rail-w", `${railW}px`);
-          body.style.setProperty("--rail-gap", `${gapMax}px`);
-          body.style.setProperty("--stage-max", `${stageDocked}px`);
-          rail.style.visibility = "visible";
-        } else {
-          reset();
-        }
-        return;
-      }
-
-      if (m <= 0.001) {
-        reset();
-        return;
-      }
-
-      const slotRect = slot.getBoundingClientRect();
-      const railRect = rail.getBoundingClientRect();
-      const railLeft =
-        resolvedPinSide === "right" ? railRect.right - railW : railRect.left;
-      const x = lerp(slotRect.left + offX, railLeft, m);
-      const y = lerp(slotRect.top + offY, Math.max(railRect.top, stickyTop), p);
-      const w = lerp(introW, railW, m);
-
-      identity.dataset.flight = "1";
-      identity.style.position = "fixed";
-      identity.style.left = `${x}px`;
-      identity.style.top = `${y}px`;
-      identity.style.width = `${w}px`;
-      identity.style.visibility = m >= 0.999 ? "hidden" : "visible";
-      identity.style.setProperty(
-        "--flight",
-        String(clamp01(Math.min(m * 5, (1 - m) * 5))),
-      );
-      identity.style.gap = "0px";
-      const rowGap = lerp(18, 14, m);
-      rowEls.forEach((el, i) => {
-        el.style.marginBlockEnd = i === rowEls.length - 1 ? "0px" : `${rowGap}px`;
-      });
-      nameEl.style.fontSize = `${lerp(fsNameI, fsNameR, m)}px`;
-      nameEl.style.marginBlockStart = `${4 * (1 - m)}px`;
-      roleEl.style.fontSize = `${lerp(fsRoleI, fsRoleR, m)}px`;
-      linkEl.style.fontSize = `${lerp(fsLinkI, fsLinkR, m)}px`;
-      actionsEl.style.marginBlockStart = `${12 * (1 - m)}px`;
-      trackEl.style.opacity = String(m);
-      trackEl.style.marginBlockStart = `${12 * m}px`;
-      const fade = clamp01(1 - m * 1.8);
-      fadeEls.forEach((el, i) => {
-        const box = fadeBox[i];
-        el.style.opacity = String(fade);
-        el.style.overflow = "hidden";
-        el.style.height = `${box.h * fade}px`;
-        el.style.width = `${box.w * fade}px`;
-        el.style.marginBlockStart = `${box.mt * fade}px`;
-        el.style.display = fade <= 0 ? "none" : "";
-      });
-      // The vacated intro keeps its height so the stage rises into the dock
-      // instead of being yanked up under the header mid-flight.
-      slot.style.height = `${introH}px`;
-      body.style.setProperty("--rail-w", `${railW * m}px`);
-      body.style.setProperty("--rail-gap", `${gapMax * m}px`);
-      body.style.setProperty(
-        "--stage-max",
-        `${lerp(stageCap, stageDocked, m)}px`,
-      );
-      rail.style.visibility = m >= 0.999 ? "visible" : "hidden";
-    };
-
-    const liveP = () => {
-      const top = section.getBoundingClientRect().top;
-      const span = Math.max(1, introH - offY);
-      return clamp01((stickyTop - slotOff - offY - top) / span);
-    };
-
-    let raf = 0;
-    let lastP = -1;
-    let mobileSettled = false;
-    const tick = () => {
-      raf = requestAnimationFrame(tick);
-      if (getComputedStyle(rail).display === "none") {
-        if (!mobileSettled) {
-          mobileSettled = true;
-          frame(0);
-        }
-        return;
-      }
-      mobileSettled = false;
-      const p = liveP();
-      const m = p * p * (3 - 2 * p);
-      const inFlight = m > 0.001 && m < 0.999;
-      if (inFlight || Math.abs(p - lastP) > 0.0005) {
-        lastP = p;
-        frame(p);
-      }
-    };
-
-    measure();
-    frame(liveP());
-    raf = requestAnimationFrame(tick);
-    let lastW = section.clientWidth;
-    const ro = new ResizeObserver(() => {
-      if (section.clientWidth !== lastW || liveP() <= 0.001) {
-        lastW = section.clientWidth;
-        measure();
-      }
-      frame(liveP());
-    });
-    ro.observe(section);
-    let fontsDone = false;
-    document.fonts?.ready.then(() => {
-      fontsDone = true;
-      measure();
-      frame(liveP());
-    });
-    return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-      if (!fontsDone) reset();
-    };
-  }, [shouldReduceMotion, member.slug, resolvedPinSide]);
-
   return (
     <section
-      ref={sectionRef}
-      id={`chapter-${member.index}`}
-      className="member-chapter"
-      data-variant={layoutVariant}
-      data-pin={resolvedPinSide}
-      data-surface={isCharcoalBand ? "charcoal" : undefined}
+      id={`chapter-${member.slug}`}
+      tabIndex={-1}
       data-pillar={member.pillar}
-      aria-labelledby={`chapter-heading-${member.index}`}
+      data-chapter-index={displayIndex}
+      data-surface={surfaceTone === "charcoal" ? "charcoal" : undefined}
+      className={cn(
+        "member-chapter roster-chapter-item @container/chapter border-b border-edge py-[clamp(4.5rem,10dvb,8.5rem)]",
+        surfaceTone === "alt" ? "bg-surface-alt" : "bg-page",
+      )}
+      style={
+        isFilterTransition
+          ? ({ viewTransitionName: `chapter-${member.id}` } as React.CSSProperties)
+          : undefined
+      }
+      aria-labelledby={`chapter-heading-${member.slug}`}
     >
-      <div className="chapter-intro" ref={introSlotRef} data-align={introAlign}>
+      <div
+        className={cn(
+          "shell grid min-w-0 items-start",
+          "grid-cols-[minmax(0,1fr)_clamp(6.5rem,27cqi,13rem)] gap-x-[clamp(1rem,4cqi,2.5rem)] gap-y-[clamp(2rem,5cqi,3.25rem)]",
+          "@min-[54rem]/chapter:grid-rows-[auto_1fr] @min-[54rem]/chapter:gap-x-[clamp(2.75rem,6cqi,5.5rem)] @min-[54rem]/chapter:gap-y-[clamp(2.25rem,5cqi,3.5rem)]",
+          pinSide === "right"
+            ? "@min-[54rem]/chapter:grid-cols-[minmax(0,1.16fr)_minmax(0,0.84fr)]"
+            : "@min-[54rem]/chapter:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)]",
+        )}
+      >
         <motion.div
-          ref={identityRef}
-          className="chapter-identity"
-          variants={containerVariants}
+          className={cn(
+            "col-start-1 row-start-1 grid min-w-0 content-start gap-3.5 @min-[54rem]/chapter:gap-5",
+            "@min-[54rem]/chapter:sticky @min-[54rem]/chapter:top-[calc(var(--header-h)+2.5rem)] @min-[54rem]/chapter:row-span-2",
+            pinSide === "right" ? "@min-[54rem]/chapter:col-start-2" : "@min-[54rem]/chapter:col-start-1",
+          )}
+          variants={identityStagger}
           initial={shouldReduceMotion ? false : "hidden"}
           whileInView="visible"
           viewport={{ once: true, amount: "some" }}
-          style={
-            isMorphTarget
-              ? ({ viewTransitionName: "member-card" } as React.CSSProperties)
-              : undefined
-          }
         >
           <motion.div
-            className="chapter-accent-rule"
-            data-pillar={member.pillar}
-            variants={ruleVariants}
+            variants={ruleReveal}
+            className={cn("h-[3px] w-12 origin-left rounded-full", ruleByPillar[member.pillar])}
             aria-hidden="true"
           />
 
-          <motion.div
-            className="chapter-meta"
-            data-morph-fade
-            variants={riseVariants}
-          >
-            <span
-              className="chapter-index"
-              data-morph-fade
-              style={
-                isMorphTarget
-                  ? ({
-                      viewTransitionName: "member-index",
-                    } as React.CSSProperties)
-                  : undefined
-              }
-            >
-              {member.index} / 07
+          <motion.div variants={riseItem} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="font-serif type-body-sm font-[560] tabular text-ink-secondary">
+              {displayIndex} / {totalFormatted}
             </span>
             <PillarBadge pillar={member.pillar}>
               {member.pillar} · {member.pillarFull}
             </PillarBadge>
           </motion.div>
 
-          <motion.h2
-            id={`chapter-heading-${member.index}`}
-            className="chapter-name"
-            variants={riseVariants}
+          <motion.h3
+            variants={riseItem}
+            id={`chapter-heading-${member.slug}`}
+            className="m-0 w-fit font-serif type-title-2 font-semibold text-ink"
             style={
               isMorphTarget
                 ? ({ viewTransitionName: "member-name" } as React.CSSProperties)
                 : undefined
             }
           >
-            {member.name}
-          </motion.h2>
-
-          <motion.p className="chapter-role" variants={riseVariants}>
-            {member.role}
-          </motion.p>
-
-          <motion.p className="chapter-bio" data-morph-fade variants={riseVariants}>
-            {member.bio}
-          </motion.p>
-
-          <motion.div className="chapter-actions" variants={riseVariants}>
             <TransitionLink
               to={`/member/${member.slug}`}
               direction="forward"
               memberSlug={member.slug}
               transitionSource="chapter"
-              className="chapter-profile-link"
+              className="ui-link-underline inline-block text-inherit hover:text-(--tone)"
+            >
+              {member.name}
+            </TransitionLink>
+          </motion.h3>
+
+          {member.minor ? (
+            <motion.p
+              variants={riseItem}
+              className="-mt-1 m-0 font-mono type-ui-sm font-medium tracking-[0.05em] uppercase text-ink-secondary"
+            >
+              Minor in {member.minor}
+            </motion.p>
+          ) : null}
+
+          {member.role ? (
+            <motion.p
+              variants={riseItem}
+              className="m-0 font-serif type-role italic font-medium text-accent"
+            >
+              {member.role}
+            </motion.p>
+          ) : null}
+
+          {member.bio ? (
+            <motion.p
+              variants={riseItem}
+              className="m-0 max-w-[34ch] type-body-lg text-ink-secondary @min-[54rem]/chapter:max-w-[46ch]"
+            >
+              {member.bio}
+            </motion.p>
+          ) : null}
+
+          {hasLinks ? (
+            <motion.div variants={riseItem}>
+              <MemberLinksRow links={member.links} className="pt-1" />
+            </motion.div>
+          ) : null}
+
+          <motion.div variants={riseItem} className="pt-1 @min-[54rem]/chapter:pt-2">
+            <TransitionLink
+              to={`/member/${member.slug}`}
+              direction="forward"
+              memberSlug={member.slug}
+              transitionSource="chapter"
+              className="ui-press group/link inline-flex min-h-11 items-center gap-2.5 rounded-control border border-control bg-surface px-4.5 py-2.5 type-ui font-semibold text-ink no-underline hover:border-(--tone) hover:bg-[color-mix(in_oklab,var(--tone)_10%,var(--surface))]"
             >
               <span>View full profile</span>
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </TransitionLink>
-          </motion.div>
-
-          <div className="chapter-pin-track" data-morph-in aria-hidden="true">
-            <motion.span
-              className="chapter-pin-progress"
-              style={shouldReduceMotion ? undefined : { scaleX: pinProgress }}
-            />
-          </div>
-        </motion.div>
-      </div>
-
-      <div className="chapter-body" ref={bodyRef}>
-        <aside className="chapter-rail" ref={railRef} aria-hidden="true">
-          <div
-            className="chapter-accent-rule"
-            data-pillar={member.pillar}
-            aria-hidden="true"
-          />
-          <PillarBadge pillar={member.pillar}>
-            {member.pillar} · {member.pillarFull}
-          </PillarBadge>
-          <p className="rail-name">{member.name}</p>
-          <p className="chapter-role">{member.role}</p>
-          <TransitionLink
-            to={`/member/${member.slug}`}
-            direction="forward"
-            memberSlug={member.slug}
-            transitionSource="chapter"
-            className="chapter-profile-link"
-            tabIndex={-1}
-          >
-            <span>View full profile</span>
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </TransitionLink>
-          <div className="chapter-pin-track" aria-hidden="true">
-            <motion.span
-              className="chapter-pin-progress"
-              style={shouldReduceMotion ? undefined : { scaleX: pinProgress }}
-            />
-          </div>
-        </aside>
-
-        <div className="chapter-stage">
-          {(layoutVariant === "split" || layoutVariant === "split-wide") && (
-            <PopOutSpecStage
-              member={member}
-              wide={layoutVariant === "split-wide"}
-              shouldReduceMotion={shouldReduceMotion}
-            />
-          )}
-          {(layoutVariant === "split-reverse" || layoutVariant === "inset") && (
-            <DiptychStage
-              member={member}
-              scrollYProgress={scrollYProgress}
-              shouldReduceMotion={shouldReduceMotion}
-            />
-          )}
-          {isCharcoalBand && (
-            <PeekCarouselStage
-              member={member}
-              shouldReduceMotion={shouldReduceMotion}
-            />
-          )}
-          {layoutVariant === "monumental" && (
-            <MonumentalStage
-              member={member}
-              shouldReduceMotion={shouldReduceMotion}
-            />
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SkillList({ skills }: { skills: string[] }) {
-  return (
-    <ul className="chapter-skills-list">
-      {skills.map((skill, idx) => (
-        <li key={skill} className="chapter-skill-item">
-          <span className="chapter-skill-num">0{idx + 1}</span>
-          <span className="chapter-skill-name">{skill}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function PopOutSpecStage({
-  member,
-  wide,
-  shouldReduceMotion,
-}: {
-  member: TeamMember;
-  wide: boolean;
-  shouldReduceMotion: boolean;
-}) {
-  const specs = (
-    <>
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <h3 className="chapter-kicker">Skillsets</h3>
-        <SkillList skills={member.skillsets} />
-      </ScrollBeat>
-
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <h3 className="chapter-kicker">Interests</h3>
-        <p className="chapter-interests-line">{member.interests.join(" · ")}</p>
-      </ScrollBeat>
-    </>
-  );
-
-  return (
-    <div className="pop-spec-stage">
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <div className="chapter-pop-frame">
-          <ArtifactFrame
-            member={member}
-            src={member.artifacts?.heroImage}
-            aspectRatio={wide ? "16/9" : "16/10"}
-            plateLabel={`${member.pillar} · ${member.pillarFull}`}
-          />
-        </div>
-      </ScrollBeat>
-
-      {wide ? <div className="chapter-spec-grid">{specs}</div> : specs}
-    </div>
-  );
-}
-
-function DiptychStage({
-  member,
-  scrollYProgress,
-  shouldReduceMotion,
-}: {
-  member: TeamMember;
-  scrollYProgress: MotionValue<number>;
-  shouldReduceMotion: boolean;
-}) {
-  const plateAY = useTransform(scrollYProgress, [0, 1], ["4%", "-4%"]);
-  const plateBY = useTransform(scrollYProgress, [0, 1], ["-3%", "5%"]);
-
-  return (
-    <div className="diptych-stage">
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <div className="diptych-collage">
-          <motion.div
-            className="diptych-plate diptych-plate-primary"
-            style={shouldReduceMotion ? undefined : { y: plateAY }}
-            initial={
-              shouldReduceMotion
-                ? false
-                : { clipPath: "inset(10% 0% 0% 0%)", opacity: 0 }
-            }
-            whileInView={{ clipPath: "inset(0% 0% 0% 0%)", opacity: 1 }}
-            viewport={{ once: true, amount: "some" }}
-            transition={{ duration: 0.4, ease: EASE }}
-          >
-            <ArtifactFrame
-              member={member}
-              src={member.artifacts?.heroImage}
-              aspectRatio="4/5"
-              plateLabel={`${member.pillar} · ${member.pillarFull}`}
-            />
-          </motion.div>
-
-          <motion.div
-            className="diptych-plate diptych-plate-secondary"
-            style={shouldReduceMotion ? undefined : { y: plateBY }}
-            initial={
-              shouldReduceMotion
-                ? false
-                : { clipPath: "inset(12% 0% 0% 0%)", opacity: 0 }
-            }
-            whileInView={{ clipPath: "inset(0% 0% 0% 0%)", opacity: 1 }}
-            viewport={{ once: true, amount: "some" }}
-            transition={{ duration: 0.4, delay: 0.05, ease: EASE }}
-          >
-            <ArtifactFrame
-              member={member}
-              src={member.artifacts?.secondaryImage}
-              aspectRatio="16/10"
-              plateLabel={`${member.pillar} · Focus`}
-            />
-          </motion.div>
-        </div>
-      </ScrollBeat>
-
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <div className="diptych-meta-strip">
-          <div>
-            <h3 className="chapter-kicker">Skillsets</h3>
-            <p className="chapter-inline-specs">
-              {member.skillsets.join(" · ")}
-            </p>
-          </div>
-          <div>
-            <h3 className="chapter-kicker">Interests</h3>
-            <p className="chapter-interests-line">
-              {member.interests.join(" · ")}
-            </p>
-          </div>
-        </div>
-      </ScrollBeat>
-    </div>
-  );
-}
-
-function PeekCarouselStage({
-  member,
-  shouldReduceMotion,
-}: {
-  member: TeamMember;
-  shouldReduceMotion: boolean;
-}) {
-  const [activeTab, setActiveTab] = useState<"skillsets" | "focus">(
-    "skillsets",
-  );
-  const trackRef = useRef<HTMLDivElement>(null);
-  const prevBtnRef = useRef<HTMLButtonElement>(null);
-  const nextBtnRef = useRef<HTMLButtonElement>(null);
-  const scrollPaddingRef = useRef(0);
-  const pendingTargetRef = useRef<number | null>(null);
-  const lastSettledRef = useRef<number>(0);
-  const userScrolledRef = useRef(false);
-  const rafRef = useRef<number>(0);
-  const settleTimerRef = useRef<number | undefined>(undefined);
-
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [canScrollPrev, setCanScrollPrev] = useState(false);
-  const [canScrollNext, setCanScrollNext] = useState(true);
-  const [settledAnnouncement, setSettledAnnouncement] = useState("");
-
-  const cards = useMemo(() => {
-    if (activeTab === "skillsets") {
-      return member.skillsets.map((skill, idx) => ({
-        id: `skill-${skill}`,
-        tag: `0${idx + 1} · Core Skill`,
-        title: skill,
-        detail: `${member.pillar} application within ${member.role.toLowerCase()}.`,
-      }));
-    }
-    return member.interests.map((interest, idx) => ({
-      id: `interest-${interest}`,
-      tag: `0${idx + 1} · Studio & Beyond`,
-      title: interest,
-      detail: `Explored alongside ${member.skillsets[idx % member.skillsets.length]}.`,
-    }));
-  }, [activeTab, member]);
-
-  const computeNearestSlide = useCallback((track: HTMLDivElement) => {
-    const slides = Array.from(track.children) as HTMLElement[];
-    if (slides.length === 0) {
-      return { nearest: 0, maxScroll: 0 };
-    }
-    const baseOffset = slides[0].offsetLeft;
-    const padding = scrollPaddingRef.current;
-    const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
-    let nearest = 0;
-    let minDistance = Number.POSITIVE_INFINITY;
-
-    slides.forEach((slide, idx) => {
-      const snapLeft = Math.max(
-        0,
-        Math.min(slide.offsetLeft - baseOffset - padding, maxScroll),
-      );
-      const distance = Math.abs(track.scrollLeft - snapLeft);
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearest = idx;
-      }
-    });
-
-    return { nearest, maxScroll };
-  }, []);
-
-  const syncScrollBounds = useCallback(
-    (track: HTMLDivElement) => {
-      const { nearest, maxScroll } = computeNearestSlide(track);
-      setCanScrollPrev(track.scrollLeft > 2);
-      setCanScrollNext(maxScroll > 2 && track.scrollLeft < maxScroll - 2);
-      return { nearest, maxScroll };
-    },
-    [computeNearestSlide],
-  );
-
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-
-    const readScrollPadding = () => {
-      scrollPaddingRef.current =
-        parseFloat(getComputedStyle(track).scrollPaddingInlineStart) || 0;
-    };
-    readScrollPadding();
-
-    pendingTargetRef.current = null;
-    lastSettledRef.current = 0;
-    userScrolledRef.current = false;
-    track.scrollTo({ left: 0, behavior: "auto" });
-    setActiveIndex(0);
-    setSettledAnnouncement("");
-    syncScrollBounds(track);
-
-    const handleSettled = () => {
-      const pending = pendingTargetRef.current;
-      pendingTargetRef.current = null;
-      const { nearest, maxScroll } = syncScrollBounds(track);
-      const settled =
-        pending !== null && Math.abs(track.scrollLeft - maxScroll) <= 2
-          ? pending
-          : nearest;
-      setActiveIndex(settled);
-      if (userScrolledRef.current && settled !== lastSettledRef.current) {
-        lastSettledRef.current = settled;
-        setSettledAnnouncement(`Slide ${settled + 1} of ${cards.length}`);
-      }
-    };
-
-    const supportsScrollEnd = "onscrollend" in window;
-
-    const onScroll = () => {
-      userScrolledRef.current = true;
-      if (pendingTargetRef.current === null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = requestAnimationFrame(() => {
-          const { nearest } = syncScrollBounds(track);
-          setActiveIndex(nearest);
-        });
-      }
-      if (!supportsScrollEnd) {
-        window.clearTimeout(settleTimerRef.current);
-        settleTimerRef.current = window.setTimeout(handleSettled, 140);
-      }
-    };
-
-    const onScrollEnd = () => {
-      if (pendingTargetRef.current !== null) {
-        const slides = Array.from(track.children) as HTMLElement[];
-        const targetSlide = slides[pendingTargetRef.current];
-        if (targetSlide && slides[0]) {
-          const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
-          const expectedLeft = Math.max(
-            0,
-            Math.min(
-              targetSlide.offsetLeft -
-                slides[0].offsetLeft -
-                scrollPaddingRef.current,
-              maxScroll,
-            ),
-          );
-          if (Math.abs(track.scrollLeft - expectedLeft) > 8) {
-            return;
-          }
-        }
-      }
-      handleSettled();
-    };
-
-    track.addEventListener("scroll", onScroll, { passive: true });
-    if (supportsScrollEnd) {
-      track.addEventListener("scrollend", onScrollEnd);
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      readScrollPadding();
-      syncScrollBounds(track);
-    });
-    resizeObserver.observe(track);
-
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      window.clearTimeout(settleTimerRef.current);
-      track.removeEventListener("scroll", onScroll);
-      if (supportsScrollEnd) {
-        track.removeEventListener("scrollend", onScrollEnd);
-      }
-      resizeObserver.disconnect();
-    };
-  }, [activeTab, cards.length, syncScrollBounds]);
-
-  const scrollToSlide = (targetIdx: number) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const slides = Array.from(track.children) as HTMLElement[];
-    if (slides.length === 0) return;
-
-    const clampedIdx = Math.max(0, Math.min(slides.length - 1, targetIdx));
-    const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
-    const targetLeft = Math.max(
-      0,
-      Math.min(
-        slides[clampedIdx].offsetLeft -
-          slides[0].offsetLeft -
-          scrollPaddingRef.current,
-        maxScroll,
-      ),
-    );
-
-    userScrolledRef.current = true;
-    pendingTargetRef.current = clampedIdx;
-    setActiveIndex(clampedIdx);
-    setCanScrollPrev(targetLeft > 2);
-    setCanScrollNext(maxScroll > 2 && targetLeft < maxScroll - 2);
-
-    track.scrollTo({
-      left: targetLeft,
-      behavior: shouldReduceMotion ? "auto" : "smooth",
-    });
-
-    if (targetLeft <= 2 && document.activeElement === prevBtnRef.current) {
-      nextBtnRef.current?.focus();
-    }
-    if (
-      !(maxScroll > 2 && targetLeft < maxScroll - 2) &&
-      document.activeElement === nextBtnRef.current
-    ) {
-      prevBtnRef.current?.focus();
-    }
-
-    if (shouldReduceMotion) {
-      pendingTargetRef.current = null;
-      if (clampedIdx !== lastSettledRef.current) {
-        lastSettledRef.current = clampedIdx;
-        setSettledAnnouncement(`Slide ${clampedIdx + 1} of ${cards.length}`);
-      }
-    }
-  };
-
-  const handleStep = (delta: -1 | 1) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const baseIndex =
-      pendingTargetRef.current ?? computeNearestSlide(track).nearest;
-    scrollToSlide(baseIndex + delta);
-  };
-
-  return (
-    <section
-      className="peek-stage"
-      aria-roledescription="carousel"
-      aria-label={`${member.name} ${activeTab === "skillsets" ? "skillsets" : "interests"}`}
-    >
-      <div className="peek-header">
-        <div
-          className="peek-tabs"
-          role="tablist"
-          aria-label={`${member.name} focus areas`}
-        >
-          {(["skillsets", "focus"] as const).map((tab) => {
-            const isSelected = activeTab === tab;
-            const label =
-              tab === "skillsets" ? "Skillsets" : "Focus & Interests";
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                className="peek-tab-btn"
-                onClick={() => setActiveTab(tab)}
-              >
-                {isSelected && (
-                  <motion.span
-                    layoutId={`peek-tab-${member.id}`}
-                    className="peek-tab-pill"
-                    transition={
-                      shouldReduceMotion
-                        ? { duration: 0 }
-                        : { type: "spring", stiffness: 420, damping: 36 }
-                    }
-                    aria-hidden="true"
-                  />
-                )}
-                <span className="peek-tab-label">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="peek-controls">
-          <button
-            ref={prevBtnRef}
-            type="button"
-            className="peek-nav-btn"
-            aria-label="Previous slide"
-            disabled={!canScrollPrev}
-            onClick={() => handleStep(-1)}
-          >
-            <ChevronLeft className="size-4" aria-hidden="true" />
-          </button>
-          <button
-            ref={nextBtnRef}
-            type="button"
-            className="peek-nav-btn"
-            aria-label="Next slide"
-            disabled={!canScrollNext}
-            onClick={() => handleStep(1)}
-          >
-            <ChevronRight className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
-      <div
-        ref={trackRef}
-        className="peek-carousel"
-        role="group"
-        aria-label="Slides"
-        tabIndex={0}
-      >
-        {cards.map((card, idx) => (
-          <article
-            key={card.id}
-            role="group"
-            aria-roledescription="slide"
-            aria-label={`${idx + 1} of ${cards.length}`}
-            className="peek-card"
-          >
-            <span className="peek-card-tag">{card.tag}</span>
-            <h3 className="peek-card-title">{card.title}</h3>
-            <p className="peek-card-detail">{card.detail}</p>
-          </article>
-        ))}
-      </div>
-
-      <nav className="peek-markers" aria-label="Choose a slide">
-        {cards.map((card, idx) => (
-          <button
-            key={card.id}
-            type="button"
-            className="peek-marker-btn"
-            aria-label={`Go to slide ${idx + 1}: ${card.title}`}
-            aria-current={idx === activeIndex ? "true" : undefined}
-            onClick={() => scrollToSlide(idx)}
-          />
-        ))}
-      </nav>
-
-      <p className="visually-hidden" role="status" aria-live="polite">
-        {settledAnnouncement}
-      </p>
-    </section>
-  );
-}
-
-interface LensOption {
-  id: string;
-  label: string;
-}
-
-function LensStrip({
-  lenses,
-  activeLensId,
-  onSelect,
-  shouldReduceMotion,
-  pillPrefix,
-  groupLabel,
-}: {
-  lenses: LensOption[];
-  activeLensId: string;
-  onSelect: (id: string) => void;
-  shouldReduceMotion: boolean;
-  pillPrefix: string;
-  groupLabel: string;
-}) {
-  return (
-    <div
-      className="perspective-lens-strip"
-      role="group"
-      aria-label={groupLabel}
-    >
-      {lenses.map((lens) => {
-        const active = lens.id === activeLensId;
-        return (
-          <button
-            key={lens.id}
-            type="button"
-            aria-pressed={active}
-            className="perspective-lens-btn"
-            onClick={() => onSelect(lens.id)}
-          >
-            {active && (
-              <motion.span
-                layoutId={pillPrefix}
-                className="perspective-lens-pill"
-                transition={
-                  shouldReduceMotion
-                    ? { duration: 0 }
-                    : { type: "spring", stiffness: 420, damping: 36 }
-                }
+              <ArrowRight
+                className="size-4 transition-transform duration-200 motion-safe:group-hover/link:translate-x-[0.22em]"
                 aria-hidden="true"
               />
-            )}
-            <span className="perspective-lens-label">{lens.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+            </TransitionLink>
+          </motion.div>
+        </motion.div>
 
-function MonumentalStage({
-  member,
-  shouldReduceMotion,
-}: {
-  member: TeamMember;
-  shouldReduceMotion: boolean;
-}) {
-  const lenses = useMemo(() => {
-    if (member.artifacts?.lenses && member.artifacts.lenses.length > 0) {
-      return member.artifacts.lenses;
-    }
-    return [
-      { id: "craft", label: "Craft", summary: member.bio },
-      {
-        id: "toolchain",
-        label: "Toolchain",
-        summary: member.skillsets.join(" · "),
-      },
-      {
-        id: "role",
-        label: "Capstone Role",
-        summary: `${member.pillarFull} · ${member.role}`,
-      },
-    ];
-  }, [member]);
-
-  const [activeLensId, setActiveLensId] = useState(lenses[0]?.id ?? "craft");
-  const currentLens = lenses.find((l) => l.id === activeLensId) ?? lenses[0];
-
-  return (
-    <div className="perspective-stage monumental-stage">
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <div className="perspective-canvas">
+        <motion.div
+          variants={stageBlock}
+          initial={shouldReduceMotion ? false : "hidden"}
+          whileInView="visible"
+          viewport={{ once: true, amount: "some" }}
+          className={cn(
+            "col-start-2 row-start-1 min-w-0 self-start",
+            pinSide === "right" ? "@min-[54rem]/chapter:col-start-1" : "@min-[54rem]/chapter:col-start-2",
+          )}
+        >
           <ArtifactFrame
             member={member}
             src={member.artifacts?.heroImage}
-            aspectRatio="16/9"
-            plateLabel={`${member.pillar} · ${currentLens.label}`}
-            className="perspective-artifact"
+            alignClassName="justify-items-end @min-[54rem]/chapter:justify-items-center"
+            mediaClassName="aspect-[4/5] @min-[54rem]/chapter:aspect-[16/10]"
+            photoMaxHeightClassName="max-h-[clamp(9.5rem,36cqi,15.5rem)] @min-[54rem]/chapter:max-h-[clamp(22rem,56dvb,34rem)]"
+            plateLabel={`${member.pillar} · ${member.pillarFull}`}
           />
-        </div>
+        </motion.div>
 
-        <div className="perspective-controls">
-          <LensStrip
-            lenses={lenses}
-            activeLensId={activeLensId}
-            onSelect={setActiveLensId}
-            shouldReduceMotion={shouldReduceMotion}
-            pillPrefix={`monumental-lens-${member.id}`}
-            groupLabel="Perspective lens"
-          />
+        {hasDetails ? (
+          <motion.div
+            className={cn(
+              "@container/chapter-detail col-span-2 row-start-2 grid min-w-0 content-start gap-[clamp(2rem,4.5cqi,3.25rem)]",
+              "@min-[54rem]/chapter:col-span-1",
+              pinSide === "right" ? "@min-[54rem]/chapter:col-start-1" : "@min-[54rem]/chapter:col-start-2",
+            )}
+            variants={stageStagger}
+            initial={shouldReduceMotion ? false : "hidden"}
+            whileInView="visible"
+            viewport={{ once: true, amount: "some" }}
+          >
+            {hasSkills ? (
+              <motion.div variants={stageBlock} className="grid gap-4">
+                <h4 className={kickerStyles}>Skillsets</h4>
+                <ul className="m-0 grid list-none grid-cols-1 gap-x-10 gap-y-3.5 p-0 @min-[30rem]/chapter-detail:grid-cols-2">
+                  {member.skillsets.map((skill, idx) => (
+                    <li
+                      key={skill}
+                      className="flex items-baseline gap-3.5 type-body text-ink"
+                    >
+                      <span className="shrink-0 font-serif type-body-sm italic font-[540] tabular text-accent">
+                        {String(idx + 1).padStart(2, "0")}
+                      </span>
+                      <span className="min-w-0 font-medium">{skill}</span>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+            ) : null}
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentLens.id}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
-              className="perspective-readout"
-            >
-              <p className="perspective-lens-summary">
-                <strong>{currentLens.label}:</strong> {currentLens.summary}
-              </p>
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </ScrollBeat>
+            {hasTools || hasInterests ? (
+              <motion.div
+                variants={stageBlock}
+                className={cn(
+                  "grid grid-cols-1 gap-6",
+                  hasSkills && "border-t border-rule pt-6",
+                  hasTools && hasInterests && "@min-[34rem]/chapter-detail:grid-cols-2",
+                )}
+              >
+                {hasTools ? (
+                  <div className="grid content-start gap-3">
+                    <h4 className={kickerStyles}>Tools &amp; Software</h4>
+                    <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+                      {member.tools!.map((tool) => (
+                        <li
+                          key={tool}
+                          className="rounded-control border border-edge bg-surface px-3 py-1 font-mono type-ui-sm font-medium text-ink transition-colors duration-150 hover:border-(--tone)"
+                        >
+                          {tool}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
 
-      <ScrollBeat shouldReduceMotion={shouldReduceMotion}>
-        <div className="chapter-specs-block">
-          <h3 className="chapter-kicker">Skillsets</h3>
-          <SkillList skills={member.skillsets} />
-        </div>
+                {hasInterests ? (
+                  <div className="grid content-start gap-2.5">
+                    <h4 className={kickerStyles}>Interests</h4>
+                    <p className="m-0 type-body text-ink-secondary">
+                      {member.interests.join(" · ")}
+                    </p>
+                  </div>
+                ) : null}
+              </motion.div>
+            ) : null}
 
-        <div className="chapter-interests-block">
-          <h3 className="chapter-kicker">Interests</h3>
-          <p className="chapter-interests-line">
-            {member.interests.join(" · ")}
-          </p>
-        </div>
-      </ScrollBeat>
-    </div>
+            {hasProjects ? (
+              <motion.div
+                variants={stageBlock}
+                className={cn(
+                  "grid gap-3.5",
+                  (hasSkills || hasTools || hasInterests) && "border-t border-rule pt-6",
+                )}
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h4 className={kickerStyles}>Projects &amp; Internships</h4>
+                  <TransitionLink
+                    to={`/member/${member.slug}`}
+                    direction="forward"
+                    memberSlug={member.slug}
+                    transitionSource="chapter"
+                    className="ui-link-underline type-ui-sm font-semibold text-(--tone)"
+                  >
+                    Read full details
+                  </TransitionLink>
+                </div>
+                <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 @min-[36rem]/chapter-detail:grid-cols-2">
+                  {projects.map((project) => (
+                    <li
+                      key={project.title}
+                      className="ui-card-interactive flex flex-wrap items-center justify-between gap-2.5 rounded-card border border-edge bg-surface px-4 py-3.5"
+                    >
+                      <TransitionLink
+                        to={`/member/${member.slug}`}
+                        direction="forward"
+                        memberSlug={member.slug}
+                        transitionSource="chapter"
+                        className="ui-link-underline font-serif type-label-lg font-semibold text-ink hover:text-(--tone)"
+                      >
+                        {project.title}
+                      </TransitionLink>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {project.tag ? (
+                          <span className="rounded-chip border border-rule bg-surface-muted px-2.5 py-0.5 font-mono type-micro font-semibold text-ink-secondary">
+                            {project.tag}
+                          </span>
+                        ) : null}
+                        {project.url && isValidHttpUrl(project.url) ? (
+                          <a
+                            href={project.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Open ${project.title}`}
+                            className="ui-press inline-flex size-9 items-center justify-center rounded-control border border-transparent text-(--tone) hover:bg-surface-muted/80 pointer-coarse:size-11"
+                          >
+                            <ArrowUpRight className="size-4" aria-hidden="true" />
+                          </a>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+            ) : null}
+          </motion.div>
+        ) : null}
+      </div>
+    </section>
   );
 }

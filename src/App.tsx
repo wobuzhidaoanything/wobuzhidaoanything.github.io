@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import { Outlet, RouterProvider, createBrowserRouter } from "react-router";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { ToastRegion } from "@/components/ui/ToastRegion";
 import { useTransitionState } from "@/hooks/useTransitionMember";
 import { focusRouteHeading } from "@/lib/viewTransitions";
 import { LicensesPage } from "@/pages/LicensesPage";
@@ -38,6 +39,7 @@ function AppShell() {
         <Outlet />
       </main>
       <SiteFooter />
+      <ToastRegion />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { CircleAlert } from "lucide-react";
 import { cn } from "cn";
 
 export const inputStyles =
-  "w-full min-h-11 px-3 py-2 rounded-control border border-edge bg-surface type-body text-ink placeholder:text-ink-muted transition-[border-color] duration-150 focus-visible:outline-[3px] focus-visible:outline-accent focus-visible:outline-offset-2 aria-[invalid=true]:border-danger";
+  "w-full min-h-11 px-3.5 py-2 rounded-control border border-edge bg-surface type-body text-ink placeholder:text-ink-muted transition-[border-color] duration-150 focus-visible:outline-[3px] focus-visible:outline-accent focus-visible:outline-offset-2 aria-[invalid=true]:border-danger";
 
 function describedBy(id: string, error?: string, hint?: string): string | undefined {
   if (error) return `${id}-error`;
@@ -22,7 +22,20 @@ interface FieldShellProps {
   children: ReactNode;
 }
 
-export function FieldShell({ id, label, required, hint, error, counter, group, children }: FieldShellProps) {
+export function FieldShell({
+  id,
+  label,
+  required,
+  hint,
+  error,
+  counter,
+  group,
+  children,
+}: FieldShellProps) {
+  const showCounter =
+    counter !== undefined &&
+    (counter.value >= Math.floor(counter.max * 0.75) || counter.value > counter.max);
+
   const labelClass = "type-ui font-semibold text-ink";
   const labelContent = (
     <>
@@ -35,9 +48,10 @@ export function FieldShell({ id, label, required, hint, error, counter, group, c
       ) : null}
     </>
   );
+
   return (
-    <div className="grid min-w-0 gap-[0.6rem] text-left min-[48rem]:grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)] min-[48rem]:gap-x-6">
-      <div className="flex items-baseline justify-between gap-3 min-[48rem]:block">
+    <div className="field-shell grid min-w-0 gap-1.5 text-left">
+      <div className="flex items-baseline justify-between gap-3">
         {group ? (
           <span id={`${id}-label`} className={labelClass}>
             {labelContent}
@@ -47,10 +61,10 @@ export function FieldShell({ id, label, required, hint, error, counter, group, c
             {labelContent}
           </label>
         )}
-        {counter ? (
+        {showCounter ? (
           <span
             className={cn(
-              "type-micro tabular min-[48rem]:mt-1 min-[48rem]:block",
+              "type-micro tabular",
               counter.value > counter.max ? "font-semibold text-danger" : "text-ink-muted",
             )}
           >
@@ -59,7 +73,7 @@ export function FieldShell({ id, label, required, hint, error, counter, group, c
         ) : null}
       </div>
       <div
-        className="grid min-w-0 content-start gap-[0.35rem]"
+        className="grid min-w-0 content-start gap-1.5"
         role={group ? "group" : undefined}
         aria-labelledby={group ? `${id}-label` : undefined}
         aria-describedby={group ? describedBy(id, error, hint) : undefined}
@@ -83,6 +97,7 @@ export function FieldShell({ id, label, required, hint, error, counter, group, c
 interface TextFieldProps {
   id: string;
   label: string;
+  type?: "text" | "url" | "email";
   value: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
@@ -98,6 +113,7 @@ interface TextFieldProps {
 export function TextField({
   id,
   label,
+  type = "text",
   value,
   onChange,
   onBlur,
@@ -121,7 +137,7 @@ export function TextField({
       <input
         id={id}
         name={id}
-        type="text"
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
@@ -138,9 +154,9 @@ export function TextField({
   );
 }
 
-interface TextAreaFieldProps extends Omit<TextFieldProps, "autoComplete" | "enterKeyHint" | "placeholder"> {
+interface TextAreaFieldProps
+  extends Omit<TextFieldProps, "type" | "autoComplete" | "enterKeyHint"> {
   rows?: number;
-  placeholder?: string;
 }
 
 export function TextAreaField({
@@ -153,7 +169,7 @@ export function TextAreaField({
   hint,
   error,
   maxLength,
-  rows = 4,
+  rows = 3,
   placeholder,
 }: TextAreaFieldProps) {
   return (
@@ -177,7 +193,7 @@ export function TextAreaField({
         placeholder={placeholder}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, error, hint)}
-        className={cn(inputStyles, "resize-y")}
+        className={cn(inputStyles, "field-auto-size resize-y")}
       />
     </FieldShell>
   );

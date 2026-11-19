@@ -2,6 +2,15 @@ export type Pillar = "CSD" | "EPD" | "ESD";
 
 export type FilterOption = "All" | Pillar;
 
+export type HeroFocus = "top" | "center" | "bottom";
+
+export interface MemberLinks {
+  github?: string;
+  linkedin?: string;
+  portfolio?: string;
+  email?: string;
+}
+
 export interface ArtifactHotspot {
   id: string;
   label: string;
@@ -13,6 +22,7 @@ export interface ArtifactHotspot {
 export interface MemberArtifacts {
   heroImage?: string;
   secondaryImage?: string;
+  heroFocus?: HeroFocus;
   caption?: string;
   alt?: string;
   lenses?: {
@@ -26,6 +36,9 @@ export interface MemberArtifacts {
 export interface MemberProject {
   title: string;
   detail: string;
+  tag?: string;
+  url?: string;
+  featured?: boolean;
 }
 
 export interface TeamMember {
@@ -40,6 +53,8 @@ export interface TeamMember {
   skillsets: string[];
   interests: string[];
   artifacts?: MemberArtifacts;
+  links?: MemberLinks;
+  hidden?: boolean;
   // Profile template fields: photo → artifacts.heroImage,
   // MAJOR → pillar + minor, skills → skillsets / tools / projects.
   minor?: string;
@@ -67,7 +82,7 @@ export const GROUP_META = {
   pillarsLabel: "EPD · ESD · CSD",
   overview:
     "Seven final-year students from the Singapore University of Technology and Design across Engineering Product Development, Engineering Systems and Design, and Computer Science and Design.",
-  note: "Placeholder bios, skillsets & contact: update details via the private editor at /update_details.",
+  note: "SUTD Capstone 2027–2028 · Team details managed via Settings.",
 };
 
 export const PARTNER_OUTREACH = {
@@ -114,6 +129,32 @@ export const PARTNER_OUTREACH = {
       title: "Connect within the next few weeks",
       detail:
         "Partners need time to review agreement terms with SUTD's Capstone Office, so we're hoping to schedule a short call soon.",
+    },
+  ],
+  faqs: [
+    {
+      id: "ip-ownership",
+      question: "How do IP ownership and NDAs work?",
+      answer:
+        "Your organisation retains 100% ownership of all foreground IP, prototypes, code, and documentation produced during the two terms. Standard NDAs and industry agreements are handled directly with SUTD's Capstone Office.",
+    },
+    {
+      id: "mentor-cadence",
+      question: "How much time does our company mentor need to commit?",
+      answer:
+        "Mentorship is lightweight: typically an occasional check-in (e.g., bi-weekly or milestone reviews) to align requirements, give domain feedback, and review demos while the student team drives execution.",
+    },
+    {
+      id: "funding-scope",
+      question: "What do the S$6,000 fee and S$4,000 materials grant cover?",
+      answer:
+        "The S$6,000 (incl. GST) industry participation fee supports SUTD's two-term Capstone programme. Separately, SUTD provides up to S$4,000 in dedicated project materials funding for hardware components, fabrication, cloud tooling, and testing.",
+    },
+    {
+      id: "timeline",
+      question: "When should we connect for the Sep 2027 – Apr 2028 cycle?",
+      answer:
+        "Connecting soon gives your team and SUTD's Capstone Office comfortable runway to scope the problem statement, review legal terms, and lock in the project well before Term 1 begins in September 2027.",
     },
   ],
   contactEmail: "capstone-lockheed@example.com",

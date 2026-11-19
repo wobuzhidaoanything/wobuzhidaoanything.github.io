@@ -1,4 +1,4 @@
-import type { TeamMember } from "@/data/capstone";
+import type { Pillar, TeamMember } from "@/data/capstone";
 import { UPDATE_WORKER_URL } from "@/lib/media";
 
 export type ApiFailure = {
@@ -106,11 +106,15 @@ export async function uploadPhoto(
   memberId: string,
   slot: "hero" | "secondary",
   file: File,
+  baseVersion?: number,
 ): Promise<ApiResult<PhotoResponse>> {
   const formData = new FormData();
   formData.set("password", password);
   formData.set("memberId", memberId);
   formData.set("slot", slot);
+  if (typeof baseVersion === "number") {
+    formData.set("baseVersion", String(baseVersion));
+  }
   formData.set("file", file);
   const result = await request("/photos", { method: "POST", body: formData });
   return result.ok
@@ -128,13 +132,136 @@ export async function removePhoto(
   password: string,
   memberId: string,
   slot: "hero" | "secondary",
+  baseVersion?: number,
 ): Promise<ApiResult<PhotoResponse>> {
-  const result = await request("/photos/remove", jsonInit({ password, memberId, slot }));
+  const result = await request(
+    "/photos/remove",
+    jsonInit({ password, memberId, slot, baseVersion }),
+  );
   return result.ok ? { ok: true, data: { member: result.payload.member as TeamMember | undefined } } : result;
 }
 
 export interface HealthStatus {
   configured: boolean;
+}
+
+export interface RosterResponse {
+  member?: TeamMember;
+  members?: TeamMember[];
+}
+
+function mapRosterFailure(result: ApiFailure): ApiFailure {
+  if (result.status === 404 || result.status === 405) {
+    return {
+      ...result,
+      error: "Deploy the updated Worker (wrangler deploy) to enable roster add, reorder, and hide.",
+    };
+  }
+  return result;
+}
+
+export async function listRosterMembers(
+  password: string,
+): Promise<ApiResult<RosterResponse>> {
+  const result = await request(
+    "/roster",
+    jsonInit({ password, action: "list" }),
+  );
+  return result.ok
+    ? {
+        ok: true,
+        data: {
+          members: result.payload.members as TeamMember[] | undefined,
+        },
+      }
+    : mapRosterFailure(result);
+}
+
+export async function addRosterMember(
+  password: string,
+  draft: { name: string; pillar: Pillar; role?: string },
+  expectedIds?: string[],
+): Promise<ApiResult<RosterResponse>> {
+  const result = await request(
+    "/roster",
+    jsonInit({
+      password,
+      action: "add",
+      name: draft.name,
+      pillar: draft.pillar,
+      role: draft.role,
+      expectedIds,
+    }),
+  );
+  return result.ok
+    ? {
+        ok: true,
+        data: {
+          member: result.payload.member as TeamMember | undefined,
+          members: result.payload.members as TeamMember[] | undefined,
+        },
+      }
+    : mapRosterFailure(result);
+}
+
+export async function reorderRoster(
+  password: string,
+  order: string[],
+  expectedIds?: string[],
+): Promise<ApiResult<RosterResponse>> {
+  const result = await request(
+    "/roster",
+    jsonInit({ password, action: "reorder", order, expectedIds }),
+  );
+  return result.ok
+    ? {
+        ok: true,
+        data: {
+          members: result.payload.members as TeamMember[] | undefined,
+        },
+      }
+    : mapRosterFailure(result);
+}
+
+export async function setMemberHidden(
+  password: string,
+  memberId: string,
+  hidden: boolean,
+  baseVersion?: number,
+): Promise<ApiResult<RosterResponse>> {
+  const result = await request(
+    "/roster",
+    jsonInit({ password, action: "setHidden", memberId, hidden, baseVersion }),
+  );
+  return result.ok
+    ? {
+        ok: true,
+        data: {
+          member: result.payload.member as TeamMember | undefined,
+          members: result.payload.members as TeamMember[] | undefined,
+        },
+      }
+    : mapRosterFailure(result);
+}
+
+export async function deleteRosterMember(
+  password: string,
+  memberId: string,
+  expectedIds?: string[],
+  baseVersion?: number,
+): Promise<ApiResult<RosterResponse>> {
+  const result = await request(
+    "/roster",
+    jsonInit({ password, action: "delete", memberId, expectedIds, baseVersion }),
+  );
+  return result.ok
+    ? {
+        ok: true,
+        data: {
+          members: result.payload.members as TeamMember[] | undefined,
+        },
+      }
+    : mapRosterFailure(result);
 }
 
 export async function fetchHealth(): Promise<HealthStatus | null> {

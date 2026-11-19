@@ -4,11 +4,74 @@ export interface CompressedPhoto {
   height: number;
 }
 
+export interface NormalizedCrop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 const MAX_SIDE = 1600;
 const PNG_KEEP_BYTES = 1_500_000;
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+function sanitizeStem(name: string): string {
+  const stem = name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return stem || "photo";
+}
+
+export async function cropImageToFile(
+  img: HTMLImageElement,
+  crop: NormalizedCrop,
+  baseName: string,
+  sourceMime?: string,
+): Promise<File> {
+  const natW = img.naturalWidth;
+  const natH = img.naturalHeight;
+  if (!natW || !natH) {
+    throw new Error("Image is not loaded yet.");
+  }
+
+  const sx = Math.max(0, Math.min(natW - 1, Math.round(crop.x * natW)));
+  const sy = Math.max(0, Math.min(natH - 1, Math.round(crop.y * natH)));
+  const sw = Math.max(1, Math.min(natW - sx, Math.round(crop.w * natW)));
+  const sh = Math.max(1, Math.min(natH - sy, Math.round(crop.h * natH)));
+
+  const scale = Math.min(1, MAX_SIDE / Math.max(sw, sh));
+  const outW = Math.max(1, Math.round(sw * scale));
+  const outH = Math.max(1, Math.round(sh * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Could not prepare crop canvas.");
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+
+  const stem = `${sanitizeStem(baseName)}-cropped`;
+  if (sourceMime === "image/png") {
+    const png = await canvasToBlob(canvas, "image/png");
+    if (png && png.size <= PNG_KEEP_BYTES) {
+      return new File([png], `${stem}.png`, { type: "image/png" });
+    }
+  }
+
+  ctx.globalCompositeOperation = "destination-over";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, outW, outH);
+  const jpeg = await canvasToBlob(canvas, "image/jpeg", 0.9);
+  if (!jpeg) {
+    throw new Error("Could not encode cropped image.");
+  }
+  return new File([jpeg], `${stem}.jpg`, { type: "image/jpeg" });
 }
 
 /**

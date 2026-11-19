@@ -28,10 +28,8 @@ export function NotFoundPage() {
           to="/"
           direction="backward"
           className={cn(
-            "mt-7 inline-flex items-center gap-[0.45rem] min-h-10 px-5 py-1.5",
+            "ui-press ui-press-primary mt-7 inline-flex items-center gap-[0.45rem] min-h-11 px-5 py-2",
             "rounded-control border border-ink bg-ink text-page type-ui font-semibold no-underline",
-            "transition-[background-color,border-color,color,scale] duration-150",
-            "hover:bg-accent hover:border-accent hover:text-accent-ink active:scale-[0.985]",
           )}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />

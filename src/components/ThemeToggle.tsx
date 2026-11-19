@@ -19,15 +19,14 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={`Switch to ${nextScheme} theme`}
       className={cn(
-        "theme-toggle inline-flex items-center justify-center gap-2",
+        "theme-toggle ui-press group/theme inline-flex items-center justify-center gap-2",
         "min-h-10 min-w-10 px-3 py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
         "rounded-control border border-control bg-surface text-ink",
         "type-ui-sm font-semibold cursor-pointer",
-        "transition-[background-color,border-color,color,scale] duration-150",
-        "hover:bg-surface-muted hover:border-ink active:scale-[0.98]",
+        "hover:bg-surface-muted/75 hover:text-accent",
       )}
     >
-      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <Icon className="size-4 shrink-0 transition-transform duration-200 motion-safe:group-hover/theme:rotate-12" aria-hidden="true" />
       <span className="@max-[26rem]/site-header:sr-only">
         {nextScheme === "dark" ? "Dark" : "Light"}
       </span>

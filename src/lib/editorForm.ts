@@ -1,16 +1,40 @@
-import type { MemberArtifacts, MemberProject, Pillar, TeamMember } from "@/data/capstone";
+import type {
+  HeroFocus,
+  MemberArtifacts,
+  MemberLinks,
+  MemberProject,
+  Pillar,
+  TeamMember,
+} from "@/data/capstone";
+
+export interface EditorLinksForm {
+  github: string;
+  linkedin: string;
+  portfolio: string;
+  email: string;
+}
+
+export interface EditorProjectForm {
+  title: string;
+  detail: string;
+  tag: string;
+  url: string;
+  featured: boolean;
+}
 
 export interface EditorForm {
   name: string;
   pillar: Pillar;
-  pillarFull: string;
   minor: string;
   role: string;
   bio: string;
   skillsetsText: string;
   interestsText: string;
   toolsText: string;
-  projects: MemberProject[];
+  projects: EditorProjectForm[];
+  links: EditorLinksForm;
+  heroFocus: HeroFocus;
+  hidden: boolean;
   caption: string;
   alt: string;
 }
@@ -21,11 +45,14 @@ export const LIMITS = {
   minor: 80,
   role: 80,
   bio: 600,
-  listItem: 40,
+  listItem: 80,
   listCount: 12,
   projectTitle: 80,
-  projectDetail: 300,
+  projectDetail: 800,
+  projectTag: 64,
   projectCount: 12,
+  url: 200,
+  email: 120,
   caption: 160,
   alt: 160,
 } as const;
@@ -48,14 +75,27 @@ export function formFromMember(member: TeamMember): EditorForm {
   return {
     name: member.name,
     pillar: member.pillar,
-    pillarFull: member.pillarFull,
     minor: member.minor ?? "",
     role: member.role,
     bio: member.bio,
     skillsetsText: serializeList(member.skillsets),
     interestsText: serializeList(member.interests),
     toolsText: serializeList(member.tools),
-    projects: (member.projects ?? []).map((p) => ({ title: p.title, detail: p.detail })),
+    projects: (member.projects ?? []).map((p) => ({
+      title: p.title,
+      detail: p.detail,
+      tag: p.tag ?? "",
+      url: p.url ?? "",
+      featured: p.featured !== false,
+    })),
+    links: {
+      github: member.links?.github ?? "",
+      linkedin: member.links?.linkedin ?? "",
+      portfolio: member.links?.portfolio ?? "",
+      email: member.links?.email ?? "",
+    },
+    heroFocus: member.artifacts?.heroFocus ?? "center",
+    hidden: Boolean(member.hidden),
     caption: member.artifacts?.caption ?? "",
     alt: member.artifacts?.alt ?? "",
   };
@@ -65,12 +105,17 @@ export function formsEqual(a: EditorForm, b: EditorForm): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+export type EditorTabId = "basics" | "skills" | "projects" | "photos";
+
 export type FormField =
   | "name"
-  | "pillarFull"
   | "minor"
   | "role"
   | "bio"
+  | "linksGithub"
+  | "linksLinkedin"
+  | "linksPortfolio"
+  | "linksEmail"
   | "skillsets"
   | "interests"
   | "tools"
@@ -82,16 +127,36 @@ export type FormErrors = Partial<Record<FormField, string>>;
 
 export const FIELD_ELEMENT_IDS: Record<FormField, string> = {
   name: "member-name",
-  pillarFull: "member-pillarfull",
   minor: "member-minor",
   role: "member-role",
   bio: "member-bio",
+  linksGithub: "member-link-github",
+  linksLinkedin: "member-link-linkedin",
+  linksPortfolio: "member-link-portfolio",
+  linksEmail: "member-link-email",
   skillsets: "member-skills",
   interests: "member-interests",
   tools: "member-tools",
   projects: "projects-editor",
   caption: "member-caption",
   alt: "member-alt",
+};
+
+export const FIELD_TAB: Record<FormField, EditorTabId> = {
+  name: "basics",
+  minor: "basics",
+  role: "basics",
+  bio: "basics",
+  linksGithub: "basics",
+  linksLinkedin: "basics",
+  linksPortfolio: "basics",
+  linksEmail: "basics",
+  skillsets: "skills",
+  interests: "skills",
+  tools: "skills",
+  projects: "projects",
+  caption: "photos",
+  alt: "photos",
 };
 
 function listError(text: string, label: string): string | undefined {
@@ -106,6 +171,33 @@ function capError(value: string, max: number, label: string): string | undefined
   return value.trim().length > max ? `${label}: keep to ${max} characters or fewer.` : undefined;
 }
 
+export function isValidHttpUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (trimmed.length > LIMITS.url) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function isValidEmail(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (trimmed.length > LIMITS.email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
+function urlError(value: string, label: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length > LIMITS.url) return `${label}: keep to ${LIMITS.url} characters or fewer.`;
+  if (!isValidHttpUrl(trimmed)) return `${label}: enter a full https:// or http:// URL.`;
+  return undefined;
+}
+
 export function validateForm(form: EditorForm): FormErrors {
   const errors: FormErrors = {};
   if (!form.name.trim()) errors.name = "Name is required.";
@@ -113,20 +205,33 @@ export function validateForm(form: EditorForm): FormErrors {
     const nameError = capError(form.name, LIMITS.name, "Name");
     if (nameError) errors.name = nameError;
   }
-  const pillarFullError = capError(form.pillarFull, LIMITS.pillarFull, "Pillar full name");
-  if (pillarFullError) errors.pillarFull = pillarFullError;
   const minorError = capError(form.minor, LIMITS.minor, "Minor");
   if (minorError) errors.minor = minorError;
   const roleError = capError(form.role, LIMITS.role, "Role");
   if (roleError) errors.role = roleError;
   const bioError = capError(form.bio, LIMITS.bio, "Bio");
   if (bioError) errors.bio = bioError;
+
+  const githubErr = urlError(form.links.github, "GitHub URL");
+  if (githubErr) errors.linksGithub = githubErr;
+  const linkedinErr = urlError(form.links.linkedin, "LinkedIn URL");
+  if (linkedinErr) errors.linksLinkedin = linkedinErr;
+  const portfolioErr = urlError(form.links.portfolio, "Portfolio URL");
+  if (portfolioErr) errors.linksPortfolio = portfolioErr;
+  if (form.links.email.trim() && !isValidEmail(form.links.email)) {
+    errors.linksEmail =
+      form.links.email.trim().length > LIMITS.email
+        ? `Email: keep to ${LIMITS.email} characters or fewer.`
+        : "Enter a valid email address.";
+  }
+
   const skillsetsError = listError(form.skillsetsText, "Skillsets");
   if (skillsetsError) errors.skillsets = skillsetsError;
   const interestsError = listError(form.interestsText, "Interests");
   if (interestsError) errors.interests = interestsError;
   const toolsError = listError(form.toolsText, "Tools");
   if (toolsError) errors.tools = toolsError;
+
   if (form.projects.length > LIMITS.projectCount) {
     errors.projects = `Keep to ${LIMITS.projectCount} projects or fewer.`;
   } else if (form.projects.some((p) => !p.title.trim())) {
@@ -135,7 +240,12 @@ export function validateForm(form: EditorForm): FormErrors {
     errors.projects = `Project titles must be ${LIMITS.projectTitle} characters or fewer.`;
   } else if (form.projects.some((p) => p.detail.trim().length > LIMITS.projectDetail)) {
     errors.projects = `Project descriptions must be ${LIMITS.projectDetail} characters or fewer.`;
+  } else if (form.projects.some((p) => p.tag.trim().length > LIMITS.projectTag)) {
+    errors.projects = `Project tags must be ${LIMITS.projectTag} characters or fewer.`;
+  } else if (form.projects.some((p) => p.url.trim() && !isValidHttpUrl(p.url))) {
+    errors.projects = "Project links must be valid https:// or http:// URLs (200 chars max).";
   }
+
   const captionError = capError(form.caption, LIMITS.caption, "Caption");
   if (captionError) errors.caption = captionError;
   const altError = capError(form.alt, LIMITS.alt, "Alt text");
@@ -145,21 +255,41 @@ export function validateForm(form: EditorForm): FormErrors {
 
 export function buildPayload(form: EditorForm, member: TeamMember): Omit<TeamMember, "slug"> {
   const tools = parseList(form.toolsText);
-  const projects = form.projects
-    .map((p) => ({ title: p.title.trim(), detail: p.detail.trim() }))
+  const projects: MemberProject[] = form.projects
+    .map((p) => {
+      const entry: MemberProject = {
+        title: p.title.trim(),
+        detail: p.detail.trim(),
+      };
+      const tag = p.tag.trim();
+      const url = p.url.trim();
+      if (tag) entry.tag = tag;
+      if (url) entry.url = url;
+      if (p.featured === false) entry.featured = false;
+      return entry;
+    })
     .filter((p) => p.title);
+
+  const links: MemberLinks = {};
+  if (form.links.github.trim()) links.github = form.links.github.trim();
+  if (form.links.linkedin.trim()) links.linkedin = form.links.linkedin.trim();
+  if (form.links.portfolio.trim()) links.portfolio = form.links.portfolio.trim();
+  if (form.links.email.trim()) links.email = form.links.email.trim();
+
   // Empty strings are sent deliberately: they clear caption/alt server-side.
   const artifacts: MemberArtifacts = {
     ...member.artifacts,
+    heroFocus: form.heroFocus,
     caption: form.caption.trim(),
     alt: form.alt.trim(),
   };
+
   const payload: Omit<TeamMember, "slug"> = {
     id: member.id,
     index: member.index,
     name: form.name.trim(),
     pillar: form.pillar,
-    pillarFull: form.pillarFull.trim(),
+    pillarFull: PILLAR_FULL[form.pillar],
     role: form.role.trim(),
     bio: form.bio.trim(),
     skillsets: parseList(form.skillsetsText),
@@ -170,5 +300,38 @@ export function buildPayload(form: EditorForm, member: TeamMember): Omit<TeamMem
   if (minor) payload.minor = minor;
   if (tools.length) payload.tools = tools;
   if (projects.length) payload.projects = projects;
+  if (Object.keys(links).length) payload.links = links;
+  if (form.hidden) payload.hidden = true;
   return payload;
+}
+
+export interface MemberCompleteness {
+  bio: boolean;
+  photo: boolean;
+  skills: boolean;
+  projects: boolean;
+  links: boolean;
+  score: number;
+  total: number;
+}
+
+export function memberCompleteness(member: TeamMember): MemberCompleteness {
+  const bio = Boolean(member.bio?.trim());
+  const photo = Boolean(member.artifacts?.heroImage);
+  const skills = (member.skillsets?.length ?? 0) > 0;
+  const projects = (member.projects?.length ?? 0) > 0;
+  const links = Boolean(
+    member.links &&
+      (member.links.github || member.links.linkedin || member.links.portfolio || member.links.email),
+  );
+  const checks = [bio, photo, skills, projects, links];
+  return {
+    bio,
+    photo,
+    skills,
+    projects,
+    links,
+    score: checks.filter(Boolean).length,
+    total: checks.length,
+  };
 }

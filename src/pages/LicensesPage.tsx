@@ -38,10 +38,10 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 Full text: https://scripts.sil.org/OFL`;
 
 const quietLinkStyles = cn(
-  "inline-flex items-center gap-[0.45rem] min-h-10 px-3.5 py-1.5",
+  "ui-press inline-flex items-center gap-[0.45rem] min-h-10 px-3.5 py-1.5",
   "rounded-control border border-transparent type-ui font-semibold",
-  "text-ink-secondary no-underline transition-[background-color,border-color,color,scale] duration-150",
-  "hover:bg-surface-muted hover:border-edge hover:text-ink active:scale-[0.985]",
+  "text-ink-secondary no-underline",
+  "hover:bg-surface-muted/75 hover:border-edge hover:text-ink",
   "pointer-coarse:min-h-11",
 );
 
@@ -107,7 +107,7 @@ export function LicensesPage() {
                   href={font.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex min-h-10 items-center gap-1.5 px-2 type-ui font-semibold text-accent no-underline hover:underline hover:underline-offset-4"
+                  className="ui-link-underline inline-flex min-h-10 items-center gap-1.5 px-2 type-ui font-semibold text-accent"
                 >
                   <span>Source</span>
                   <ArrowUpRight className="size-4" aria-hidden="true" />

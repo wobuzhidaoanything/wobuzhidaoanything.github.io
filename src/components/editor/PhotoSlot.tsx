@@ -1,185 +1,201 @@
-import { useEffect, useRef, useState } from "react";
-import { ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Crop, ImagePlus, RotateCcw, Trash2, Upload } from "lucide-react";
 import { cn } from "cn";
 import type { TeamMember } from "@/data/capstone";
-import { removePhoto, uploadPhoto } from "@/lib/editorApi";
+import { useFileObjectUrl } from "@/hooks/useFileObjectUrl";
 import { resolveImageSrc } from "@/lib/media";
-import { compressPhoto, formatBytes, type CompressedPhoto } from "@/lib/photo";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { StatusMessage, type StatusTone } from "./StatusMessage";
-import { primaryButtonStyles, quietButtonStyles } from "./buttons";
+import { formatBytes } from "@/lib/photo";
+import { PhotoCropDialog } from "./PhotoCropDialog";
+import { StatusMessage } from "./StatusMessage";
+import { quietButtonStyles } from "./buttons";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_RAW_BYTES = 20 * 1024 * 1024;
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-
-type Phase = "idle" | "compressing" | "uploading" | "removing";
 
 interface PhotoSlotProps {
   slot: "hero" | "secondary";
   label: string;
+  hint: string;
   member: TeamMember;
-  password: string;
-  busy: boolean;
-  onBusyChange: (busy: boolean) => void;
-  onSaved: (member: TeamMember | undefined) => void;
-  onUnauthorized: () => void;
-  onPendingPreview: (url: string | null) => void;
+  stagedFile: File | null;
+  stagedRemove: boolean;
+  onStageFile: (file: File) => void;
+  onStageRemove: () => void;
+  onUndoStage: () => void;
 }
 
 export function PhotoSlot({
   slot,
   label,
+  hint,
   member,
-  password,
-  busy,
-  onBusyChange,
-  onSaved,
-  onUnauthorized,
-  onPendingPreview,
+  stagedFile,
+  stagedRemove,
+  onStageFile,
+  onStageRemove,
+  onUndoStage,
 }: PhotoSlotProps) {
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [status, setStatus] = useState<{ tone: StatusTone; text: string } | null>(null);
+  const previewUrl = useFileObjectUrl(stagedFile);
+  const [dims, setDims] = useState<{ src: string; w: number; h: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSession, setCropSession] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const previewRef = useRef<string | null>(null);
 
-  const currentKey = slot === "hero" ? member.artifacts?.heroImage : member.artifacts?.secondaryImage;
+  const currentKey =
+    slot === "hero" ? member.artifacts?.heroImage : member.artifacts?.secondaryImage;
   const currentSrc = resolveImageSrc(currentKey);
-  const active = phase !== "idle";
-
-  useEffect(() => {
-    return () => {
-      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
-    };
-  }, []);
-
-  function setPreview(url: string | null) {
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
-    previewRef.current = url;
-    setPreviewUrl(url);
-    onPendingPreview(url);
-  }
-
-  function clearSelection() {
-    setFile(null);
-    setDims(null);
-    setPreview(null);
-    if (inputRef.current) inputRef.current.value = "";
-  }
 
   function selectFile(next: File) {
-    if (busy || active) return;
     if (!ALLOWED_TYPES.includes(next.type)) {
-      setStatus({
-        tone: "danger",
-        text: "Use a JPEG, PNG or WebP image. iPhone HEIC photos need to be exported as JPEG first.",
-      });
+      setError("Use JPEG, PNG, or WebP. Export iPhone HEIC photos as JPEG first.");
       return;
     }
     if (next.size > MAX_RAW_BYTES) {
-      setStatus({ tone: "danger", text: "That file is over 20 MB. Choose a smaller photo." });
+      setError("That file exceeds 20 MB. Choose a smaller photo.");
       return;
     }
-    setStatus(null);
-    setFile(next);
-    const url = URL.createObjectURL(next);
-    setPreview(url);
-    const img = new Image();
-    img.onload = () => setDims({ w: img.naturalWidth, h: img.naturalHeight });
-    img.src = url;
+    setError(null);
+    onStageFile(next);
+    if (inputRef.current) inputRef.current.value = "";
   }
 
-  function fail(result: { status: number | null; error: string; retryAfter?: number }) {
-    if (result.status === 401) {
-      setStatus({ tone: "danger", text: "Password rejected. Unlock the editor again to upload." });
-      onUnauthorized();
-      return;
-    }
-    setStatus({
-      tone: "danger",
-      text:
-        result.status === 429 && result.retryAfter
-          ? `Too many attempts. Try again in ${result.retryAfter} seconds.`
-          : result.error,
-    });
-  }
-
-  async function handleUpload() {
-    if (!file || busy || active) return;
-    if (!password) {
-      onUnauthorized();
-      return;
-    }
-    setStatus(null);
-    setPhase("compressing");
-    onBusyChange(true);
-    try {
-      let compressed: CompressedPhoto;
-      try {
-        compressed = await compressPhoto(file);
-      } catch {
-        setStatus({
-          tone: "danger",
-          text: "This image can't be read in the browser. Export it as JPEG or PNG and try again.",
-        });
-        return;
-      }
-      if (compressed.file.size > MAX_UPLOAD_BYTES) {
-        setStatus({
-          tone: "danger",
-          text: "Still over 5 MB after compression. Choose a smaller photo.",
-        });
-        return;
-      }
-      setPhase("uploading");
-      const result = await uploadPhoto(password, member.id, slot, compressed.file);
-      if (result.ok) {
-        clearSelection();
-        setStatus({ tone: "success", text: `${label} saved. It is live on the site now.` });
-        onSaved(result.data.member);
-      } else {
-        fail(result);
-      }
-    } finally {
-      setPhase("idle");
-      onBusyChange(false);
-    }
-  }
-
-  async function handleRemove() {
-    if (busy || active || !password) return;
-    setStatus(null);
-    setPhase("removing");
-    onBusyChange(true);
-    try {
-      const result = await removePhoto(password, member.id, slot);
-      if (result.ok) {
-        setStatus({ tone: "info", text: `${label} removed from the site.` });
-        onSaved(result.data.member);
-      } else {
-        fail(result);
-      }
-    } finally {
-      setPhase("idle");
-      onBusyChange(false);
-    }
-  }
+  const activeSrc = stagedRemove ? undefined : (previewUrl ?? currentSrc);
+  const activeDims = activeSrc && dims?.src === activeSrc ? dims : null;
+  const hasStagedChange = Boolean(stagedFile) || stagedRemove;
 
   return (
-    <div className="grid content-start gap-3 rounded-card border border-edge bg-surface-alt p-[clamp(1rem,3cqi,1.25rem)]">
-      <div className="flex min-h-11 items-center justify-between gap-2">
-        <h3 className="m-0 type-ui font-semibold text-ink">{label}</h3>
-        {currentSrc && !file ? (
+    <div className="grid content-start gap-3 rounded-card border border-edge bg-surface p-[clamp(1rem,3cqi,1.35rem)]">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h3 className="m-0 type-ui font-semibold text-ink">{label}</h3>
+          <p className="m-0 type-ui-sm text-ink-muted">{hint}</p>
+        </div>
+        {stagedFile ? (
+          <span className="rounded-chip border border-warning/40 bg-warning-surface px-2 py-0.5 type-micro font-semibold text-warning">
+            Staged · save to publish
+          </span>
+        ) : stagedRemove ? (
+          <span className="rounded-chip border border-danger/40 bg-danger-surface px-2 py-0.5 type-micro font-semibold text-danger">
+            Removing on save
+          </span>
+        ) : null}
+      </div>
+
+      {activeSrc ? (
+        <div className="overflow-hidden rounded-frame border border-edge bg-surface-alt">
+          <div className="grid place-items-center p-2">
+            <img
+              key={previewUrl ?? `${currentSrc ?? "empty"}-${member.version ?? 0}`}
+              src={activeSrc}
+              alt={
+                previewUrl
+                  ? `Selected ${label.toLowerCase()} preview`
+                  : `Current ${label.toLowerCase()} for ${member.name}`
+              }
+              onLoad={(e) => {
+                const el = e.currentTarget;
+                if (el.naturalWidth && el.naturalHeight) {
+                  setDims({ src: activeSrc, w: el.naturalWidth, h: el.naturalHeight });
+                }
+              }}
+              className="block h-auto max-h-[18rem] w-auto max-w-full rounded-[calc(var(--radius-frame)-0.35rem)]"
+            />
+          </div>
+          {stagedFile || activeDims ? (
+            <div className="border-t border-rule bg-surface px-3 py-1.5 type-micro tabular text-ink-secondary">
+              {stagedFile ? (
+                <>
+                  {stagedFile.name}
+                  {activeDims ? ` · ${activeDims.w} × ${activeDims.h} px` : ""} ·{" "}
+                  {formatBytes(stagedFile.size)}
+                </>
+              ) : activeDims ? (
+                `Actual dimensions: ${activeDims.w} × ${activeDims.h} px`
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            const dropped = e.dataTransfer.files?.[0];
+            if (dropped) selectFile(dropped);
+          }}
+          className={cn(
+            "grid min-h-[10rem] w-full cursor-pointer place-items-center gap-1.5 rounded-frame border border-dashed px-4 py-6 text-center transition-[background-color,border-color] duration-150",
+            dragging
+              ? "border-accent bg-accent/10"
+              : "border-edge bg-surface-alt hover:bg-surface-muted",
+          )}
+        >
+          <ImagePlus className="size-5 text-ink-secondary" aria-hidden="true" />
+          <span className="type-ui font-semibold text-ink">
+            {stagedRemove ? "Photo marked for removal" : "Drop a photo here, or browse"}
+          </span>
+          <span className="type-ui-sm text-ink-muted">
+            JPEG, PNG or WebP · shown at actual dimensions
+          </span>
+        </button>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label={`Choose ${label.toLowerCase()}`}
+        onChange={(e) => {
+          const selected = e.target.files?.[0];
+          if (selected) selectFile(selected);
+        }}
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className={quietButtonStyles}
+        >
+          <Upload className="size-4" aria-hidden="true" />
+          {activeSrc ? "Replace" : "Choose photo"}
+        </button>
+
+        {activeSrc ? (
           <button
             type="button"
-            onClick={() => setConfirmRemove(true)}
-            disabled={busy || active}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-control px-2 type-ui-sm font-semibold text-ink-secondary transition-colors duration-150 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 pointer-coarse:min-h-11"
+            onClick={() => {
+              setCropSession((s) => s + 1);
+              setCropOpen(true);
+            }}
+            className={quietButtonStyles}
+          >
+            <Crop className="size-4" aria-hidden="true" />
+            Crop
+          </button>
+        ) : null}
+
+        {hasStagedChange ? (
+          <button type="button" onClick={onUndoStage} className={quietButtonStyles}>
+            <RotateCcw className="size-4" aria-hidden="true" />
+            Undo
+          </button>
+        ) : currentSrc ? (
+          <button
+            type="button"
+            onClick={onStageRemove}
+            className={cn(quietButtonStyles, "hover:text-danger")}
           >
             <Trash2 className="size-4" aria-hidden="true" />
             Remove
@@ -187,133 +203,21 @@ export function PhotoSlot({
         ) : null}
       </div>
 
-      {currentSrc || previewUrl ? (
-        <div className={cn("grid gap-3", currentSrc && previewUrl && "min-[30rem]:grid-cols-2")}>
-          {currentSrc ? (
-            <figure className="m-0 grid min-w-0 gap-1.5">
-              <img
-                key={member.version ?? 0}
-                src={currentSrc}
-                alt={`Current ${label.toLowerCase()} for ${member.name}`}
-                className="aspect-[4/5] w-full rounded-frame border border-edge bg-surface-muted object-cover"
-                loading="lazy"
-              />
-              <figcaption className="type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted">
-                Current
-              </figcaption>
-            </figure>
-          ) : null}
-          {previewUrl ? (
-            <figure className="m-0 grid min-w-0 gap-1.5">
-              <img
-                src={previewUrl}
-                alt={`Selected ${label.toLowerCase()}, not saved yet`}
-                className="aspect-[4/5] w-full rounded-frame border border-accent object-cover"
-              />
-              <figcaption className="type-micro font-semibold tracking-[0.06em] uppercase text-accent">
-                New · not saved yet
-              </figcaption>
-            </figure>
-          ) : null}
-        </div>
-      ) : null}
+      {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}
 
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (!busy && !active) setDragging(true);
+      <PhotoCropDialog
+        open={cropOpen}
+        sessionKey={cropSession}
+        src={activeSrc ?? null}
+        label={label}
+        suggestedName={stagedFile?.name ?? `${member.slug}-${slot}`}
+        sourceMime={stagedFile?.type}
+        onApply={(croppedFile) => {
+          setError(null);
+          onStageFile(croppedFile);
+          setCropOpen(false);
         }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          const dropped = e.dataTransfer.files?.[0];
-          if (dropped) selectFile(dropped);
-        }}
-        disabled={busy || active}
-        className={cn(
-          "grid min-h-[7rem] w-full place-items-center gap-1.5 rounded-frame border border-dashed px-4 py-5 text-center transition-[background-color,border-color] duration-150 disabled:cursor-not-allowed disabled:opacity-50",
-          dragging ? "border-accent bg-accent/10" : "border-edge bg-surface hover:bg-surface-muted",
-        )}
-      >
-        {phase === "compressing" || phase === "uploading" ? (
-          <LoaderCircle className="size-5 animate-spin text-accent motion-reduce:animate-none" aria-hidden="true" />
-        ) : (
-          <ImagePlus className="size-5 text-ink-secondary" aria-hidden="true" />
-        )}
-        <span className="type-ui font-semibold text-ink">
-          {phase === "compressing"
-            ? "Compressing…"
-            : phase === "uploading"
-              ? "Uploading…"
-              : phase === "removing"
-                ? "Removing…"
-                : file
-                  ? "Choose a different photo"
-                  : "Drag a photo here, or browse"}
-        </span>
-        <span className="type-ui-sm text-ink-muted">
-          JPEG, PNG or WebP · up to 5 MB · resized to 1600px
-        </span>
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(e) => {
-          const selected = e.target.files?.[0];
-          if (selected) selectFile(selected);
-        }}
-      />
-
-      {file ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="min-w-0 truncate type-ui-sm text-ink-secondary">
-            {file.name}
-            {dims ? ` · ${dims.w}×${dims.h}` : ""} · {formatBytes(file.size)}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={clearSelection}
-              disabled={active}
-              className={quietButtonStyles}
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleUpload()}
-              disabled={busy || active}
-              className={primaryButtonStyles}
-            >
-              {phase === "uploading" ? (
-                <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              ) : null}
-              {phase === "uploading" ? "Uploading…" : "Upload"}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {status ? <StatusMessage tone={status.tone}>{status.text}</StatusMessage> : null}
-
-      <ConfirmDialog
-        open={confirmRemove}
-        title={`Remove ${label.toLowerCase()}?`}
-        description="The photo is deleted from the live site immediately. You can upload a new one anytime."
-        confirmLabel="Remove photo"
-        tone="danger"
-        onConfirm={() => {
-          setConfirmRemove(false);
-          void handleRemove();
-        }}
-        onCancel={() => setConfirmRemove(false)}
+        onClose={() => setCropOpen(false)}
       />
     </div>
   );

@@ -58,12 +58,28 @@ export function normalizeMembers(raw: unknown): TeamMember[] | null {
   return members.length ? members : null;
 }
 
+/**
+ * Visible members for public views: excludes hidden members and assigns
+ * contiguous display indices ("01", "02", ...) so counts and chapter
+ * numbers remain seamless whenever someone is hidden or added.
+ */
+export function getPublicMembers(members: TeamMember[]): TeamMember[] {
+  return members
+    .filter((m) => !m.hidden)
+    .map((m, i) => ({
+      ...m,
+      index: String(i + 1).padStart(2, "0"),
+    }));
+}
+
 export async function refreshMembers(force = false): Promise<void> {
   if (!force && state.fetchedAt && Date.now() - state.fetchedAt < FRESH_MS) return;
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const res = await fetch(membersUrl(), { cache: "no-store" });
+      const res = await fetch(membersUrl(), {
+        cache: force ? "reload" : "default",
+      });
       if (!res.ok) throw new Error(`members fetch failed (${res.status})`);
       const normalized = normalizeMembers((await res.json()) as unknown);
       if (normalized) {
@@ -83,9 +99,16 @@ export async function refreshMembers(force = false): Promise<void> {
 export function applyLocalMember(member: TeamMember) {
   const exists = state.members.some((m) => m.id === member.id);
   // Replace, never merge: a save response omits cleared fields (artifacts,
-  // minor, tools, projects), and merging would resurrect the old values.
+  // minor, tools, projects, links, hidden), and merging would resurrect old values.
   const members = exists
     ? state.members.map((m) => (m.id === member.id ? member : m))
     : [...state.members, member];
   set({ ...state, members });
+}
+
+export function replaceMembers(rawMembers: TeamMember[]) {
+  const normalized = normalizeMembers(rawMembers);
+  if (normalized) {
+    set({ ...state, members: normalized, usingFallback: false, fetchedAt: Date.now() });
+  }
 }
