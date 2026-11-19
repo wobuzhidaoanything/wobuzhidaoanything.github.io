@@ -39,12 +39,6 @@ const accentByPillar: Record<Pillar, string> = {
   ESD: "text-pillar-esd",
 };
 
-const dotByPillar: Record<Pillar, string> = {
-  CSD: "bg-pillar-csd",
-  EPD: "bg-pillar-epd",
-  ESD: "bg-pillar-esd",
-};
-
 const primaryCueStyles = cn(
   "inline-flex items-center gap-2 min-h-11 px-5.5 py-2.5",
   "rounded-control border border-ink bg-ink text-page type-body-sm font-semibold no-underline",
@@ -453,17 +447,10 @@ export function RosterPage() {
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-[0.35rem]">
                         <span
                           className={cn(
-                            "inline-flex items-center gap-[0.35rem] type-ui-sm font-semibold tracking-[0.04em]",
+                            "inline-flex items-center type-ui-sm font-semibold tracking-[0.04em]",
                             accentByPillar[spec.pillar],
                           )}
                         >
-                          <span
-                            className={cn(
-                              "size-[0.45rem] rounded-full",
-                              dotByPillar[spec.pillar],
-                            )}
-                            aria-hidden="true"
-                          />
                           <span>{spec.pillar}</span>
                         </span>
                         <span className="text-ink-muted" aria-hidden="true">

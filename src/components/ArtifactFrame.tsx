@@ -105,12 +105,11 @@ export function ArtifactFrame({
             <div className="artifact-plate-top relative z-1 flex flex-nowrap items-center justify-between gap-x-3 gap-y-1">
               <span
                 className={cn(
-                  "artifact-plate-tag inline-flex min-w-0 items-center gap-[0.45rem]",
+                  "artifact-plate-tag inline-flex min-w-0 items-center",
                   "type-ui-sm font-semibold tracking-[0.04em] uppercase text-ink-secondary",
                   tagColorByPillar[member.pillar],
                 )}
               >
-                <span className="artifact-plate-dot size-[0.45rem] shrink-0 rounded-full bg-[var(--plate-accent,var(--ink-secondary))]" />
                 <span className="overflow-hidden text-ellipsis whitespace-nowrap">
                   {plateLabel ?? `${member.pillar} · ${member.pillarFull}`}
                 </span>

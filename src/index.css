@@ -44,12 +44,12 @@
   --palette-accent-ink-light: #ffffff;
   --palette-accent-ink-dark: #111110;
 
-  --palette-pillar-csd-light: #2d5c4d;
-  --palette-pillar-csd-dark: #7ec4ad;
+  --palette-pillar-csd-light: #4e6e5f;
+  --palette-pillar-csd-dark: #9fc7b5;
   --palette-pillar-epd-light: #b54524;
   --palette-pillar-epd-dark: #ee8263;
-  --palette-pillar-esd-light: #3d4e75;
-  --palette-pillar-esd-dark: #a2b7e3;
+  --palette-pillar-esd-light: #607084;
+  --palette-pillar-esd-dark: #a8b9cc;
 
   /* Status hues: success/info borrow the pillar families; danger is a true
      red, deliberately distinct from the terracotta brand accent. */
