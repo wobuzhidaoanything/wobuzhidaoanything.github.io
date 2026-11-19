@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Eye, EyeOff, LoaderCircle, Lock } from "lucide-react";
+import { CircleAlert, Eye, EyeOff, LoaderCircle, Lock } from "lucide-react";
 import { cn } from "cn";
 import { fetchHealth } from "@/lib/editorApi";
 import { unlockEditor } from "@/lib/editorSession";
 import { StatusMessage, type StatusTone } from "./StatusMessage";
-import { FieldShell, inputStyles } from "./fields";
+import { inputStyles } from "./fields";
 import { primaryButtonStyles } from "./buttons";
 
 interface EditorGateProps {
@@ -63,20 +63,37 @@ export function EditorGate({ notice, onUnlocked }: EditorGateProps) {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-[26rem] gap-[clamp(1rem,3cqi,1.5rem)]">
-      <div className="flex items-center gap-3.5">
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-edge bg-surface-muted">
-          <Lock className="size-5 text-accent" aria-hidden="true" />
+    <div className="mx-auto grid w-full max-w-[26rem] justify-items-center gap-[clamp(1.5rem,4cqi,2.25rem)] py-[clamp(1rem,3cqi,2rem)] text-center">
+      <div className="grid justify-items-center gap-4">
+        <span className="flex size-16 items-center justify-center rounded-full border border-edge bg-surface shadow-raised">
+          <Lock className="size-7 text-accent" aria-hidden="true" />
         </span>
-        <h2 id="gate-heading" className="m-0 font-serif type-heading-xs font-semibold">
+        <h2 id="gate-heading" className="m-0 font-serif type-heading font-semibold text-balance">
           Unlock the editor
         </h2>
+        <span aria-hidden="true" className="h-[3px] w-12 rounded-full bg-accent" />
       </div>
 
-      {notice ? <StatusMessage tone={notice.tone}>{notice.text}</StatusMessage> : null}
+      {notice ? (
+        <StatusMessage tone={notice.tone} className="w-full justify-center text-center">
+          {notice.text}
+        </StatusMessage>
+      ) : null}
 
-      <form onSubmit={handleSubmit} noValidate aria-labelledby="gate-heading" className="grid gap-4">
-        <FieldShell id="group-password" label="Group password" required error={shownError}>
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        aria-labelledby="gate-heading"
+        className="grid w-full gap-5"
+      >
+        <div className="grid gap-2.5">
+          <label htmlFor="group-password" className="type-ui font-semibold text-ink">
+            Group password
+            <span aria-hidden="true" className="text-danger">
+              {" "}
+              *
+            </span>
+          </label>
           <div className="relative">
             <input
               ref={inputRef}
@@ -95,7 +112,7 @@ export function EditorGate({ notice, onUnlocked }: EditorGateProps) {
               disabled={checking}
               aria-invalid={shownError ? true : undefined}
               aria-describedby={shownError ? "group-password-error" : undefined}
-              className={cn(inputStyles, "pr-12")}
+              className={cn(inputStyles, "min-h-12 px-12 text-center")}
             />
             <button
               type="button"
@@ -111,11 +128,21 @@ export function EditorGate({ notice, onUnlocked }: EditorGateProps) {
               )}
             </button>
           </div>
-        </FieldShell>
+          {shownError ? (
+            <span
+              id="group-password-error"
+              role="alert"
+              className="inline-flex items-center justify-center gap-1.5 type-ui-sm text-danger"
+            >
+              <CircleAlert className="size-[1.1em] shrink-0" aria-hidden="true" />
+              <span>{shownError}</span>
+            </span>
+          ) : null}
+        </div>
         <button
           type="submit"
           disabled={checking || health === "unconfigured"}
-          className={primaryButtonStyles}
+          className={cn(primaryButtonStyles, "min-h-12 w-full shadow-raised")}
         >
           {checking ? (
             <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
