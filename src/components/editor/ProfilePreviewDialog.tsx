@@ -175,7 +175,7 @@ export function ProfilePreviewDialog({
               </PillarBadge>
               {form.hidden ? (
                 <span className="rounded-chip border border-warning/40 bg-warning-surface px-2 py-0.5 type-micro font-semibold text-warning">
-                  Hidden from public roster
+                  Profile hidden
                 </span>
               ) : null}
             </div>

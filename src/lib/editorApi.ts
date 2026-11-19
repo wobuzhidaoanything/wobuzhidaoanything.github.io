@@ -154,7 +154,7 @@ function mapRosterFailure(result: ApiFailure): ApiFailure {
   if (result.status === 404 || result.status === 405) {
     return {
       ...result,
-      error: "Deploy the updated Worker (wrangler deploy) to enable roster add, reorder, and hide.",
+      error: "Deploy the updated Worker (wrangler deploy) to enable adding, reordering, and hiding team members.",
     };
   }
   return result;

@@ -13,8 +13,6 @@ export type ChapterSurfaceTone = "default" | "alt" | "charcoal";
 
 interface MemberChapterProps {
   member: TeamMember;
-  displayIndex: string;
-  totalCount: number;
   surfaceTone?: ChapterSurfaceTone;
   pinSide?: "left" | "right";
 }
@@ -90,14 +88,11 @@ function hasAnyMemberLink(links?: TeamMember["links"]): boolean {
 
 export function MemberChapter({
   member,
-  displayIndex,
-  totalCount,
   surfaceTone = "default",
   pinSide = "left",
 }: MemberChapterProps) {
   const shouldReduceMotion = Boolean(useReducedMotion());
   const transitionState = useTransitionState();
-  const totalFormatted = String(totalCount).padStart(2, "0");
 
   const hasSkills = member.skillsets.length > 0;
   const hasTools = Boolean(member.tools && member.tools.length > 0);
@@ -118,7 +113,7 @@ export function MemberChapter({
       id={`chapter-${member.slug}`}
       tabIndex={-1}
       data-pillar={member.pillar}
-      data-chapter-index={displayIndex}
+      data-chapter-index={member.index}
       data-surface={surfaceTone === "charcoal" ? "charcoal" : undefined}
       className={cn(
         "member-chapter roster-chapter-item @container/chapter border-b border-edge py-[clamp(4.5rem,10dvb,8.5rem)]",
@@ -159,9 +154,6 @@ export function MemberChapter({
           />
 
           <motion.div variants={riseItem} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="font-serif type-body-sm font-[560] tabular text-ink-secondary">
-              {displayIndex} / {totalFormatted}
-            </span>
             <PillarBadge pillar={member.pillar}>
               {member.pillar} · {member.pillarFull}
             </PillarBadge>
@@ -227,7 +219,7 @@ export function MemberChapter({
               direction="forward"
               memberSlug={member.slug}
               transitionSource="chapter"
-              className="ui-press group/link inline-flex min-h-11 items-center gap-2.5 rounded-control border border-control bg-surface px-4.5 py-2.5 type-ui font-semibold text-ink no-underline hover:border-(--tone) hover:bg-[color-mix(in_oklab,var(--tone)_10%,var(--surface))]"
+              className="ui-press group/link inline-flex min-h-11 items-center gap-2.5 rounded-control border border-control bg-surface px-4.5 py-2.5 type-ui font-semibold text-ink no-underline hover:border-(--tone) hover:bg-[color-mix(in_oklab,var(--ink)_10%,var(--surface))]"
             >
               <span>View full profile</span>
               <ArrowRight
@@ -251,6 +243,7 @@ export function MemberChapter({
           <ArtifactFrame
             member={member}
             src={member.artifacts?.heroImage}
+            eager
             alignClassName="justify-items-end @min-[54rem]/chapter:justify-items-center"
             mediaClassName="aspect-[4/5] @min-[54rem]/chapter:aspect-[16/10]"
             photoMaxHeightClassName="max-h-[clamp(9.5rem,36cqi,15.5rem)] @min-[54rem]/chapter:max-h-[clamp(22rem,56dvb,34rem)]"

@@ -8,7 +8,7 @@ interface SessionState {
 
 /**
  * Module singleton: the unlock survives route changes but never a reload,
- * and the password is held in memory only — never written to storage.
+ * and the password is held in memory only, never written to storage.
  */
 let session: SessionState = { unlocked: false, password: "" };
 const listeners = new Set<() => void>();

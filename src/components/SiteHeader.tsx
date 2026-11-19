@@ -9,6 +9,7 @@ import {
   prefersReducedMotion,
   runViewTransition,
 } from "@/lib/viewTransitions";
+import { getHeaderHeight, scrollToSectionAligned } from "@/lib/scroll";
 import { ThemeToggle } from "./ThemeToggle";
 import { TransitionLink } from "./TransitionLink";
 
@@ -27,7 +28,7 @@ const navLinkStyles = cn(
   "group-data-[wide]/header:w-auto",
 );
 
-const SECTION_IDS = ["top", "team", "work", "partner"] as const;
+const SPY_SECTION_IDS = ["partner", "work", "team"] as const;
 
 export function SiteHeader() {
   const { pathname } = useLocation();
@@ -55,65 +56,41 @@ export function SiteHeader() {
     }
   }, []);
 
-  // Scroll-direction auto-hide fallback for browsers without CSS scroll-state queries.
-  useEffect(() => {
-    const header = headerRef.current;
-    if (!header) return;
-    if (typeof window === "undefined" || window.CSS?.supports?.("container-type", "scroll-state")) {
-      return;
-    }
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      const y = Math.max(0, Math.min(window.scrollY, maxScroll));
-      if (y === lastY) return;
-      header.classList.toggle("is-hidden", y > lastY && y > header.offsetHeight + 24);
-      lastY = y;
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      header.classList.remove("is-hidden");
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, []);
-
-  // Scrollspy sync (native scroll-target-group on supporting browsers, IntersectionObserver elsewhere).
+  // Deterministic scrollspy aligned to the live header bottom edge.
   useEffect(() => {
     if (pathname !== "/") return;
 
-    if (typeof window !== "undefined" && window.CSS?.supports?.("scroll-target-group", "auto")) {
-      const syncFromNative = () => {
-        try {
-          const activeLink = document.querySelector<HTMLAnchorElement>(".site-nav-links a:target-current");
-          const href = activeLink?.getAttribute("href");
-          const matched = href ? href.replace(/^\/?#/, "") : null;
-          setActiveSection(matched);
-        } catch {
-          // Fallback silently if selector unsupported
-        }
-      };
-      syncFromNative();
-      document.addEventListener("scrollend", syncFromNative);
-      return () => document.removeEventListener("scrollend", syncFromNative);
-    }
+    let rafId = 0;
 
-    const targets = SECTION_IDS.map((id) => document.getElementById(id)).filter(
-      (el): el is HTMLElement => el !== null,
-    );
-    if (targets.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id === "top" ? null : entry.target.id);
-          }
+    const updateActiveSection = () => {
+      rafId = 0;
+      const headerH = getHeaderHeight();
+      const triggerY = headerH + 32;
+      let matched: string | null = null;
+      for (const id of SPY_SECTION_IDS) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= triggerY) {
+          matched = id;
+          break;
         }
-      },
-      { rootMargin: "-35% 0px -55% 0px", threshold: 0 },
-    );
-    for (const el of targets) observer.observe(el);
-    return () => observer.disconnect();
+      }
+      setActiveSection(matched);
+    };
+
+    const onScrollOrResize = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(updateActiveSection);
+    };
+
+    updateActiveSection();
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize, { passive: true });
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
   }, [pathname]);
 
   useEffect(() => {
@@ -123,12 +100,22 @@ export function SiteHeader() {
     if (!header || !inner || !menu) return;
 
     let rafId = 0;
+    let lastSyncedH = 0;
+
+    const syncHeaderHeight = () => {
+      const h = Math.ceil(header.getBoundingClientRect().height);
+      if (h > 0 && h !== lastSyncedH) {
+        lastSyncedH = h;
+        document.documentElement.style.setProperty("--header-h", `${h}px`);
+      }
+    };
 
     const measureLayout = (forceMeasure = false) => {
       const currentWidth = header.clientWidth;
       const wasWide = header.hasAttribute("data-wide");
 
       if (!forceMeasure && !wasWide && currentWidth <= lastMeasuredCollapsedWidth.current) {
+        syncHeaderHeight();
         return;
       }
 
@@ -161,6 +148,7 @@ export function SiteHeader() {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         header.removeAttribute("data-measuring");
+        syncHeaderHeight();
       });
     };
 
@@ -199,12 +187,10 @@ export function SiteHeader() {
   }, []);
 
   const scrollToSection = (sectionId: string) => {
-    const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
     if (pathname === "/") {
       navigate(`/#${sectionId}`, { replace: true });
       requestAnimationFrame(() => {
-        const target = document.getElementById(sectionId);
-        target?.scrollIntoView({ behavior });
+        scrollToSectionAligned(sectionId);
       });
       return;
     }
@@ -216,9 +202,8 @@ export function SiteHeader() {
       },
       onFinished: () => {
         requestAnimationFrame(() => {
-          const target = document.getElementById(sectionId);
-          if (target) {
-            target.scrollIntoView({ behavior });
+          if (document.getElementById(sectionId)) {
+            scrollToSectionAligned(sectionId);
           } else {
             focusRouteHeading();
           }
@@ -279,7 +264,7 @@ export function SiteHeader() {
 
       <div
         ref={innerRef}
-        className="header-inner shell flex min-h-[var(--header-h)] items-center justify-between gap-[clamp(0.5rem,2dvw,1.25rem)] py-2.5"
+        className="header-inner shell flex min-h-[4.25rem] items-center justify-between gap-[clamp(0.5rem,2dvw,1.25rem)] py-2.5"
       >
         <TransitionLink
           to="/"

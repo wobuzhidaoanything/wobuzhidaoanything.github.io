@@ -755,7 +755,7 @@ export function UpdateDetailsPage() {
                 )}
               >
                 <Users className="size-4 shrink-0" aria-hidden="true" />
-                <span>Team Roster &amp; Order</span>
+                <span>Team Members</span>
               </button>
 
               <div className="mt-3 mb-1 border-t border-rule pt-3 px-3 type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted">
@@ -776,7 +776,7 @@ export function UpdateDetailsPage() {
                       className={cn(
                         "ui-row-interactive flex min-h-10 shrink-0 cursor-pointer items-center justify-between gap-2 rounded-control border px-3 py-2 text-start type-ui-sm font-medium pointer-coarse:min-h-11",
                         active
-                          ? "border-(--tone) bg-[color-mix(in_oklab,var(--tone)_10%,var(--surface))] font-semibold text-ink shadow-chip"
+                          ? "border-(--tone) bg-[color-mix(in_oklab,var(--ink)_10%,var(--surface))] font-semibold text-ink shadow-chip"
                           : "border-transparent bg-transparent text-ink-secondary hover:text-ink",
                         m.hidden && "opacity-65",
                       )}
@@ -848,7 +848,7 @@ export function UpdateDetailsPage() {
                           className="ui-press inline-flex min-h-10 cursor-pointer items-center gap-1 rounded-control border border-transparent px-2.5 type-ui-sm font-semibold text-ink-secondary hover:bg-surface-muted/75 hover:text-ink pointer-coarse:min-h-11"
                         >
                           <ArrowLeft className="size-3.5" aria-hidden="true" />
-                          <span>Roster</span>
+                          <span>Team</span>
                         </button>
                         <span aria-hidden="true" className="text-ink-muted">
                           /
@@ -1006,7 +1006,7 @@ export function UpdateDetailsPage() {
                                 "ui-press flex min-h-11 cursor-pointer items-center gap-2.5 rounded-control border px-3.5 py-2.5 type-ui",
                                 pillarToneClass[option.id],
                                 form.pillar === option.id
-                                  ? "border-(--pillar-tone) bg-[color-mix(in_oklab,var(--pillar-tone)_10%,var(--surface))] font-semibold"
+                                  ? "border-(--pillar-tone) bg-[color-mix(in_oklab,var(--ink)_10%,var(--surface))] font-semibold"
                                   : "border-edge bg-surface hover:bg-surface-muted/60",
                               )}
                             >
@@ -1133,7 +1133,7 @@ export function UpdateDetailsPage() {
                           <span>
                             Hide profile from public site
                             <span className="block type-ui-sm text-ink-muted">
-                              Drafts and data stay saved, but won't appear on the roster.
+                              Drafts and data stay saved, but the profile stays hidden.
                             </span>
                           </span>
                         </label>

@@ -14,6 +14,7 @@ interface ArtifactFrameProps {
   plateLabel?: string;
   headline?: string;
   priority?: "high" | "low";
+  eager?: boolean;
   showPlaceholder?: boolean;
   className?: string;
 }
@@ -43,6 +44,7 @@ export function ArtifactFrame({
   plateLabel,
   headline,
   priority,
+  eager = false,
   showPlaceholder = true,
   className,
 }: ArtifactFrameProps) {
@@ -56,10 +58,12 @@ export function ArtifactFrame({
 
   const imgPriorityProps =
     priority === "high"
-      ? ({ fetchPriority: "high" } as Record<string, unknown>)
+      ? ({ fetchPriority: "high", decoding: "async" } as Record<string, unknown>)
       : priority === "low"
-        ? ({ fetchPriority: "low", loading: "lazy" } as Record<string, unknown>)
-        : ({ loading: "lazy" } as Record<string, unknown>);
+        ? ({ fetchPriority: "low", loading: "lazy", decoding: "async" } as Record<string, unknown>)
+        : eager
+          ? ({ decoding: "async" } as Record<string, unknown>)
+          : ({ loading: "lazy", decoding: "async" } as Record<string, unknown>);
 
   return (
     <figure
@@ -96,7 +100,7 @@ export function ArtifactFrame({
             className="flex size-full flex-col justify-between p-[clamp(1.35rem,4.5cqi,2.5rem)] text-ink transition-transform duration-500 ease-(--ease-brand) motion-safe:group-hover/artifact:scale-[1.012]"
             style={{
               background:
-                "radial-gradient(120% 100% at 100% 0%, color-mix(in oklab, var(--tone, var(--accent)) 14%, transparent) 0%, transparent 70%), linear-gradient(155deg, var(--surface) 0%, var(--surface-muted) 100%)",
+                "radial-gradient(120% 100% at 100% 0%, color-mix(in oklab, var(--ink) 14%, transparent) 0%, transparent 70%), linear-gradient(155deg, var(--surface) 0%, var(--surface-muted) 100%)",
             }}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -117,12 +121,6 @@ export function ArtifactFrame({
               <p className="m-0 max-w-[26ch] font-serif type-title-4 font-[560] text-ink">
                 {headline ?? (member.role || member.name)}
               </p>
-              <span
-                className="font-serif type-numeral font-semibold tabular leading-none text-ink/20 select-none"
-                aria-hidden="true"
-              >
-                {member.index}
-              </span>
             </div>
           </div>
         </div>

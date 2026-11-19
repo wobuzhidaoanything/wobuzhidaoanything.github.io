@@ -6,7 +6,7 @@ import { isValidHttpUrl } from "@/lib/editorForm";
 const linkPillStyles = cn(
   "ui-press group/ext inline-flex items-center gap-1.5 min-h-10 px-3.5 py-1.5 rounded-control",
   "border border-edge bg-surface type-ui-sm font-semibold text-ink no-underline",
-  "hover:border-(--tone,var(--accent)) hover:bg-[color-mix(in_oklab,var(--tone,var(--accent))_10%,var(--surface))] hover:text-(--tone,var(--accent)) pointer-coarse:min-h-11",
+  "hover:border-(--tone,var(--accent)) hover:bg-[color-mix(in_oklab,var(--ink)_10%,var(--surface))] hover:text-(--tone,var(--accent)) pointer-coarse:min-h-11",
 );
 
 export function MemberLinksRow({

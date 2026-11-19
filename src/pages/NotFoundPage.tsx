@@ -21,8 +21,8 @@ export function NotFoundPage() {
           This page does not exist.
         </h1>
         <p className="mt-6 max-w-[48ch] type-body-lg text-ink-secondary">
-          Return to the {GROUP_META.code} roster, skills matrix, or capstone
-          brief.
+          Back to home to see the {GROUP_META.code} team, skills matrix,
+          and capstone brief.
         </p>
         <TransitionLink
           to="/"
@@ -33,7 +33,7 @@ export function NotFoundPage() {
           )}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          <span>Return to Roster</span>
+          <span>Back to home</span>
         </TransitionLink>
       </section>
     </div>

@@ -72,7 +72,7 @@ export function RosterManager({
     if (result.ok) {
       const synced = await syncRosterStore(result.data.members);
       if (synced) {
-        pushToast({ tone: "success", text: "Roster order updated." });
+        pushToast({ tone: "success", text: "Team order updated." });
       }
     } else if (result.status === 401) {
       onUnauthorized();
@@ -127,7 +127,7 @@ export function RosterManager({
       setNewName("");
       setNewRole("");
       setAdding(false);
-      pushToast({ tone: "success", text: `Added ${trimmedName} to the roster.` });
+      pushToast({ tone: "success", text: `Added ${trimmedName} to the team.` });
       if (result.data.member) {
         onEditMember(result.data.member.id);
       }
@@ -152,7 +152,7 @@ export function RosterManager({
       const synced = await syncRosterStore(result.data.members);
       if (synced) {
         onMemberDeleted?.(target.id);
-        pushToast({ tone: "info", text: `Removed ${target.name} from the roster.` });
+        pushToast({ tone: "info", text: `Removed ${target.name} from the team.` });
       }
     } else if (result.status === 401) {
       onUnauthorized();
@@ -168,7 +168,7 @@ export function RosterManager({
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-4">
         <div className="grid gap-1">
           <h2 className="m-0 font-serif type-heading font-semibold text-ink">
-            Team Roster &amp; Order
+            Team Members
           </h2>
           <p className="m-0 type-ui-sm text-ink-secondary">
             {visibleCount} visible of {members.length} total members. Reorder, hide, add, or remove teammates.
@@ -284,9 +284,6 @@ export function RosterManager({
             >
               <div className="grid min-w-0 flex-1 gap-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-serif type-ui-sm font-semibold tabular text-ink-muted">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
                   <span className="font-serif type-label-lg font-semibold text-ink">
                     {member.name}
                   </span>

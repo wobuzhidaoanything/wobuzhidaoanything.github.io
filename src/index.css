@@ -44,12 +44,12 @@
   --palette-accent-ink-light: #ffffff;
   --palette-accent-ink-dark: #111110;
 
-  --palette-pillar-csd-light: #4e6e5f;
-  --palette-pillar-csd-dark: #9fc7b5;
+  --palette-pillar-csd-light: #5b5c36;
+  --palette-pillar-csd-dark: #bfc39a;
   --palette-pillar-epd-light: #b54524;
   --palette-pillar-epd-dark: #ee8263;
-  --palette-pillar-esd-light: #607084;
-  --palette-pillar-esd-dark: #a8b9cc;
+  --palette-pillar-esd-light: #66563f;
+  --palette-pillar-esd-dark: #c4b294;
 
   /* Status hues: success/info borrow the pillar families; danger is a true
      red, deliberately distinct from the terracotta brand accent. */
@@ -295,7 +295,7 @@
   );
 
   --header-h: 4.25rem;
-  --anchor-offset: calc(var(--header-h) + 1rem);
+  --anchor-offset: var(--header-h);
 
   &:has(> head > meta[name="color-scheme"][content="dark"]) {
     color-scheme: dark;
@@ -366,7 +366,6 @@
     text-rendering: optimizeLegibility;
     container-type: scroll-state;
     container-name: page-scroll;
-    scroll-padding-top: var(--anchor-offset);
   }
 
   body {
@@ -406,7 +405,7 @@
   }
 
   ::selection {
-    background-color: color-mix(in oklab, var(--tone, var(--accent)) 22%, transparent);
+    background-color: color-mix(in oklab, var(--ink) 22%, transparent);
     color: var(--ink);
   }
 
@@ -414,13 +413,13 @@
   button,
   summary,
   label {
-    -webkit-tap-highlight-color: color-mix(in oklab, var(--tone, var(--accent)) 16%, transparent);
+    -webkit-tap-highlight-color: color-mix(in oklab, var(--ink) 16%, transparent);
   }
 
   :where(a:any-link, button, summary, input, textarea, select, [tabindex]):focus-visible {
     outline: 3px solid var(--tone, var(--accent));
     outline-offset: 3px;
-    box-shadow: 0 0 0 5px color-mix(in oklab, var(--tone, var(--accent)) 18%, transparent);
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--ink) 18%, transparent);
   }
 
   /* `hidden="until-found"` renders with `content-visibility: hidden`, whose
@@ -644,7 +643,7 @@
       background-color: var(--accent);
       border-color: var(--accent);
       color: var(--accent-ink);
-      box-shadow: 0 6px 18px -10px color-mix(in oklab, var(--accent) 55%, transparent);
+      box-shadow: 0 6px 18px -10px color-mix(in oklab, var(--ink) 30%, transparent);
     }
   }
 }
@@ -663,7 +662,7 @@
     &:hover {
       translate: 0 -2px;
       border-color: color-mix(in oklab, var(--tone, var(--accent)) 50%, var(--edge));
-      background-color: color-mix(in oklab, var(--tone, var(--accent)) 4%, var(--surface));
+      background-color: color-mix(in oklab, var(--ink) 4%, var(--surface));
       box-shadow: var(--shadow-raised);
     }
   }
@@ -685,7 +684,7 @@
 
   @media (hover: hover) {
     &:hover:not(:disabled) {
-      background-color: color-mix(in oklab, var(--tone, var(--accent)) 8%, transparent);
+      background-color: color-mix(in oklab, var(--ink) 8%, transparent);
       box-shadow: inset 2.5px 0 0 var(--tone, var(--accent));
     }
   }
@@ -734,7 +733,7 @@
   @media (hover: hover) {
     &:hover:not([aria-pressed="true"]) {
       color: var(--tone, var(--ink));
-      background-color: color-mix(in oklab, var(--tone, var(--accent)) 9%, transparent);
+      background-color: color-mix(in oklab, var(--ink) 9%, transparent);
     }
   }
 
@@ -751,23 +750,12 @@
   color: var(--success);
 }
 
-/* ---------- Header: auto-hide on scroll down, native scrollspy, popover ---------- */
+/* ---------- Header: pinned navigation, popover menu ---------- */
 
 .site-header {
   transition:
-    transform 0.24s var(--ease-brand),
     background-color 0.2s ease,
     border-color 0.2s ease;
-}
-
-@container page-scroll scroll-state((scrolled: bottom) and (scrollable: top)) {
-  .site-header:not(:focus-within):not(:has(:is(:popover-open, .\:popover-open))) {
-    transform: translateY(-100%);
-  }
-}
-
-.site-header.is-hidden:not(:focus-within):not(:has(:is(:popover-open, .\:popover-open))) {
-  transform: translateY(-100%);
 }
 
 .site-header[data-wide] .header-inner > * {
@@ -777,10 +765,6 @@
 
 .site-header[data-measuring] * {
   transition: none !important;
-}
-
-.site-nav-links {
-  scroll-target-group: auto;
 }
 
 .nav-link {
@@ -811,7 +795,7 @@
   @media (hover: hover) {
     &:hover {
       color: var(--ink);
-      background-color: color-mix(in oklab, var(--accent) 7%, transparent);
+      background-color: color-mix(in oklab, var(--ink) 7%, transparent);
     }
   }
 
@@ -947,8 +931,11 @@
   padding-inline: max(1rem, var(--spacing-gutter));
   padding-block: 0.5rem 1rem;
   pointer-events: none;
+  transition: inset-block-end 0.2s var(--ease-brand);
+}
 
-  @media (max-width: 47.99rem) {
+@media (max-width: 47.99rem) {
+  html.has-chapter-dock .back-to-top-dock {
     inset-block-end: max(4.75rem, calc(env(safe-area-inset-bottom) + 3.75rem));
   }
 }
@@ -994,7 +981,7 @@
 /* ---------- Unified Member Chapters & Content-Based Styling ---------- */
 
 .member-chapter {
-  scroll-margin-top: var(--anchor-offset);
+  scroll-margin-top: var(--header-h);
 }
 
 .member-chapter[data-surface="charcoal"] {
@@ -1091,7 +1078,7 @@
   @media (hover: hover) {
     &:has(> summary:hover) {
       border-color: color-mix(in oklab, var(--accent) 42%, var(--edge));
-      background-color: color-mix(in oklab, var(--accent) 4%, var(--surface));
+      background-color: color-mix(in oklab, var(--ink) 4%, var(--surface));
     }
   }
 }
@@ -1240,7 +1227,7 @@
   @media (hover: hover) {
     &:hover:not([aria-selected="true"]) {
       color: var(--ink);
-      background-color: color-mix(in oklab, var(--accent) 7%, transparent);
+      background-color: color-mix(in oklab, var(--ink) 7%, transparent);
     }
   }
 

@@ -62,7 +62,7 @@ export function SelectedWorkSection({
     <section
       id="work"
       tabIndex={-1}
-      className="defer-section @container/work scroll-mt-20 border-t border-edge bg-page py-[clamp(5rem,11dvb,8.25rem)]"
+      className="@container/work scroll-mt-(--header-h) border-t border-edge bg-page py-[clamp(5rem,11dvb,8.25rem)]"
       aria-labelledby="work-heading"
     >
       <div className="shell grid min-w-0 gap-[clamp(2.25rem,5cqi,3.75rem)]">

@@ -196,7 +196,7 @@ export function PartnerSection() {
     <section
       id="partner"
       tabIndex={-1}
-      className="partner-section defer-section @container/partner scroll-mt-20 border-t border-edge bg-surface-alt"
+      className="partner-section @container/partner scroll-mt-(--header-h) border-t border-edge bg-surface-alt"
       aria-labelledby="partner-heading"
     >
       <motion.div

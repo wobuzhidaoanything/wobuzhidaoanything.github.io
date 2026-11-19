@@ -10,9 +10,9 @@ import { useEditorSession } from "@/lib/editorSession";
 import { isValidHttpUrl } from "@/lib/editorForm";
 import {
   focusRouteHeading,
-  prefersReducedMotion,
   runViewTransition,
 } from "@/lib/viewTransitions";
+import { scrollToSectionAligned } from "@/lib/scroll";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
 import { MemberLinksRow } from "@/components/MemberLinksRow";
 import { ProjectDetailContent } from "@/components/ProjectDetailContent";
@@ -101,7 +101,6 @@ export function MemberDetailPage() {
   const handleBreadcrumbToTeam = (e: MouseEvent<HTMLAnchorElement>, to: string) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
     runViewTransition({
       types: ["backward"],
       update: () => {
@@ -111,7 +110,7 @@ export function MemberDetailPage() {
         requestAnimationFrame(() => {
           const target = document.getElementById("team");
           if (target) {
-            target.scrollIntoView({ behavior });
+            scrollToSectionAligned("team");
           } else {
             focusRouteHeading();
           }
@@ -135,7 +134,7 @@ export function MemberDetailPage() {
             No member matches “{slug}”.
           </h1>
           <p className="mt-6 max-w-[48ch] type-body-lg text-ink-secondary">
-            Return to the roster to view all team builders.
+            Back to home to view all team builders.
           </p>
           <TransitionLink
             to="/"
