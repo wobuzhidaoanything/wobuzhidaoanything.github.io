@@ -68,14 +68,9 @@ export function EditorGate({ notice, onUnlocked }: EditorGateProps) {
         <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-edge bg-surface-muted">
           <Lock className="size-5 text-accent" aria-hidden="true" />
         </span>
-        <div className="min-w-0">
-          <h2 id="gate-heading" className="m-0 font-serif type-heading-xs font-semibold">
-            Unlock the editor
-          </h2>
-          <p className="m-0 type-ui-sm text-ink-secondary">
-            Shared team password · stays unlocked while you browse
-          </p>
-        </div>
+        <h2 id="gate-heading" className="m-0 font-serif type-heading-xs font-semibold">
+          Unlock the editor
+        </h2>
       </div>
 
       {notice ? <StatusMessage tone={notice.tone}>{notice.text}</StatusMessage> : null}
