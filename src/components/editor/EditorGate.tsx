@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Eye, EyeOff, LoaderCircle, Lock } from "lucide-react";
+import { cn } from "cn";
 import { fetchHealth } from "@/lib/editorApi";
 import { unlockEditor } from "@/lib/editorSession";
 import { StatusMessage, type StatusTone } from "./StatusMessage";
