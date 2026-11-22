@@ -300,7 +300,7 @@ export function PartnerSection() {
             <dt className="type-ui-sm font-semibold text-ink-muted">
               Delivery window
             </dt>
-            <dd className="m-0 font-heading font-semibold text-ink">
+            <dd className="m-0 type-heading font-semibold tabular text-ink">
               Sep 2027 – Apr 2028
             </dd>
           </div>
@@ -316,7 +316,7 @@ export function PartnerSection() {
             <dt className="type-ui-sm font-semibold text-ink-muted">
               Materials funding
             </dt>
-            <dd className="m-0 font-heading font-semibold text-ink">
+            <dd className="m-0 type-heading font-semibold tabular text-ink">
               Up to S$4,000 via SUTD
             </dd>
           </div>

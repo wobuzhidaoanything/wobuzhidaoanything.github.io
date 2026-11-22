@@ -184,7 +184,7 @@ export function ProfilePreviewDialog({
             </h3>
 
             {previewMember.minor ? (
-              <p className="-mt-2 m-0 type-body-sm font-medium text-ink-secondary text-ink-secondary">
+              <p className="-mt-2 m-0 type-body-sm font-medium text-ink-secondary">
                 Minor in {previewMember.minor}
               </p>
             ) : null}
