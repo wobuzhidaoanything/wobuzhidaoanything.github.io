@@ -8,8 +8,6 @@ import { TransitionLink } from "@/components/TransitionLink";
 import { PillarBadge } from "@/components/ui/pillar-badge";
 import { useTransitionState } from "@/hooks/useTransitionMember";
 import { isValidHttpUrl } from "@/lib/editorForm";
-import { memberShortLabel } from "@/lib/membersStore";
-import { parseProjectDetail } from "@/lib/projectFormatting";
 
 export type ChapterSurfaceTone = "default" | "alt" | "charcoal";
 
@@ -76,7 +74,7 @@ const ruleByPillar: Record<Pillar, string> = {
 };
 
 const kickerStyles =
-  "m-0 type-ui-sm font-semibold text-ink-muted";
+  "m-0 type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted";
 
 function hasAnyMemberLink(links?: TeamMember["links"]): boolean {
   if (!links) return false;
@@ -86,11 +84,6 @@ function hasAnyMemberLink(links?: TeamMember["links"]): boolean {
       (links.portfolio && isValidHttpUrl(links.portfolio)) ||
       links.email,
   );
-}
-
-function projectSummary(detail: string): string {
-  const { intro, bullets } = parseProjectDetail(detail);
-  return intro[0] ?? bullets[0]?.text ?? "";
 }
 
 export function MemberChapter({
@@ -106,9 +99,6 @@ export function MemberChapter({
   const hasInterests = member.interests.length > 0;
   const projects = member.projects ?? [];
   const hasProjects = projects.length > 0;
-  const HOMEPAGE_PROJECT_LIMIT = 4;
-  const visibleProjects = projects.slice(0, HOMEPAGE_PROJECT_LIMIT);
-  const hiddenProjectCount = projects.length - visibleProjects.length;
   const hasLinks = hasAnyMemberLink(member.links);
   const hasDetails = hasSkills || hasTools || hasInterests || hasProjects;
 
@@ -126,7 +116,7 @@ export function MemberChapter({
       data-chapter-index={member.index}
       data-surface={surfaceTone === "charcoal" ? "charcoal" : undefined}
       className={cn(
-        "member-chapter roster-chapter-item @container/chapter border-b border-edge py-[clamp(3.5rem,8dvb,6.5rem)]",
+        "member-chapter roster-chapter-item @container/chapter border-b border-edge py-[clamp(4.5rem,10dvb,8.5rem)]",
         surfaceTone === "alt" ? "bg-surface-alt" : "bg-page",
       )}
       style={
@@ -147,7 +137,6 @@ export function MemberChapter({
         )}
       >
         <motion.div
-          data-chapter-hero={member.slug}
           className={cn(
             "col-start-1 row-start-1 grid min-w-0 content-start gap-3.5 @min-[54rem]/chapter:gap-5",
             "@min-[54rem]/chapter:sticky @min-[54rem]/chapter:top-[calc(var(--header-h)+2.5rem)] @min-[54rem]/chapter:row-span-2",
@@ -194,9 +183,18 @@ export function MemberChapter({
           {member.minor ? (
             <motion.p
               variants={riseItem}
-              className="-mt-1 m-0 type-body-sm text-ink-secondary"
+              className="-mt-1 m-0 font-mono type-ui-sm font-medium tracking-[0.05em] uppercase text-ink-secondary"
             >
               Minor in {member.minor}
+            </motion.p>
+          ) : null}
+
+          {member.role ? (
+            <motion.p
+              variants={riseItem}
+              className="m-0 font-serif type-role italic font-medium text-accent"
+            >
+              {member.role}
             </motion.p>
           ) : null}
 
@@ -265,7 +263,7 @@ export function MemberChapter({
                       key={skill}
                       className="flex items-baseline gap-3.5 type-body text-ink"
                     >
-                      <span className="shrink-0 type-ui-sm font-semibold tabular text-ink-muted">
+                      <span className="shrink-0 font-serif type-body-sm italic font-[540] tabular text-accent">
                         {String(idx + 1).padStart(2, "0")}
                       </span>
                       <span className="min-w-0 font-medium">{skill}</span>
@@ -291,7 +289,7 @@ export function MemberChapter({
                       {member.tools!.map((tool) => (
                         <li
                           key={tool}
-                          className="rounded-control border border-edge bg-surface px-3 py-1 type-ui-sm font-medium text-ink transition-colors duration-150 hover:border-(--tone)"
+                          className="rounded-control border border-edge bg-surface px-3 py-1 font-mono type-ui-sm font-medium text-ink transition-colors duration-150 hover:border-(--tone)"
                         >
                           {tool}
                         </li>
@@ -332,62 +330,41 @@ export function MemberChapter({
                   </TransitionLink>
                 </div>
                 <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 @min-[36rem]/chapter-detail:grid-cols-2">
-                  {visibleProjects.map((project) => {
-                    const summary = projectSummary(project.detail);
-                    return (
-                      <li
-                        key={project.title}
-                        className="ui-card-interactive grid content-start gap-2 rounded-card border border-edge bg-surface px-4 py-3.5"
+                  {projects.map((project) => (
+                    <li
+                      key={project.title}
+                      className="ui-card-interactive flex flex-wrap items-center justify-between gap-2.5 rounded-card border border-edge bg-surface px-4 py-3.5"
+                    >
+                      <TransitionLink
+                        to={`/member/${member.slug}`}
+                        direction="forward"
+                        memberSlug={member.slug}
+                        transitionSource="chapter"
+                        className="ui-link-underline font-serif type-label-lg font-semibold text-ink hover:text-(--tone)"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2.5">
-                          <TransitionLink
-                            to={`/member/${member.slug}`}
-                            direction="forward"
-                            memberSlug={member.slug}
-                            transitionSource="chapter"
-                            className="ui-link-underline font-serif type-body font-semibold text-ink hover:text-(--tone)"
-                          >
-                            {project.title}
-                          </TransitionLink>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {project.tag ? (
-                              <span className="rounded-chip border border-rule bg-surface-muted px-2.5 py-0.5 type-micro font-semibold text-ink-secondary">
-                                {project.tag}
-                              </span>
-                            ) : null}
-                            {project.url && isValidHttpUrl(project.url) ? (
-                              <a
-                                href={project.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label={`Open ${project.title}`}
-                                className="ui-press inline-flex size-9 items-center justify-center rounded-control border border-transparent text-(--tone) hover:bg-surface-muted/80 pointer-coarse:size-11"
-                              >
-                                <ArrowUpRight className="size-4" aria-hidden="true" />
-                              </a>
-                            ) : null}
-                          </div>
-                        </div>
-                        {summary ? (
-                          <p className="m-0 type-body-sm text-ink-secondary line-clamp-2">
-                            {summary}
-                          </p>
+                        {project.title}
+                      </TransitionLink>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {project.tag ? (
+                          <span className="rounded-chip border border-rule bg-surface-muted px-2.5 py-0.5 font-mono type-micro font-semibold text-ink-secondary">
+                            {project.tag}
+                          </span>
                         ) : null}
-                      </li>
-                    );
-                  })}
+                        {project.url && isValidHttpUrl(project.url) ? (
+                          <a
+                            href={project.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Open ${project.title}`}
+                            className="ui-press inline-flex size-9 items-center justify-center rounded-control border border-transparent text-(--tone) hover:bg-surface-muted/80 pointer-coarse:size-11"
+                          >
+                            <ArrowUpRight className="size-4" aria-hidden="true" />
+                          </a>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
                 </ul>
-                {hiddenProjectCount > 0 ? (
-                  <TransitionLink
-                    to={`/member/${member.slug}`}
-                    direction="forward"
-                    memberSlug={member.slug}
-                    transitionSource="chapter"
-                    className="ui-link-underline mt-1 w-fit type-ui-sm font-semibold text-(--tone)"
-                  >
-                    View all {projects.length} projects on {memberShortLabel(member.name)}&rsquo;s profile
-                  </TransitionLink>
-                ) : null}
               </motion.div>
             ) : null}
           </motion.div>

@@ -5,7 +5,7 @@ export function SiteFooter() {
   return (
     <footer className="site-footer no-print border-t border-edge bg-page">
       <div className="shell flex flex-wrap items-center justify-between gap-x-8 gap-y-4 py-8">
-        <p className="m-0 type-body font-semibold">
+        <p className="m-0 font-serif type-label-lg font-semibold">
           {GROUP_META.institution} · {GROUP_META.code} ({GROUP_META.pillarsLabel})
         </p>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">

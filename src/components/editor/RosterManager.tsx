@@ -43,6 +43,7 @@ export function RosterManager({
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPillar, setNewPillar] = useState<Pillar>("CSD");
+  const [newRole, setNewRole] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TeamMember | null>(null);
 
   async function syncRosterStore(incoming: TeamMember[] | undefined): Promise<boolean> {
@@ -116,6 +117,7 @@ export function RosterManager({
       {
         name: trimmedName,
         pillar: newPillar,
+        role: newRole.trim() || undefined,
       },
       currentIds,
     );
@@ -123,6 +125,7 @@ export function RosterManager({
     if (result.ok) {
       await syncRosterStore(result.data.members);
       setNewName("");
+      setNewRole("");
       setAdding(false);
       pushToast({ tone: "success", text: `Added ${trimmedName} to the team.` });
       if (result.data.member) {
@@ -228,6 +231,20 @@ export function RosterManager({
             </div>
           </div>
 
+          <div className="grid gap-1.5">
+            <label htmlFor="new-member-role" className="type-ui-sm font-semibold text-ink">
+              Role (optional)
+            </label>
+            <input
+              id="new-member-role"
+              value={newRole}
+              maxLength={LIMITS.role}
+              placeholder="e.g. Robotics & Control"
+              onChange={(e) => setNewRole(e.target.value)}
+              className={inputStyles}
+            />
+          </div>
+
           <div className="flex flex-wrap justify-end gap-2">
             <button
               type="submit"
@@ -267,7 +284,7 @@ export function RosterManager({
             >
               <div className="grid min-w-0 flex-1 gap-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="type-body font-semibold text-ink">
+                  <span className="font-serif type-label-lg font-semibold text-ink">
                     {member.name}
                   </span>
                   <PillarBadge pillar={member.pillar}>{member.pillar}</PillarBadge>

@@ -80,6 +80,7 @@ export function ProfilePreviewDialog({
     pillar: form.pillar,
     pillarFull: PILLAR_FULL[form.pillar],
     minor: form.minor.trim() || undefined,
+    role: form.role.trim(),
     bio: form.bio.trim(),
     skillsets,
     interests,
@@ -184,11 +185,16 @@ export function ProfilePreviewDialog({
             </h3>
 
             {previewMember.minor ? (
-              <p className="-mt-2 m-0 type-body-sm font-medium text-ink-secondary">
+              <p className="-mt-2 m-0 font-mono type-ui-sm font-medium tracking-[0.05em] uppercase text-ink-secondary">
                 Minor in {previewMember.minor}
               </p>
             ) : null}
 
+            {previewMember.role ? (
+              <p className="m-0 font-serif type-role italic font-medium text-accent">
+                {previewMember.role}
+              </p>
+            ) : null}
             {previewMember.bio ? (
               <p className="m-0 max-w-[54ch] type-body text-ink-secondary">
                 {previewMember.bio}
@@ -216,7 +222,7 @@ export function ProfilePreviewDialog({
 
           {skillsets.length > 0 ? (
             <div className="grid gap-2 border-t border-rule pt-4">
-              <span className="type-ui-sm font-semibold text-ink-muted">
+              <span className="type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted">
                 Skillsets
               </span>
               <p className="m-0 type-body-sm text-ink">{skillsets.join(" · ")}</p>
@@ -225,16 +231,16 @@ export function ProfilePreviewDialog({
 
           {tools.length > 0 ? (
             <div className="grid gap-2 border-t border-rule pt-4">
-              <span className="type-ui-sm font-semibold text-ink-muted">
+              <span className="type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted">
                 Tools &amp; Software
               </span>
-              <p className="m-0 type-ui-sm text-ink-secondary">{tools.join(" · ")}</p>
+              <p className="m-0 font-mono type-ui-sm text-ink-secondary">{tools.join(" · ")}</p>
             </div>
           ) : null}
 
           {projects.length > 0 ? (
             <div className="grid gap-2 border-t border-rule pt-4">
-              <span className="type-ui-sm font-semibold text-ink-muted">
+              <span className="type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted">
                 Projects ({projects.length})
               </span>
               <ul className="m-0 grid list-none gap-2 p-0">
@@ -242,7 +248,7 @@ export function ProfilePreviewDialog({
                   <li key={p.title} className="type-body-sm text-ink">
                     <span className="font-semibold">{p.title}</span>
                     {p.tag ? (
-                      <span className="ms-2 type-micro font-medium text-ink-muted">[{p.tag}]</span>
+                      <span className="ms-2 font-mono type-micro text-ink-muted">[{p.tag}]</span>
                     ) : null}
                     {p.detail ? (
                       <ProjectDetailContent detail={p.detail} className="mt-1.5" />
@@ -255,7 +261,7 @@ export function ProfilePreviewDialog({
 
           {interests.length > 0 ? (
             <div className="grid gap-1 border-t border-rule pt-4">
-              <span className="type-ui-sm font-semibold text-ink-muted">
+              <span className="type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted">
                 Interests
               </span>
               <p className="m-0 type-body-sm text-ink-secondary">{interests.join(" · ")}</p>

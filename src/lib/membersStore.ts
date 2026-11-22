@@ -59,23 +59,6 @@ export function normalizeMembers(raw: unknown): TeamMember[] | null {
 }
 
 /**
- * Short display label for compact controls (chapter dock pills, inline links).
- * Keeps two-word given names like "Jin Hng" intact while shortening longer names.
- */
-export function memberShortLabel(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "Member";
-  const commaIdx = trimmed.indexOf(",");
-  if (commaIdx >= 0) {
-    const after = trimmed.slice(commaIdx + 1).trim();
-    if (after) return after;
-  }
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 2 && trimmed.length <= 10) return trimmed;
-  return parts[0] ?? trimmed;
-}
-
-/**
  * Visible members for public views: excludes hidden members and assigns
  * contiguous display indices ("01", "02", ...) so counts and chapter
  * numbers remain seamless whenever someone is hidden or added.

@@ -48,6 +48,7 @@ export interface TeamMember {
   name: string;
   pillar: Pillar;
   pillarFull: string;
+  role: string;
   bio: string;
   skillsets: string[];
   interests: string[];

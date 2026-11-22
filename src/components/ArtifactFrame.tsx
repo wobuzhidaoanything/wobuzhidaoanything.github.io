@@ -48,7 +48,7 @@ export function ArtifactFrame({
   showPlaceholder = true,
   className,
 }: ArtifactFrameProps) {
-  const resolvedAlt = alt ?? member.artifacts?.alt ?? `${member.name}: ${member.pillarFull}`;
+  const resolvedAlt = alt ?? member.artifacts?.alt ?? `${member.name}: ${member.role}`;
   const resolvedCaption = caption ?? member.artifacts?.caption;
   const resolvedSrc = resolveImageSrc(src ?? member.artifacts?.heroImage);
 
@@ -106,20 +106,20 @@ export function ArtifactFrame({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span
                 className={cn(
-                  "type-ui-sm font-semibold",
+                  "font-mono type-micro font-semibold tracking-[0.06em] uppercase",
                   tagColorByPillar[member.pillar],
                 )}
               >
                 {plateLabel ?? `${member.pillar} · ${member.pillarFull}`}
               </span>
-              <span className="type-ui-sm text-ink-muted">
-                {member.minor || "Capstone Builder"}
+              <span className="font-mono type-micro font-medium text-ink-muted">
+                {member.role || "Capstone Builder"}
               </span>
             </div>
 
             <div className="flex flex-wrap items-end justify-between gap-4">
-              <p className="m-0 max-w-[26ch] font-serif type-title-4 font-semibold text-ink">
-                {headline ?? member.name}
+              <p className="m-0 max-w-[26ch] font-serif type-title-4 font-[560] text-ink">
+                {headline ?? (member.role || member.name)}
               </p>
             </div>
           </div>
