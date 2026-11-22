@@ -5,10 +5,11 @@ import { ArrowDown, ArrowRight } from "lucide-react";
 import { cn } from "cn";
 import { GROUP_META, PILLAR_FILTERS, type FilterOption } from "@/data/capstone";
 import { useLiveMembers } from "@/hooks/useLiveMembers";
-import { getPublicMembers } from "@/lib/membersStore";
+import { getPublicMembers, memberShortLabel } from "@/lib/membersStore";
 import { MemberChapter, type ChapterSurfaceTone } from "@/components/MemberChapter";
 import { SelectedWorkSection } from "@/components/SelectedWorkSection";
 import { PartnerSection } from "@/components/PartnerSection";
+import { IdentityIndicator } from "@/components/IdentityIndicator";
 import { BackToTop } from "@/components/BackToTop";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { prefersReducedMotion, runViewTransition } from "@/lib/viewTransitions";
@@ -111,19 +112,6 @@ function resolveChapterTone(idx: number): ChapterSurfaceTone {
   return "default";
 }
 
-function memberShortLabel(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "Member";
-  const commaIdx = trimmed.indexOf(",");
-  if (commaIdx >= 0) {
-    const after = trimmed.slice(commaIdx + 1).trim();
-    if (after) return after;
-  }
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 2 && trimmed.length <= 10) return trimmed;
-  return parts[0] ?? trimmed;
-}
-
 export function RosterPage() {
   useDocumentTitle(`${GROUP_META.title} | Team & Work`);
   const shouldReduceMotion = Boolean(useReducedMotion());
@@ -145,6 +133,8 @@ export function RosterPage() {
     () => filteredMembers[0]?.slug ?? "01",
   );
   const [showDock, setShowDock] = useState(false);
+  const [inTeamSection, setInTeamSection] = useState(false);
+  const [activeHeroHidden, setActiveHeroHidden] = useState(false);
   const dockNavRef = useRef<HTMLElement | null>(null);
 
   // Sync mobile Back to Top clearance with visible fixed chapter dock.
@@ -207,14 +197,16 @@ export function RosterPage() {
       rafId = 0;
       const headerH = getHeaderHeight();
       const teamEl = document.getElementById("team");
-      if (!teamEl || filteredMembers.length <= 1) {
+      if (!teamEl || filteredMembers.length === 0) {
+        setInTeamSection(false);
         setShowDock(false);
       } else {
         const teamRect = teamEl.getBoundingClientRect();
-        const visible =
+        const inTeam =
           teamRect.top <= window.innerHeight * 0.55 &&
           teamRect.bottom >= Math.min(window.innerHeight * 0.38, headerH + 220);
-        setShowDock(visible);
+        setInTeamSection(inTeam);
+        setShowDock(inTeam && filteredMembers.length > 1);
       }
 
       const chapters = Array.from(document.querySelectorAll<HTMLElement>(".member-chapter"));
@@ -230,6 +222,11 @@ export function RosterPage() {
         }
       }
       if (matchedSlug) setActiveChapterSlug(matchedSlug);
+      const hero = matchedSlug
+        ? document.querySelector<HTMLElement>(`[data-chapter-hero="${matchedSlug}"]`)
+        : null;
+      const heroHidden = hero ? hero.getBoundingClientRect().bottom <= headerH + 4 : false;
+      setActiveHeroHidden((prev) => (prev === heroHidden ? prev : heroHidden));
     };
 
     const onScrollOrResize = () => {
@@ -299,13 +296,6 @@ export function RosterPage() {
           initial={shouldReduceMotion ? false : "hidden"}
           animate="visible"
         >
-          <motion.p
-            variants={splashRise}
-            className="m-0 type-body font-semibold tracking-[0.08em] uppercase text-ink-secondary"
-          >
-            {GROUP_META.institution}
-          </motion.p>
-
           <motion.h1
             variants={splashRise}
             id="main-content"
@@ -316,7 +306,7 @@ export function RosterPage() {
             <span className="font-serif type-display font-semibold text-wrap-balance text-ink">
               Lockheed
             </span>
-            <span className="font-serif type-title-sub italic font-medium text-accent">
+            <span className="font-serif type-title-sub font-normal text-ink-secondary">
               Summer Internship
             </span>
           </motion.h1>
@@ -325,8 +315,7 @@ export function RosterPage() {
             variants={splashRise}
             className="m-0 max-w-[44ch] type-body-lg text-ink-secondary"
           >
-            One team across product, systems &amp; design, and code. Scroll on
-            to find out more about us.
+            An SUTD capstone team building for Lockheed Martin, from CAD to code.
           </motion.p>
 
           <motion.div variants={splashRise} className="no-print pt-1">
@@ -346,7 +335,7 @@ export function RosterPage() {
       <section
         id="builders"
         tabIndex={-1}
-        className="hero-masthead @container/hero grid min-h-[min(86svb,48rem)] scroll-mt-(--header-h) items-center border-b border-edge bg-surface-alt/45 py-[clamp(5.5rem,12dvb,9rem)]"
+        className="hero-masthead @container/hero scroll-mt-(--header-h) border-b border-edge bg-surface-alt/45 py-[clamp(3.5rem,9dvb,6.5rem)]"
         aria-labelledby="builders-masthead-heading"
       >
         <motion.div
@@ -359,7 +348,7 @@ export function RosterPage() {
           <div className="grid max-w-[46rem] gap-4">
             <motion.p
               variants={mastheadRise}
-              className="m-0 type-ui-sm font-semibold tracking-[0.06em] uppercase text-ink-secondary"
+              className="m-0 type-ui-sm font-semibold text-ink-secondary"
             >
               {GROUP_META.institution} · {GROUP_META.pillarsLabel} · Sep 2027 – Apr 2028
             </motion.p>
@@ -367,32 +356,30 @@ export function RosterPage() {
             <motion.h2
               variants={mastheadRise}
               id="builders-masthead-heading"
-              className="m-0 font-serif type-title-1 font-semibold text-ink [&_em]:font-medium [&_em]:italic [&_em]:text-accent"
+              className="m-0 font-serif type-title-1 font-semibold text-ink"
             >
               {builderWord} {publicMembers.length === 1 ? "builder" : "builders"},{" "}
-              <em>
-                {pillarWordLower} {activePillarCount === 1 ? "pillar." : "pillars."}
-              </em>
+              {pillarWordLower} {activePillarCount === 1 ? "pillar." : "pillars."}
             </motion.h2>
           </div>
 
           <motion.dl
             variants={figureStagger}
-            className="m-0 grid w-full list-none grid-cols-1 gap-[clamp(1.25rem,3cqi,2.25rem)] @min-[44rem]/hero:grid-cols-3"
+            className="m-0 grid w-full list-none grid-cols-1 divide-y divide-rule border-t border-rule pt-[clamp(1.5rem,3cqi,2.25rem)] @min-[44rem]/hero:grid-cols-3 @min-[44rem]/hero:divide-x @min-[44rem]/hero:divide-y-0"
             aria-label="Capstone key figures"
           >
             <motion.div
               variants={figureCardRise}
-              className="ui-card-interactive grid content-between gap-6 rounded-card border border-edge bg-surface p-[clamp(1.75rem,4cqi,2.5rem)] shadow-raised"
+              className="grid gap-1.5 py-5 first:pt-0 last:pb-0 @min-[44rem]/hero:py-0 @min-[44rem]/hero:px-8 @min-[44rem]/hero:first:pl-0 @min-[44rem]/hero:last:pr-0"
             >
-              <dt className="type-ui-sm font-semibold tracking-[0.06em] uppercase text-ink-muted">
+              <dt className="order-2 type-ui-sm font-medium text-ink-secondary">
                 Team
               </dt>
-              <dd className="m-0 flex flex-wrap items-baseline gap-3">
-                <span className="font-serif type-numeral font-semibold tabular leading-none text-ink">
+              <dd className="order-1 m-0 flex flex-wrap items-baseline gap-3">
+                <span className="type-figure font-semibold tabular leading-none text-ink">
                   {publicMembers.length}
                 </span>
-                <span className="font-serif type-role italic font-medium text-accent">
+                <span className="type-body text-ink-secondary">
                   builders
                 </span>
               </dd>
@@ -400,16 +387,16 @@ export function RosterPage() {
 
             <motion.div
               variants={figureCardRise}
-              className="ui-card-interactive grid content-between gap-6 rounded-card border border-edge bg-surface p-[clamp(1.75rem,4cqi,2.5rem)] shadow-raised"
+              className="grid gap-1.5 py-5 first:pt-0 last:pb-0 @min-[44rem]/hero:py-0 @min-[44rem]/hero:px-8 @min-[44rem]/hero:first:pl-0 @min-[44rem]/hero:last:pr-0"
             >
-              <dt className="type-ui-sm font-semibold tracking-[0.06em] uppercase text-ink-muted">
+              <dt className="order-2 type-ui-sm font-medium text-ink-secondary">
                 Team composition
               </dt>
-              <dd className="m-0 flex flex-wrap items-baseline gap-3">
-                <span className="font-serif type-numeral font-semibold tabular leading-none text-ink">
+              <dd className="order-1 m-0 flex flex-wrap items-baseline gap-3">
+                <span className="type-figure font-semibold tabular leading-none text-ink">
                   {activePillarCount}
                 </span>
-                <span className="font-serif type-role italic font-medium text-accent">
+                <span className="type-body text-ink-secondary">
                   SUTD pillars
                 </span>
               </dd>
@@ -417,16 +404,16 @@ export function RosterPage() {
 
             <motion.div
               variants={figureCardRise}
-              className="ui-card-interactive grid content-between gap-6 rounded-card border border-edge bg-surface p-[clamp(1.75rem,4cqi,2.5rem)] shadow-raised"
+              className="grid gap-1.5 py-5 first:pt-0 last:pb-0 @min-[44rem]/hero:py-0 @min-[44rem]/hero:px-8 @min-[44rem]/hero:first:pl-0 @min-[44rem]/hero:last:pr-0"
             >
-              <dt className="type-ui-sm font-semibold tracking-[0.06em] uppercase text-ink-muted">
+              <dt className="order-2 type-ui-sm font-medium text-ink-secondary">
                 Delivery
               </dt>
-              <dd className="m-0 flex flex-wrap items-baseline gap-3">
-                <span className="font-serif type-numeral font-semibold tabular leading-none text-ink">
+              <dd className="order-1 m-0 flex flex-wrap items-baseline gap-3">
+                <span className="type-figure font-semibold tabular leading-none text-ink">
                   2
                 </span>
-                <span className="font-serif type-role italic font-medium text-accent">
+                <span className="type-body text-ink-secondary">
                   academic terms
                 </span>
               </dd>
@@ -470,25 +457,22 @@ export function RosterPage() {
         className="relative scroll-mt-(--header-h)"
         aria-labelledby="team-section-heading"
       >
-        <div className="border-b border-edge bg-surface-alt/70 py-[clamp(3rem,6.5dvb,4.5rem)]">
+        <div className="border-b border-edge bg-surface-alt/70 py-[clamp(2.25rem,4.5dvb,3.5rem)]">
           <div className="shell flex min-w-0 flex-wrap items-end justify-between gap-x-8 gap-y-5">
-            <div className="grid gap-2">
-              <p className="m-0 type-ui-sm font-semibold tracking-[0.05em] uppercase text-accent">
-                Team
-              </p>
+            <div className="grid gap-2.5">
               <h2
                 id="team-section-heading"
                 className="m-0 font-serif type-title-3 font-semibold text-ink"
               >
-                The {publicMembers.length} Builders
+                The team
               </h2>
               <p className="m-0 max-w-[54ch] type-body text-ink-secondary">
-                Filter by SUTD pillar or open any member profile for full tools and projects.
+                Filter by SUTD pillar, or open any profile for tools and projects.
               </p>
             </div>
 
             <div
-              className="filter-rail no-print inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-control bg-surface-muted p-1"
+              className="filter-rail no-print inline-flex max-w-full flex-wrap items-center gap-1.5"
               role="group"
               aria-label="Filter team members by SUTD pillar"
             >
@@ -504,12 +488,17 @@ export function RosterPage() {
                     className={cn(
                       "filter-pill inline-flex min-h-10 cursor-pointer items-center gap-[0.45rem] rounded-full border px-[0.95rem] py-[0.4rem] type-ui font-semibold transition-[background-color,border-color,color] duration-150 pointer-coarse:min-h-11",
                       pressed
-                        ? "border-edge bg-surface font-bold text-ink shadow-chip"
-                        : "border-transparent bg-transparent text-ink-secondary hover:text-ink",
+                        ? "border-ink bg-ink text-page"
+                        : "border-rule bg-transparent text-ink-secondary hover:border-edge hover:text-ink",
                     )}
                   >
                     <span>{filter.label}</span>
-                    <span className="type-micro font-bold tabular text-ink-secondary">
+                    <span
+                      className={cn(
+                        "type-micro font-bold tabular",
+                        pressed ? "text-page/75" : "text-ink-muted",
+                      )}
+                    >
                       {pillarCounts[filter.id]}
                     </span>
                   </button>
@@ -618,6 +607,15 @@ export function RosterPage() {
             </nav>
           </div>
         ) : null}
+
+        {/* Below the chapter sticky breakpoint the identity column scrolls away, so pin a bar instead */}
+        <div className="min-[54rem]:hidden">
+          <IdentityIndicator
+            member={filteredMembers.find((m) => m.slug === activeChapterSlug) ?? null}
+            targetId={`chapter-${activeChapterSlug}`}
+            visible={inTeamSection && activeHeroHidden}
+          />
+        </div>
       </section>
 
       <SelectedWorkSection

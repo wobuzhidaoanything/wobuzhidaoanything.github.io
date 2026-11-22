@@ -1,9 +1,9 @@
-import { useMemo, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Pencil } from "lucide-react";
 import { cn } from "cn";
-import { GROUP_META } from "@/data/capstone";
+import { GROUP_META, type MemberProject } from "@/data/capstone";
 import { useLiveMembers } from "@/hooks/useLiveMembers";
 import { getPublicMembers } from "@/lib/membersStore";
 import { useEditorSession } from "@/lib/editorSession";
@@ -12,8 +12,9 @@ import {
   focusRouteHeading,
   runViewTransition,
 } from "@/lib/viewTransitions";
-import { scrollToSectionAligned } from "@/lib/scroll";
+import { getHeaderHeight, scrollToSectionAligned } from "@/lib/scroll";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
+import { IdentityIndicator } from "@/components/IdentityIndicator";
 import { MemberLinksRow } from "@/components/MemberLinksRow";
 import { ProjectDetailContent } from "@/components/ProjectDetailContent";
 import { TransitionLink } from "@/components/TransitionLink";
@@ -50,8 +51,53 @@ const quietLinkStyles = cn(
   "pointer-coarse:min-h-11",
 );
 
-const sectionTitleStyles =
-  "m-0 type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted";
+function DetailSection({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby={id}
+      className="grid min-w-0 scroll-mt-24 grid-cols-[minmax(0,1fr)] gap-y-4 border-t border-rule pt-[clamp(1.5rem,3dvb,2.25rem)] first:border-t-0 first:pt-0 @min-[54rem]/detail-body:grid-cols-[10.5rem_minmax(0,1fr)] @min-[54rem]/detail-body:gap-x-[clamp(2rem,4cqi,4rem)]"
+    >
+      <h2
+        id={id}
+        className="m-0 pt-0.5 type-ui-sm font-semibold text-ink-muted @min-[54rem]/detail-body:sticky @min-[54rem]/detail-body:top-[calc(var(--header-h)+1.5rem)] @min-[54rem]/detail-body:self-start"
+      >
+        {title}
+      </h2>
+      <div className="grid min-w-0 gap-4">{children}</div>
+    </section>
+  );
+}
+
+function ProjectMeta({ project }: { project: MemberProject }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {project.tag ? (
+        <span className="rounded-chip border border-rule bg-surface-muted px-2.5 py-0.5 type-micro font-semibold text-ink-secondary">
+          {project.tag}
+        </span>
+      ) : null}
+      {project.url && isValidHttpUrl(project.url) ? (
+        <a
+          href={project.url}
+          target="_blank"
+          rel="noreferrer"
+          className="ui-link-underline inline-flex min-h-9 items-center gap-1 type-ui-sm font-semibold text-(--tone) pointer-coarse:min-h-11"
+        >
+          <span>Open</span>
+          <ArrowUpRight className="size-3.5" aria-hidden="true" />
+        </a>
+      ) : null}
+    </div>
+  );
+}
 
 function hasAnyMemberLink(links?: {
   github?: string;
@@ -119,11 +165,37 @@ export function MemberDetailPage() {
     });
   };
 
+  const heroRef = useRef<HTMLElement | null>(null);
+  const [heroHidden, setHeroHidden] = useState(false);
+
+  useEffect(() => {
+    let rafId = 0;
+    const update = () => {
+      rafId = 0;
+      const hero = heroRef.current;
+      if (!hero) return;
+      const hidden = hero.getBoundingClientRect().bottom <= getHeaderHeight() + 4;
+      setHeroHidden((prev) => (prev === hidden ? prev : hidden));
+    };
+    const onScrollOrResize = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [member?.id]);
+
   if (!member) {
     return (
       <div className="shell shell-block">
         <section className="py-[clamp(3rem,8dvb,5.5rem)]">
-          <p className="mb-5 type-ui-sm font-semibold tracking-[0.04em] uppercase text-ink-secondary">
+          <p className="mb-5 type-ui-sm font-semibold text-ink-secondary">
             Profile not found
           </p>
           <h1
@@ -149,6 +221,9 @@ export function MemberDetailPage() {
     );
   }
 
+  const featuredProjects = (member.projects ?? []).slice(0, 3);
+  const remainingProjects = (member.projects ?? []).slice(3);
+
   const prevMember = navList[(memberIndex - 1 + navList.length) % navList.length];
   const nextMember = navList[(memberIndex + 1) % navList.length];
 
@@ -159,7 +234,8 @@ export function MemberDetailPage() {
     transitionState.mode === "member" && transitionState.memberSlug === member.slug;
 
   return (
-    <div className="shell shell-block @container/detail" data-pillar={member.pillar}>
+    <div id="member-top" className="shell pt-[clamp(1.25rem,3dvb,2rem)] pb-[clamp(3rem,6dvb,5rem)]" data-pillar={member.pillar}>
+      <IdentityIndicator member={member} targetId="member-top" visible={heroHidden} />
       <div className="mb-[clamp(2.25rem,5dvb,3.25rem)] flex flex-wrap items-center justify-between gap-4 border-b border-rule pb-4">
         <nav aria-label="Breadcrumb" className="min-w-0">
           <ol className="m-0 flex flex-wrap items-center gap-1.5 p-0 type-ui font-semibold text-ink-secondary">
@@ -231,235 +307,224 @@ export function MemberDetailPage() {
         </div>
       </div>
 
-      <article className="detail-profile-card grid min-w-0 items-start grid-cols-[minmax(0,1fr)_clamp(6.5rem,27cqi,13rem)] gap-x-[clamp(1rem,4cqi,2.5rem)] gap-y-[clamp(2rem,5cqi,3.25rem)] rounded-card border border-edge bg-surface p-[clamp(1.5rem,4.5cqi,3.5rem)] shadow-raised @min-[54rem]/detail:grid-cols-[minmax(16.5rem,0.78fr)_minmax(0,1.22fr)] @min-[54rem]/detail:grid-rows-[auto_1fr] @min-[54rem]/detail:gap-x-[clamp(2.5rem,5.5cqi,4.75rem)] @min-[54rem]/detail:gap-y-[clamp(2.25rem,5cqi,3.5rem)]">
-        <motion.aside
-          key={`${member.slug}-aside`}
-          initial={shouldReduceMotion ? false : { opacity: 0, y: "3%" }}
-          animate={{ opacity: 1, y: "0%" }}
-          transition={{ duration: 0.38, ease: EASE }}
-          className="col-start-1 row-start-1 grid min-w-0 content-start gap-4 @min-[54rem]/detail:sticky @min-[54rem]/detail:top-[calc(var(--header-h)+2.25rem)] @min-[54rem]/detail:row-span-2 @min-[54rem]/detail:gap-5"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <PillarBadge pillar={member.pillar}>
-              {member.pillar} · {member.pillarFull}
-            </PillarBadge>
-            {member.hidden ? (
-              <span className="rounded-chip border border-warning/40 bg-warning-surface px-2 py-0.5 type-micro font-semibold text-warning">
-                Hidden
-              </span>
-            ) : null}
-          </div>
-
-          <h1
-            id="main-content"
-            tabIndex={-1}
-            className="m-0 w-fit font-serif type-title-3 font-semibold focus:outline-none"
-            style={
-              isMorphTarget
-                ? ({ viewTransitionName: "member-name" } as React.CSSProperties)
-                : undefined
-            }
+      <article className="@container/detail-body min-w-0">
+        <header ref={heroRef} id="member-hero" className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-end gap-x-[clamp(2rem,5cqi,4.5rem)] gap-y-[clamp(1.75rem,4cqi,3rem)] border-b border-rule pb-[clamp(2.25rem,5dvb,3.5rem)] @min-[54rem]/detail-body:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <motion.div
+            key={`${member.slug}-aside`}
+            initial={shouldReduceMotion ? false : { opacity: 0, y: "3%" }}
+            animate={{ opacity: 1, y: "0%" }}
+            transition={{ duration: 0.38, ease: EASE }}
+            className="grid min-w-0 justify-items-start gap-4 @min-[54rem]/detail-body:gap-5"
           >
-            {member.name}
-          </h1>
-
-          {member.minor ? (
-            <p className="-mt-2 m-0 font-mono type-ui-sm font-medium tracking-[0.06em] uppercase text-ink-secondary">
-              Minor in {member.minor}
-            </p>
-          ) : null}
-
-          {member.role ? (
-            <p className="m-0 font-serif type-role italic font-medium text-accent">
-              {member.role}
-            </p>
-          ) : null}
-
-          {member.bio ? (
-            <p className="m-0 max-w-[34ch] type-body-lg text-ink-secondary @min-[54rem]/detail:max-w-[46ch]">
-              {member.bio}
-            </p>
-          ) : null}
-
-          {hasLinks ? <MemberLinksRow links={member.links} className="pt-1" /> : null}
-        </motion.aside>
-
-        <motion.div
-          key={`${member.slug}-media`}
-          initial={shouldReduceMotion ? false : { opacity: 0, y: "3%" }}
-          animate={{ opacity: 1, y: "0%" }}
-          transition={{ duration: 0.4, ease: EASE }}
-          className="col-start-2 row-start-1 min-w-0 self-start"
-        >
-          {hasHero || hasSecondary ? (
-            <div
-              className={cn(
-                "grid items-start gap-4",
-                hasHero && hasSecondary
-                  ? "grid-cols-1 @min-[54rem]/detail:grid-cols-2"
-                  : "grid-cols-1",
-              )}
-            >
-              {hasHero ? (
-                <ArtifactFrame
-                  member={member}
-                  src={member.artifacts?.heroImage}
-                  alignClassName="justify-items-end @min-[54rem]/detail:justify-items-center"
-                  photoMaxHeightClassName="max-h-[clamp(9.5rem,36cqi,15.5rem)] @min-[54rem]/detail:max-h-[clamp(22rem,58dvb,34rem)]"
-                  priority="high"
-                  showPlaceholder={false}
-                />
-              ) : null}
-              {hasSecondary ? (
-                <ArtifactFrame
-                  member={member}
-                  src={member.artifacts?.secondaryImage}
-                  alt={`${member.name} secondary artifact`}
-                  caption=""
-                  alignClassName="justify-items-end @min-[54rem]/detail:justify-items-center"
-                  photoMaxHeightClassName="max-h-[clamp(9.5rem,36cqi,15.5rem)] @min-[54rem]/detail:max-h-[clamp(22rem,58dvb,34rem)]"
-                  showPlaceholder={false}
-                />
+            <div className="flex flex-wrap items-center gap-2">
+              <PillarBadge pillar={member.pillar}>
+                {member.pillar} · {member.pillarFull}
+              </PillarBadge>
+              {member.hidden ? (
+                <span className="rounded-chip border border-warning/40 bg-warning-surface px-2 py-0.5 type-micro font-semibold text-warning">
+                  Hidden
+                </span>
               ) : null}
             </div>
-          ) : (
-            <ArtifactFrame
-              member={member}
-              mediaClassName="aspect-[4/5] @min-[54rem]/detail:aspect-[16/10]"
-              plateLabel={`${member.pillar} · ${member.pillarFull}`}
-            />
-          )}
-        </motion.div>
 
-        <motion.div
-          key={member.slug}
-          className="@container/detail-body col-span-2 row-start-2 grid min-w-0 content-start gap-[clamp(2rem,4.5cqi,3.25rem)] @min-[54rem]/detail:col-span-1 @min-[54rem]/detail:col-start-2"
-          variants={listStagger}
-          initial={shouldReduceMotion ? false : "hidden"}
-          animate="visible"
-        >
-
-          {member.skillsets.length > 0 ? (
-            <section
-              className="grid content-start gap-4 border-t border-rule pt-7"
-              aria-labelledby="detail-skills-heading"
+            <h1
+              id="main-content"
+              tabIndex={-1}
+              className="m-0 max-w-[16ch] font-serif type-title-2 font-semibold text-balance focus:outline-none"
+              style={
+                isMorphTarget
+                  ? ({ viewTransitionName: "member-name" } as React.CSSProperties)
+                  : undefined
+              }
             >
-              <h2 id="detail-skills-heading" className={sectionTitleStyles}>
-                Skillsets
-              </h2>
-              <ul className="m-0 grid list-none grid-cols-1 gap-x-8 gap-y-3.5 p-0 @min-[30rem]/detail-body:grid-cols-2">
+              {member.name}
+            </h1>
+
+            {member.minor ? (
+              <p className="-mt-2 m-0 type-body-sm font-medium text-ink-secondary text-ink-secondary">
+                Minor in {member.minor}
+              </p>
+            ) : null}
+
+            {member.bio ? (
+              <p className="m-0 max-w-[56ch] type-body-lg text-ink-secondary">
+                {member.bio}
+              </p>
+            ) : null}
+
+            {hasLinks ? <MemberLinksRow links={member.links} className="pt-1" /> : null}
+          </motion.div>
+
+          <motion.div
+            key={`${member.slug}-media`}
+            initial={shouldReduceMotion ? false : { opacity: 0, y: "3%" }}
+            animate={{ opacity: 1, y: "0%" }}
+            transition={{ duration: 0.4, ease: EASE }}
+            className="min-w-0"
+          >
+            {hasHero || hasSecondary ? (
+              <div
+                className={cn(
+                  "grid items-start gap-4",
+                  hasHero && hasSecondary
+                    ? "grid-cols-1 @min-[54rem]/detail-body:grid-cols-2"
+                    : "grid-cols-1",
+                )}
+              >
+                {hasHero ? (
+                  <ArtifactFrame
+                    member={member}
+                    src={member.artifacts?.heroImage}
+                    alignClassName="justify-items-start @min-[54rem]/detail-body:justify-items-center"
+                    photoMaxHeightClassName="max-h-[clamp(12rem,44dvb,26rem)] @min-[54rem]/detail-body:max-h-[clamp(20rem,56dvb,34rem)]"
+                    priority="high"
+                    showPlaceholder={false}
+                  />
+                ) : null}
+                {hasSecondary ? (
+                  <ArtifactFrame
+                    member={member}
+                    src={member.artifacts?.secondaryImage}
+                    alt={`${member.name} secondary artifact`}
+                    caption=""
+                    alignClassName="justify-items-start @min-[54rem]/detail-body:justify-items-center"
+                    photoMaxHeightClassName="max-h-[clamp(12rem,44dvb,26rem)] @min-[54rem]/detail-body:max-h-[clamp(20rem,56dvb,34rem)]"
+                    showPlaceholder={false}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <ArtifactFrame
+                member={member}
+                mediaClassName="aspect-[4/5] @min-[54rem]/detail-body:aspect-[16/10]"
+                plateLabel={`${member.pillar} · ${member.pillarFull}`}
+              />
+            )}
+          </motion.div>
+        </header>
+
+        <div className="grid min-w-0 gap-[clamp(2rem,4.5dvb,3.25rem)] py-[clamp(2.25rem,5dvb,3.5rem)]">
+          {member.skillsets.length > 0 ? (
+            <DetailSection id="detail-skills" title="Skillsets">
+              <motion.ul
+                key={`${member.slug}-skills`}
+                className="m-0 grid list-none grid-cols-1 gap-x-8 gap-y-4 p-0 @min-[30rem]/detail-body:grid-cols-2"
+                variants={listStagger}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate="visible"
+              >
                 {member.skillsets.map((skill, idx) => (
                   <motion.li
                     key={skill}
                     className="flex items-baseline gap-3.5 type-body text-ink"
                     variants={itemFade}
                   >
-                    <span className="shrink-0 font-serif type-body-sm italic font-[540] tabular text-accent">
+                    <span className="shrink-0 type-ui-sm font-semibold tabular text-ink-muted">
                       {String(idx + 1).padStart(2, "0")}
                     </span>
                     <span className="font-medium">{skill}</span>
                   </motion.li>
                 ))}
-              </ul>
-            </section>
+              </motion.ul>
+            </DetailSection>
           ) : null}
 
           {member.tools && member.tools.length > 0 ? (
-            <section
-              className="grid content-start gap-4 border-t border-rule pt-7"
-              aria-labelledby="detail-tools-heading"
-            >
-              <h2 id="detail-tools-heading" className={sectionTitleStyles}>
-                Tools &amp; Software
-              </h2>
+            <DetailSection id="detail-tools" title="Tools & Software">
               <ul className="m-0 flex list-none flex-wrap gap-2.5 p-0">
                 {member.tools.map((tool) => (
-                  <motion.li
+                  <li
                     key={tool}
-                    className="rounded-control border border-edge bg-surface-alt px-3.5 py-1.5 font-mono type-ui-sm font-semibold tracking-[0.02em] text-ink"
-                    variants={itemFade}
+                    className="rounded-control border border-edge bg-surface px-3.5 py-1.5 type-ui-sm font-semibold text-ink"
                   >
                     {tool}
-                  </motion.li>
+                  </li>
                 ))}
               </ul>
-            </section>
+            </DetailSection>
           ) : null}
 
           {member.projects && member.projects.length > 0 ? (
-            <section
-              className="grid content-start gap-4 border-t border-rule pt-7"
-              aria-labelledby="detail-projects-heading"
-            >
-              <h2 id="detail-projects-heading" className={sectionTitleStyles}>
-                Projects &amp; Internships
-              </h2>
-              <ul className="m-0 grid list-none gap-4 p-0">
-                {member.projects.map((project, idx) => (
-                  <motion.li
-                    key={project.title}
-                    className="flex items-baseline gap-4 rounded-card border border-rule bg-page/60 p-4"
-                    variants={itemFade}
-                  >
-                    <span className="shrink-0 font-serif type-body-sm italic font-[540] tabular text-accent">
-                      {String(idx + 1).padStart(2, "0")}
-                    </span>
-                    <div className="grid min-w-0 flex-1 gap-1.5">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <h3 className="m-0 font-serif type-label-lg font-semibold text-ink">
-                          {project.title}
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          {project.tag ? (
-                            <span className="rounded-chip border border-rule bg-surface px-2.5 py-0.5 font-mono type-micro font-semibold text-ink-secondary">
-                              {project.tag}
-                            </span>
-                          ) : null}
-                          {project.url && isValidHttpUrl(project.url) ? (
-                            <a
-                              href={project.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="ui-link-underline inline-flex min-h-9 items-center gap-1 type-ui-sm font-semibold text-(--tone) pointer-coarse:min-h-11"
-                            >
-                              <span>Open</span>
-                              <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                            </a>
-                          ) : null}
+            <DetailSection id="detail-projects" title="Projects & Internships">
+              {featuredProjects.length > 0 ? (
+                <motion.ul
+                  key={`${member.slug}-featured`}
+                  variants={listStagger}
+                  initial={shouldReduceMotion ? false : "hidden"}
+                  animate="visible"
+                  className="m-0 grid list-none gap-4 p-0"
+                >
+                  {featuredProjects.map((project, idx) => (
+                    <motion.li
+                      key={project.title}
+                      variants={itemFade}
+                      className="grid gap-3 rounded-card border border-edge bg-surface p-[clamp(1.15rem,2cqi,1.6rem)] shadow-raised"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                        <div className="flex min-w-0 items-baseline gap-3">
+                          <span className="shrink-0 type-ui-sm font-semibold tabular text-ink-muted">
+                            {String(idx + 1).padStart(2, "0")}
+                          </span>
+                          <h3 className="m-0 font-serif type-title-4 font-semibold text-ink">
+                            {project.title}
+                          </h3>
                         </div>
+                        <ProjectMeta project={project} />
                       </div>
-                      {project.detail ? (
-                        <ProjectDetailContent detail={project.detail} />
-                      ) : null}
-                    </div>
-                  </motion.li>
-                ))}
-              </ul>
-            </section>
+                      {project.detail ? <ProjectDetailContent detail={project.detail} /> : null}
+                    </motion.li>
+                  ))}
+                </motion.ul>
+              ) : null}
+
+              {remainingProjects.length > 0 ? (
+                <motion.ul
+                  key={`${member.slug}-remaining`}
+                  variants={listStagger}
+                  initial={shouldReduceMotion ? false : "hidden"}
+                  animate="visible"
+                  className="m-0 grid list-none p-0"
+                >
+                  {remainingProjects.map((project, idx) => (
+                    <motion.li
+                      key={project.title}
+                      variants={itemFade}
+                      className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 border-t border-rule py-4 first:border-t-0 first:pt-1 last:pb-0"
+                    >
+                      <span className="pt-0.5 type-ui-sm font-semibold tabular text-ink-muted">
+                        {String(featuredProjects.length + idx + 1).padStart(2, "0")}
+                      </span>
+                      <div className="grid min-w-0 gap-1.5">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5">
+                          <h3 className="m-0 font-serif type-heading font-semibold text-ink">
+                            {project.title}
+                          </h3>
+                          <ProjectMeta project={project} />
+                        </div>
+                        {project.detail ? <ProjectDetailContent detail={project.detail} /> : null}
+                      </div>
+                    </motion.li>
+                  ))}
+                </motion.ul>
+              ) : null}
+            </DetailSection>
           ) : null}
 
           {member.interests.length > 0 ? (
-            <section
-              className="grid content-start gap-4 border-t border-rule pt-7"
-              aria-labelledby="detail-interests-heading"
-            >
-              <h2 id="detail-interests-heading" className={sectionTitleStyles}>
-                Interests
-              </h2>
+            <DetailSection id="detail-interests" title="Interests">
               <ul className="m-0 flex list-none flex-wrap gap-2.5 p-0">
                 {member.interests.map((interest) => (
-                  <motion.li
+                  <li
                     key={interest}
                     className="rounded-control border border-rule bg-surface-alt px-3.5 py-1.5 type-ui font-medium text-ink"
-                    variants={itemFade}
                   >
                     {interest}
-                  </motion.li>
+                  </li>
                 ))}
               </ul>
-            </section>
+            </DetailSection>
           ) : null}
-        </motion.div>
+        </div>
       </article>
     </div>
   );

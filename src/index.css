@@ -8,78 +8,77 @@
    ========================================================================== */
 
 @theme {
-  --palette-paper-light: #faf8f3;
-  --palette-paper-dark: #0f0f0e;
+  --palette-paper-light: #f5f6f6;
+  --palette-paper-dark: #121415;
 
   --palette-surface-light: #ffffff;
-  --palette-surface-dark: #1d1d1a;
+  --palette-surface-dark: #1a1c1f;
 
-  --palette-surface-muted-light: #e6e1d4;
-  --palette-surface-muted-dark: #282723;
+  --palette-surface-muted-light: #e9ebe9;
+  --palette-surface-muted-dark: #23262a;
 
-  --palette-surface-alt-light: #efece3;
-  --palette-surface-alt-dark: #161614;
+  --palette-surface-alt-light: #eceeeb;
+  --palette-surface-alt-dark: #16181b;
 
-  --palette-ink-light: #0e0e0d;
-  --palette-ink-dark: #f7f5ee;
+  --palette-ink-light: #1b1d1f;
+  --palette-ink-dark: #e9ebe9;
 
-  --palette-ink-secondary-light: #272522;
-  --palette-ink-secondary-dark: #e4e1d8;
+  --palette-ink-secondary-light: #40454b;
+  --palette-ink-secondary-dark: #c3c7cb;
 
-  --palette-ink-muted-light: #47443e;
-  --palette-ink-muted-dark: #c0bcb1;
+  --palette-ink-muted-light: #5d636b;
+  --palette-ink-muted-dark: #979ea6;
 
-  --palette-rule-light: #ccc5b6;
-  --palette-rule-dark: #3b3933;
+  --palette-rule-light: #dcdedb;
+  --palette-rule-dark: #2c2f33;
 
-  --palette-edge-light: #6b675e;
-  --palette-edge-dark: #878276;
+  --palette-edge-light: #6d747d;
+  --palette-edge-dark: #727a83;
 
-  --palette-control-light: #262522;
-  --palette-control-dark: #cbc6ba;
+  --palette-control-light: #2b2f34;
+  --palette-control-dark: #c4c9cd;
 
-  --palette-accent-light: #b54524;
-  --palette-accent-dark: #ee8263;
+  --palette-accent-light: #164e63;
+  --palette-accent-dark: #8fc9d4;
 
   --palette-accent-ink-light: #ffffff;
-  --palette-accent-ink-dark: #111110;
+  --palette-accent-ink-dark: #0d1619;
 
-  --palette-pillar-csd-light: #5b5c36;
-  --palette-pillar-csd-dark: #bfc39a;
-  --palette-pillar-epd-light: #b54524;
-  --palette-pillar-epd-dark: #ee8263;
-  --palette-pillar-esd-light: #66563f;
-  --palette-pillar-esd-dark: #c4b294;
+  --palette-pillar-csd-light: #0f6a5f;
+  --palette-pillar-csd-dark: #6fc4b6;
+  --palette-pillar-epd-light: #a04a1d;
+  --palette-pillar-epd-dark: #e09a5f;
+  --palette-pillar-esd-light: #59496f;
+  --palette-pillar-esd-dark: #bfa6cf;
 
-  /* Status hues: success/info borrow the pillar families; danger is a true
-     red, deliberately distinct from the terracotta brand accent. */
-  --palette-success-light: #2e6b4e;
-  --palette-success-dark: #86cfae;
-  --palette-success-surface-light: #e4efe6;
-  --palette-success-surface-dark: #1c2b23;
+  /* Status hues: success/info sit near the teal end of the pillar range; danger stays a true red. */
+  --palette-success-light: #1e6b4c;
+  --palette-success-dark: #7fd0a4;
+  --palette-success-surface-light: #e3efe6;
+  --palette-success-surface-dark: #18251d;
 
-  --palette-danger-light: #a72c1e;
-  --palette-danger-dark: #f0705c;
-  --palette-danger-surface-light: #f7e5e0;
-  --palette-danger-surface-dark: #2e1d19;
+  --palette-danger-light: #a92c22;
+  --palette-danger-dark: #ef867c;
+  --palette-danger-surface-light: #f7e4e0;
+  --palette-danger-surface-dark: #2a1b17;
 
-  --palette-warning-light: #8a6100;
-  --palette-warning-dark: #e0b34e;
-  --palette-warning-surface-light: #f3ead2;
-  --palette-warning-surface-dark: #2b2517;
+  --palette-warning-light: #6f5200;
+  --palette-warning-dark: #ddb65a;
+  --palette-warning-surface-light: #f2ecd9;
+  --palette-warning-surface-dark: #26200f;
 
-  --palette-info-light: #3d4e75;
-  --palette-info-dark: #a2b7e3;
-  --palette-info-surface-light: #e4e9f3;
-  --palette-info-surface-dark: #1c2230;
+  --palette-info-light: #2f4d6e;
+  --palette-info-dark: #a3bedd;
+  --palette-info-surface-light: #e6ebf2;
+  --palette-info-surface-dark: #1a222c;
 
-  --palette-scrim-light: #0e0e0d6b;
-  --palette-scrim-dark: #000000a3;
+  --palette-scrim-light: #14161a75;
+  --palette-scrim-dark: #000000a6;
 
-  --palette-scroll-track-light: #efece3;
-  --palette-scroll-track-dark: #161614;
-  --palette-scroll-thumb-light: #6b675e;
-  --palette-scroll-thumb-dark: #878276;
+  --palette-scroll-track-light: #eceeeb;
+  --palette-scroll-track-dark: #16181b;
+  --palette-scroll-thumb-light: #6d747d;
+  --palette-scroll-thumb-dark: #727a83;
 }
 
 /* ==========================================================================
@@ -93,99 +92,81 @@
 }
 
 @theme {
-  --font-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
   --font-sans:
-    "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    sans-serif;
+    "IBM Plex Sans Variable", "IBM Plex Sans", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", sans-serif;
   --font-mono:
-    "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   /* Display & titles: serif */
-  --type-display: clamp(2.5rem, 0.5rem + 17cqi, 11.5rem);
-  --type-display--leading: 0.95;
-  --type-display--tracking: -0.04em;
-  --type-title-1: clamp(2.35rem, 1.4rem + 4cqi, 4.75rem);
-  --type-title-1--leading: 1.03;
-  --type-title-1--tracking: -0.035em;
-  --type-title-2: clamp(2.25rem, 1.4rem + 3.4cqi, 4.25rem);
-  --type-title-2--leading: 1.04;
-  --type-title-2--tracking: -0.032em;
-  --type-title-3: clamp(2rem, 1.25rem + 3.2cqi, 3.375rem);
-  --type-title-3--leading: 1.06;
-  --type-title-3--tracking: -0.028em;
-  --type-title-4: clamp(1.625rem, 1.05rem + 1.9cqi, 2.375rem);
-  --type-title-4--leading: 1.08;
-  --type-title-4--tracking: -0.028em;
-  --type-title-sub: clamp(1.5rem, 1.1rem + 3.5cqi, 3.25rem);
-  --type-title-sub--leading: 1.06;
-  --type-title-sub--tracking: -0.025em;
-  --type-brand: clamp(0.95rem, 0.82rem + 1cqi, 1.6875rem);
-  --type-brand--leading: 1.08;
-  --type-brand--tracking: -0.025em;
-  --type-brand-sub: clamp(0.6875rem, 0.65rem + 0.14cqi, 0.78rem);
-  --type-brand-sub--leading: 1.15;
-  --type-brand-sub--tracking: 0.06em;
+  --type-display: clamp(2.75rem, 0.75rem + 9.5cqi, 7.5rem);
+  --type-display--leading: 0.98;
+  --type-display--tracking: -0.022em;
+  --type-title-1: clamp(2.125rem, 1.15rem + 3.4cqi, 3.5rem);
+  --type-title-1--leading: 1.05;
+  --type-title-1--tracking: -0.02em;
+  --type-title-2: clamp(1.75rem, 1.15rem + 2.3cqi, 2.75rem);
+  --type-title-2--leading: 1.1;
+  --type-title-2--tracking: -0.015em;
+  --type-title-3: clamp(1.375rem, 1rem + 1.5cqi, 2rem);
+  --type-title-3--leading: 1.15;
+  --type-title-3--tracking: -0.012em;
+  --type-title-4: clamp(1.25rem, 1.05rem + 0.7cqi, 1.5rem);
+  --type-title-4--leading: 1.2;
+  --type-title-4--tracking: -0.008em;
+  --type-title-sub: clamp(1.375rem, 0.95rem + 3cqi, 2.625rem);
+  --type-title-sub--leading: 1.08;
+  --type-title-sub--tracking: -0.012em;
+  --type-brand: clamp(0.95rem, 0.85rem + 1cqi, 1.4rem);
+  --type-brand--leading: 1.1;
+  --type-brand--tracking: -0.012em;
+  --type-brand-sub: 0.6875rem;
+  --type-brand-sub--leading: 1.4;
+  --type-brand-sub--tracking: 0.02em;
 
-  /* Headings: serif */
-  --type-heading-lg: clamp(1.625rem, 1.3rem + 1.2cqi, 2.25rem);
-  --type-heading-lg--leading: 1.15;
-  --type-heading-lg--tracking: -0.026em;
-  --type-heading: clamp(1.35rem, 1.15rem + 0.65cqi, 1.65rem);
-  --type-heading--leading: 1.15;
-  --type-heading--tracking: -0.025em;
-  --type-heading-xs: 1.3125rem;
-  --type-heading-xs--leading: 1.15;
-  --type-heading-xs--tracking: -0.015em;
-  --type-label-lg: 1.0625rem;
-  --type-label-lg--leading: 1.3;
-  --type-label-lg--tracking: -0.01em;
+  /* Headings: serif by call-site, sized here */
+  --type-heading: clamp(1.25rem, 1.1rem + 0.55cqi, 1.5rem);
+  --type-heading--leading: 1.22;
+  --type-heading--tracking: -0.01em;
+  --type-heading-xs: clamp(1.0625rem, 1rem + 0.3cqi, 1.25rem);
+  --type-heading-xs--leading: 1.3;
+  --type-heading-xs--tracking: -0.005em;
 
-  /* Serif accents */
-  --type-role: clamp(1.125rem, 1rem + 0.65cqi, 1.4rem);
-  --type-role--leading: 1.25;
-  --type-name: clamp(1.375rem, 1.15rem + 1.8cqi, 1.75rem);
-  --type-name--leading: 1.2;
-  --type-name--tracking: -0.022em;
-  --type-name-sm: 1.25rem;
-  --type-name-sm--leading: 1.3;
-  --type-name-sm--tracking: -0.01em;
-  --type-item: clamp(1.1875rem, 1rem + 0.65cqi, 1.5rem);
-  --type-item--leading: 1.2;
-  --type-item--tracking: -0.018em;
-  --type-figure: clamp(1.75rem, 1.35rem + 1.1cqi, 2.35rem);
+  /* Figures: sans numerals */
+  --type-figure: clamp(2.5rem, 1.5rem + 2.2cqi, 3.5rem);
   --type-figure--leading: 1;
-  --type-figure--tracking: -0.03em;
-  --type-numeral: clamp(2.75rem, 1.15rem + 16cqi, 5.5rem);
-  --type-numeral--leading: 0.88;
-  --type-numeral--tracking: -0.04em;
+  --type-figure--tracking: -0.02em;
 
   /* Running text: sans */
-  --type-body-lg: clamp(1rem, 0.94rem + 0.4cqi, 1.1875rem);
-  --type-body-lg--leading: 1.68;
+  --type-body-lg: clamp(1rem, 0.95rem + 0.35cqi, 1.125rem);
+  --type-body-lg--leading: 1.65;
   --type-body: 1rem;
   --type-body--leading: 1.65;
-  --type-body-sm: 0.9375rem;
+  --type-body-sm: 0.875rem;
   --type-body-sm--leading: 1.6;
   --type-ui: 0.875rem;
-  --type-ui--leading: 1.5;
+  --type-ui--leading: 1.45;
   --type-ui-sm: 0.8125rem;
   --type-ui-sm--leading: 1.4;
   --type-micro: 0.75rem;
-  --type-micro--leading: 1.3;
+  --type-micro--leading: 1.35;
 
   --container-page: 76rem;
   --spacing-gutter: clamp(1.125rem, 4.5dvw, 3.5rem);
 
-  --radius-control: 0.625rem;
+  --radius-control: 0.5rem;
   --radius-chip: 0.375rem;
   --radius-chip-inner: 0.25rem;
-  --radius-card: clamp(1rem, 1.6cqi, 1.375rem);
-  --radius-frame: clamp(1.125rem, 2cqi, 1.625rem);
+  --radius-card: 0.625rem;
+  --radius-frame: 0.75rem;
 
-  --shadow-chip: 0 2px 6px -2px light-dark(rgb(14 14 13 / 0.22), rgb(0 0 0 / 0.55));
-  --shadow-raised: 0 12px 28px -16px light-dark(rgb(14 14 13 / 0.22), rgb(0 0 0 / 0.55));
-  --shadow-panel: 0 20px 44px -24px light-dark(rgb(14 14 13 / 0.2), rgb(0 0 0 / 0.5));
-  --shadow-float: 0 18px 36px -14px light-dark(rgb(18 18 17 / 0.32), rgb(0 0 0 / 0.6));
+  --shadow-a: light-dark(rgb(18 20 22 / 0.08), rgb(0 0 0 / 0.5));
+  --shadow-b: light-dark(rgb(18 20 22 / 0.2), rgb(0 0 0 / 0.58));
+  --shadow-chip: 0 1px 2px 0 var(--shadow-a);
+  --shadow-raised: 0 1px 2px var(--shadow-a), 0 10px 24px -14px var(--shadow-b);
+  --shadow-panel: 0 18px 40px -18px var(--shadow-b);
+  --shadow-float: 0 16px 36px -14px var(--shadow-b);
 
   --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: linear(
@@ -441,7 +422,7 @@
 }
 
 @utility shell-block {
-  padding-block: clamp(3rem, 7dvb, 5.5rem) clamp(4.5rem, 9dvb, 7.5rem);
+  padding-block: clamp(3.5rem, 8dvb, 6.5rem) clamp(5rem, 10dvb, 8rem);
 }
 
 @utility tabular {
@@ -497,13 +478,6 @@
   font-size-adjust: from-font;
 }
 
-@utility type-heading-lg {
-  font-size: var(--type-heading-lg);
-  line-height: var(--type-heading-lg--leading);
-  letter-spacing: var(--type-heading-lg--tracking);
-  font-size-adjust: from-font;
-}
-
 @utility type-heading {
   font-size: var(--type-heading);
   line-height: var(--type-heading--leading);
@@ -518,51 +492,10 @@
   font-size-adjust: from-font;
 }
 
-@utility type-label-lg {
-  font-size: var(--type-label-lg);
-  line-height: var(--type-label-lg--leading);
-  letter-spacing: var(--type-label-lg--tracking);
-  font-size-adjust: from-font;
-}
-
-@utility type-role {
-  font-size: var(--type-role);
-  line-height: var(--type-role--leading);
-  font-size-adjust: from-font;
-}
-
-@utility type-name {
-  font-size: var(--type-name);
-  line-height: var(--type-name--leading);
-  letter-spacing: var(--type-name--tracking);
-  font-size-adjust: from-font;
-}
-
-@utility type-name-sm {
-  font-size: var(--type-name-sm);
-  line-height: var(--type-name-sm--leading);
-  letter-spacing: var(--type-name-sm--tracking);
-  font-size-adjust: from-font;
-}
-
-@utility type-item {
-  font-size: var(--type-item);
-  line-height: var(--type-item--leading);
-  letter-spacing: var(--type-item--tracking);
-  font-size-adjust: from-font;
-}
-
 @utility type-figure {
   font-size: var(--type-figure);
   line-height: var(--type-figure--leading);
   letter-spacing: var(--type-figure--tracking);
-  font-size-adjust: from-font;
-}
-
-@utility type-numeral {
-  font-size: var(--type-numeral);
-  line-height: var(--type-numeral--leading);
-  letter-spacing: var(--type-numeral--tracking);
   font-size-adjust: from-font;
 }
 

@@ -314,11 +314,11 @@ export function ProjectsEditor({ projects, onChange, error, showErrors }: Projec
           >
             <summary className="min-h-10 justify-between gap-3 select-none">
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <span className="truncate font-serif type-label-lg font-semibold text-ink">
+                <span className="truncate type-body font-semibold text-ink">
                   {project.title.trim() || `Project ${index + 1} (untitled)`}
                 </span>
                 {project.tag.trim() ? (
-                  <span className="rounded-chip border border-rule bg-surface-muted px-2 py-0.5 font-mono type-micro font-semibold text-ink-secondary">
+                  <span className="rounded-chip border border-rule bg-surface-muted px-2 py-0.5 type-micro font-semibold text-ink-secondary">
                     {project.tag.trim()}
                   </span>
                 ) : null}
@@ -327,10 +327,10 @@ export function ProjectsEditor({ projects, onChange, error, showErrors }: Projec
                 {project.featured !== false ? (
                   <>
                     <Star className="size-3 fill-accent text-accent" aria-hidden="true" />
-                    <span>Featured</span>
+                    <span>Starred</span>
                   </>
                 ) : (
-                  <span>Profile only</span>
+                  <span>Not starred</span>
                 )}
               </span>
             </summary>
@@ -405,7 +405,7 @@ export function ProjectsEditor({ projects, onChange, error, showErrors }: Projec
                     onChange={(e) => update(index, { featured: e.target.checked })}
                     className="size-4"
                   />
-                  <span>Feature in Our Experience &amp; Expertise on home page</span>
+                  <span>Star: show in Our Experience &amp; Expertise on the home page</span>
                 </label>
 
                 <div className="flex items-center gap-1.5">

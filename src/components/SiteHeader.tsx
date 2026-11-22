@@ -280,7 +280,7 @@ export function SiteHeader() {
           <span className="font-serif type-brand font-semibold [text-box:trim-start_cap_text]">
             {GROUP_META.code}
           </span>
-          <span className="font-sans type-brand-sub font-semibold uppercase text-ink-secondary [text-box:trim-both_cap_alphabetic]">
+          <span className="font-sans type-brand-sub font-semibold text-ink-muted">
             {GROUP_META.institution}
           </span>
         </TransitionLink>

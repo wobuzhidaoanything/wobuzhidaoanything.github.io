@@ -26,7 +26,6 @@ export interface EditorForm {
   name: string;
   pillar: Pillar;
   minor: string;
-  role: string;
   bio: string;
   skillsetsText: string;
   interestsText: string;
@@ -39,22 +38,23 @@ export interface EditorForm {
   alt: string;
 }
 
+// Keep in sync with the Worker limits in worker/index.js. The Worker remains the
+// source of truth; these only mirror it so the form can validate before submit.
 export const LIMITS = {
-  name: 60,
-  pillarFull: 80,
-  minor: 80,
-  role: 80,
-  bio: 600,
-  listItem: 80,
-  listCount: 12,
-  projectTitle: 80,
-  projectDetail: 800,
-  projectTag: 64,
-  projectCount: 12,
-  url: 200,
-  email: 120,
-  caption: 160,
-  alt: 160,
+  name: 120,
+  pillarFull: 160,
+  minor: 160,
+  bio: 2000,
+  listItem: 200,
+  listCount: 24,
+  projectTitle: 160,
+  projectDetail: 4000,
+  projectTag: 160,
+  projectCount: 24,
+  url: 500,
+  email: 254,
+  caption: 300,
+  alt: 300,
 } as const;
 
 export const PILLAR_FULL: Record<Pillar, string> = {
@@ -76,7 +76,6 @@ export function formFromMember(member: TeamMember): EditorForm {
     name: member.name,
     pillar: member.pillar,
     minor: member.minor ?? "",
-    role: member.role,
     bio: member.bio,
     skillsetsText: serializeList(member.skillsets),
     interestsText: serializeList(member.interests),
@@ -110,7 +109,6 @@ export type EditorTabId = "basics" | "skills" | "projects" | "photos";
 export type FormField =
   | "name"
   | "minor"
-  | "role"
   | "bio"
   | "linksGithub"
   | "linksLinkedin"
@@ -128,7 +126,6 @@ export type FormErrors = Partial<Record<FormField, string>>;
 export const FIELD_ELEMENT_IDS: Record<FormField, string> = {
   name: "member-name",
   minor: "member-minor",
-  role: "member-role",
   bio: "member-bio",
   linksGithub: "member-link-github",
   linksLinkedin: "member-link-linkedin",
@@ -145,7 +142,6 @@ export const FIELD_ELEMENT_IDS: Record<FormField, string> = {
 export const FIELD_TAB: Record<FormField, EditorTabId> = {
   name: "basics",
   minor: "basics",
-  role: "basics",
   bio: "basics",
   linksGithub: "basics",
   linksLinkedin: "basics",
@@ -207,8 +203,6 @@ export function validateForm(form: EditorForm): FormErrors {
   }
   const minorError = capError(form.minor, LIMITS.minor, "Minor");
   if (minorError) errors.minor = minorError;
-  const roleError = capError(form.role, LIMITS.role, "Role");
-  if (roleError) errors.role = roleError;
   const bioError = capError(form.bio, LIMITS.bio, "Bio");
   if (bioError) errors.bio = bioError;
 
@@ -243,7 +237,7 @@ export function validateForm(form: EditorForm): FormErrors {
   } else if (form.projects.some((p) => p.tag.trim().length > LIMITS.projectTag)) {
     errors.projects = `Project tags must be ${LIMITS.projectTag} characters or fewer.`;
   } else if (form.projects.some((p) => p.url.trim() && !isValidHttpUrl(p.url))) {
-    errors.projects = "Project links must be valid https:// or http:// URLs (200 chars max).";
+    errors.projects = `Project links must be valid https:// or http:// URLs (${LIMITS.url} chars max).`;
   }
 
   const captionError = capError(form.caption, LIMITS.caption, "Caption");
@@ -290,7 +284,6 @@ export function buildPayload(form: EditorForm, member: TeamMember): Omit<TeamMem
     name: form.name.trim(),
     pillar: form.pillar,
     pillarFull: PILLAR_FULL[form.pillar],
-    role: form.role.trim(),
     bio: form.bio.trim(),
     skillsets: parseList(form.skillsetsText),
     interests: parseList(form.interestsText),

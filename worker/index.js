@@ -40,27 +40,31 @@ const PILLAR_FULL = {
 };
 const ALLOWED_HERO_FOCUS = new Set(["top", "center", "bottom"]);
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MEMBER_ID_RE = /^member-\d{2,3}$/;
+// Member ids are slugs derived from names (e.g. "paing-soe-khant"). The pattern
+// also matches the legacy zero-padded ids ("member-01") so old data stays valid.
+const MAX_MEMBER_ID_LEN = 63;
+const MEMBER_ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_MULTIPART_OVERHEAD = 64 * 1024;
-const MAX_JSON_BYTES = 64 * 1024;
+const MAX_JSON_BYTES = 512 * 1024;
 
+// Caps are generous on purpose: KV stores the bytes, this only guards the
+// public write endpoint against abuse and keeps payloads sane. Raise freely.
 const LIMITS = {
-  name: 60,
-  pillarFull: 80,
-  minor: 80,
-  role: 80,
-  bio: 600,
-  listItem: 80,
-  listCount: 12,
-  projectTitle: 80,
-  projectDetail: 800,
-  projectTag: 64,
-  projectCount: 12,
-  url: 200,
-  email: 120,
-  caption: 160,
-  alt: 160,
+  name: 120,
+  pillarFull: 160,
+  minor: 160,
+  bio: 2000,
+  listItem: 200,
+  listCount: 24,
+  projectTitle: 160,
+  projectDetail: 4000,
+  projectTag: 160,
+  projectCount: 24,
+  url: 500,
+  email: 254,
+  caption: 300,
+  alt: 300,
 };
 
 // Best-effort per-isolate throttle on failed password attempts.
@@ -137,7 +141,9 @@ function slugFromName(name, fallbackId) {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-|-$/g, "")
+    .slice(0, MAX_MEMBER_ID_LEN)
+    .replace(/-+$/g, "");
   return base || fallbackId;
 }
 
@@ -378,8 +384,6 @@ function sanitizeMember(input, fallback) {
   const minor = capString(input.minor, LIMITS.minor + 1);
   if (minor && minor.length > LIMITS.minor)
     return { error: `Minor must be ${LIMITS.minor} characters or fewer` };
-  const role = capString(input.role, LIMITS.role + 1);
-  if (role && role.length > LIMITS.role) return { error: `Role must be ${LIMITS.role} characters or fewer` };
   const bio = capString(input.bio, LIMITS.bio + 1);
   if (bio && bio.length > LIMITS.bio) return { error: `Bio must be ${LIMITS.bio} characters or fewer` };
 
@@ -390,7 +394,6 @@ function sanitizeMember(input, fallback) {
     name,
     pillar: input.pillar,
     pillarFull,
-    role: role !== null ? role : fallback.role || "",
     bio: bio !== null ? bio : fallback.bio || "",
     skillsets,
     interests,
@@ -555,7 +558,7 @@ export default {
       } catch {
         return json({ ok: false, error: "Invalid photo path" }, 400);
       }
-      if (!/^photo\/member-\d{2,3}\/(hero|secondary)$/.test(key)) {
+      if (!/^photo\/[a-z0-9][a-z0-9-]{0,62}\/(hero|secondary)$/.test(key)) {
         return json({ ok: false, error: "Photo not found" }, 404);
       }
       const result = await env.CAPSTONE_STORE.getWithMetadata(key, "arrayBuffer");
@@ -737,26 +740,23 @@ export default {
         if (!ALLOWED_PILLARS.has(body.pillar)) {
           return json({ ok: false, error: "Pillar must be CSD, EPD or ESD" }, 400);
         }
-        const role = capString(body.role, LIMITS.role + 1) || "";
-        if (role.length > LIMITS.role) {
-          return json({ ok: false, error: `Role must be ${LIMITS.role} characters or fewer` }, 400);
-        }
-        let maxNum = 0;
+        const usedIds = new Set();
         const usedSlugs = new Set();
         for (const m of existingMembers) {
-          const match = /^member-(\d+)$/.exec(m.id);
-          if (match) maxNum = Math.max(maxNum, Number(match[1]));
+          usedIds.add(m.id);
           if (m.slug) usedSlugs.add(m.slug);
         }
-        if (maxNum >= 999) return json({ ok: false, error: "Maximum member count reached" }, 400);
-        const id = `member-${String(maxNum + 1).padStart(2, "0")}`;
         const index = String(existingMembers.length + 1).padStart(2, "0");
-        const baseSlug = slugFromName(name, id);
+        const baseSlug = slugFromName(name, `member-${index}`);
         let slug = baseSlug;
         let suffix = 2;
-        while (usedSlugs.has(slug)) {
-          slug = `${baseSlug}-${suffix++}`;
+        while (usedIds.has(slug) || usedSlugs.has(slug)) {
+          const tag = `-${suffix++}`;
+          const head =
+            baseSlug.slice(0, MAX_MEMBER_ID_LEN - tag.length).replace(/-+$/g, "") || "member";
+          slug = `${head}${tag}`;
         }
+        const id = slug;
         const newMember = {
           id,
           index,
@@ -764,7 +764,6 @@ export default {
           name,
           pillar: body.pillar,
           pillarFull: PILLAR_FULL[body.pillar],
-          role,
           bio: "",
           skillsets: [],
           interests: [],

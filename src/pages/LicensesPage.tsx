@@ -6,22 +6,22 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const FONT_ATTRIBUTIONS = [
   {
-    name: "Newsreader",
+    name: "IBM Plex Sans",
     license: "SIL Open Font License 1.1",
-    copyright: "Copyright 2020 The Newsreader Project Authors",
-    url: "https://github.com/productiontype/Newsreader",
+    copyright: "Copyright 2017 IBM Corp.",
+    url: "https://github.com/IBM/plex",
   },
   {
-    name: "Geist",
+    name: "IBM Plex Serif",
     license: "SIL Open Font License 1.1",
-    copyright: "Copyright 2024 The Geist Project Authors",
-    url: "https://github.com/vercel/geist-font",
+    copyright: "Copyright 2020 IBM Corp.",
+    url: "https://github.com/IBM/plex",
   },
   {
-    name: "Geist Mono",
+    name: "IBM Plex Mono",
     license: "SIL Open Font License 1.1",
-    copyright: "Copyright 2024 The Geist Project Authors",
-    url: "https://github.com/vercel/geist-font",
+    copyright: "Copyright 2017 IBM Corp.",
+    url: "https://github.com/IBM/plex",
   },
 ];
 
@@ -46,7 +46,7 @@ const quietLinkStyles = cn(
 );
 
 const sectionTitleStyles =
-  "m-0 font-serif type-heading-xs font-[580] text-wrap-balance";
+  "m-0 font-serif type-heading-xs font-semibold text-wrap-balance";
 const sectionStyles = "mt-6 grid gap-4 border-t border-edge pt-7";
 
 export function LicensesPage() {
@@ -63,10 +63,10 @@ export function LicensesPage() {
 
       <article className="detail-profile-card @container/detail-card grid min-w-0 gap-[1.125rem] rounded-card border border-edge bg-surface p-[clamp(1.375rem,5cqi,3.25rem)]">
         <header className="mb-2 flex flex-wrap items-center justify-between gap-4">
-          <span className="w-fit font-serif type-item font-[560] tabular text-ink-secondary">
+          <span className="w-fit type-ui-sm font-semibold tabular text-ink-secondary">
             Colophon
           </span>
-          <span className="inline-flex items-center type-ui-sm font-semibold tracking-[0.04em] text-ink-secondary">
+          <span className="inline-flex items-center type-ui-sm font-semibold text-ink-secondary">
             Open Source · SIL OFL 1.1 &amp; MIT
           </span>
         </header>

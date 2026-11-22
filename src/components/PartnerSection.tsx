@@ -58,7 +58,7 @@ const secondaryCtaStyles = cn(
 const benefitItemStyles =
   "grid grid-cols-[auto_minmax(0,1fr)] content-start items-start gap-4 border-b border-rule py-4.5 first:border-t";
 const benefitNumStyles =
-  "pt-0.5 font-serif type-body-sm italic font-[540] tabular text-accent";
+  "pt-0.5 type-ui-sm font-semibold tabular text-ink-muted";
 
 export function PartnerSection() {
   const shouldReduceMotion = Boolean(useReducedMotion());
@@ -200,7 +200,7 @@ export function PartnerSection() {
       aria-labelledby="partner-heading"
     >
       <motion.div
-        className="shell grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[clamp(2.75rem,6dvb,4.5rem)] py-[clamp(5.5rem,11dvb,8.5rem)]"
+        className="shell grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[clamp(2rem,5dvb,3.5rem)] py-[clamp(3.5rem,8dvb,6rem)]"
         variants={sectionStagger}
         initial={shouldReduceMotion ? false : "hidden"}
         whileInView="visible"
@@ -211,7 +211,7 @@ export function PartnerSection() {
           className="grid min-w-0 grid-cols-1 items-start gap-x-[clamp(2rem,5cqi,4.5rem)] gap-y-7 @min-[54rem]/partner:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
         >
           <header className="grid min-w-0 max-w-[54ch] gap-4">
-            <p className="m-0 type-ui-sm font-semibold tracking-[0.05em] uppercase text-accent">
+            <p className="m-0 type-ui-sm font-semibold text-accent">
               {PARTNER_OUTREACH.kicker}
             </p>
             <h2 id="partner-heading" className="m-0 font-serif type-title-3 font-semibold text-wrap-balance">
@@ -221,7 +221,7 @@ export function PartnerSection() {
           </header>
 
           <div className="partner-card grid min-w-0 content-start gap-4 rounded-card border border-edge bg-surface p-[clamp(1.35rem,3.5cqi,2rem)] shadow-raised">
-            <p className="m-0 font-serif type-label-lg font-[560] text-ink">
+            <p className="m-0 type-body font-semibold text-ink">
               {PARTNER_OUTREACH.closingNote}
             </p>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
@@ -297,26 +297,26 @@ export function PartnerSection() {
           aria-label="Partnership highlights"
         >
           <div className="grid gap-1.5">
-            <dt className="type-micro font-semibold tracking-[0.05em] uppercase text-ink-muted">
+            <dt className="type-ui-sm font-semibold text-ink-muted">
               Delivery window
             </dt>
-            <dd className="m-0 font-serif type-heading font-[560] tabular text-ink">
+            <dd className="m-0 font-heading font-semibold text-ink">
               Sep 2027 – Apr 2028
             </dd>
           </div>
           <div className="grid gap-1.5">
-            <dt className="type-micro font-semibold tracking-[0.05em] uppercase text-ink-muted">
+            <dt className="type-ui-sm font-semibold text-ink-muted">
               Intellectual property
             </dt>
-            <dd className="m-0 font-serif type-heading font-[560] text-ink">
+            <dd className="m-0 type-heading font-semibold text-ink">
               100% Partner IP Ownership
             </dd>
           </div>
           <div className="grid gap-1.5">
-            <dt className="type-micro font-semibold tracking-[0.05em] uppercase text-ink-muted">
+            <dt className="type-ui-sm font-semibold text-ink-muted">
               Materials funding
             </dt>
-            <dd className="m-0 font-serif type-heading font-[560] tabular text-ink">
+            <dd className="m-0 font-heading font-semibold text-ink">
               Up to S$4,000 via SUTD
             </dd>
           </div>
@@ -327,7 +327,7 @@ export function PartnerSection() {
           className="grid min-w-0 grid-cols-1 gap-[clamp(1.75rem,3.5cqi,2.75rem)] @min-[46rem]/partner:grid-cols-2"
         >
           <div className="partner-card ui-card-interactive grid min-w-0 content-start gap-5 rounded-card border border-edge bg-surface p-[clamp(1.65rem,4.5cqi,2.5rem)]">
-            <h3 className="m-0 font-serif type-item font-[580]">{PARTNER_OUTREACH.benefitsHeading}</h3>
+            <h3 className="m-0 font-serif type-heading-xs font-semibold">{PARTNER_OUTREACH.benefitsHeading}</h3>
             <ol className="m-0 grid min-w-0 list-none p-0">
               {PARTNER_OUTREACH.benefits.map((item) => (
                 <li key={item.index} className={benefitItemStyles}>
@@ -342,7 +342,7 @@ export function PartnerSection() {
           </div>
 
           <div className="partner-card ui-card-interactive grid min-w-0 content-start gap-5 rounded-card border border-edge bg-surface p-[clamp(1.65rem,4.5cqi,2.5rem)]">
-            <h3 className="m-0 font-serif type-item font-[580]">{PARTNER_OUTREACH.termsHeading}</h3>
+            <h3 className="m-0 font-serif type-heading-xs font-semibold">{PARTNER_OUTREACH.termsHeading}</h3>
             <ol className="m-0 grid min-w-0 list-none p-0">
               {PARTNER_OUTREACH.terms.map((term) => (
                 <li key={term.index} className={benefitItemStyles}>
@@ -365,7 +365,7 @@ export function PartnerSection() {
           aria-labelledby="partner-faq-heading"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 id="partner-faq-heading" className="m-0 font-serif type-heading-xs font-[580] text-ink">
+            <h3 id="partner-faq-heading" className="m-0 font-serif type-heading-xs font-semibold text-ink">
               Partnership details &amp; FAQ
             </h3>
             <button

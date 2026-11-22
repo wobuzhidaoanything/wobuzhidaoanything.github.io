@@ -670,10 +670,10 @@ export function UpdateDetailsPage() {
       <div className="detail-page-shell shell shell-block">
         <article className="detail-profile-card @container/detail-card grid min-w-0 gap-[1.125rem] rounded-card border border-edge bg-surface p-[clamp(1.375rem,5cqi,3.25rem)]">
           <header className="flex flex-wrap items-center justify-between gap-4">
-            <span className="w-fit font-serif type-item font-[560] tabular text-ink-secondary">
+            <span className="w-fit type-ui-sm font-semibold tabular text-ink-secondary">
               Team settings
             </span>
-            <span className="inline-flex items-center gap-1.5 type-ui-sm font-semibold tracking-[0.04em] text-ink-secondary">
+            <span className="inline-flex items-center gap-1.5 type-ui-sm font-semibold text-ink-secondary">
               <Lock className="size-3.5" aria-hidden="true" />
               Private · Not indexed
             </span>
@@ -697,7 +697,7 @@ export function UpdateDetailsPage() {
     <div className="shell shell-block @container/studio">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-5">
         <div className="grid gap-1">
-          <span className="inline-flex items-center gap-1.5 type-ui-sm font-semibold tracking-[0.04em] uppercase text-ink-muted">
+          <span className="inline-flex items-center gap-1.5 type-ui-sm font-semibold text-ink-muted">
             <Lock className="size-3.5" aria-hidden="true" />
             Private · Not indexed
           </span>
@@ -758,7 +758,7 @@ export function UpdateDetailsPage() {
                 <span>Team Members</span>
               </button>
 
-              <div className="mt-3 mb-1 border-t border-rule pt-3 px-3 type-micro font-semibold tracking-[0.06em] uppercase text-ink-muted">
+              <div className="mt-3 mb-1 border-t border-rule pt-3 px-3 type-ui-sm font-semibold text-ink-muted">
                 Members
               </div>
 
@@ -853,7 +853,7 @@ export function UpdateDetailsPage() {
                         <span aria-hidden="true" className="text-ink-muted">
                           /
                         </span>
-                        <span className="font-serif type-label-lg font-semibold text-ink">
+                        <span className="type-body font-semibold text-ink">
                           {form.name.trim() || member.name}
                         </span>
                       </div>
@@ -983,7 +983,10 @@ export function UpdateDetailsPage() {
                     className="col-start-1 row-start-1 min-w-0"
                     hidden={activeTab !== "basics"}
                   >
-                    <div className="grid gap-5 pt-1">
+                    <div className="grid gap-6 pt-2">
+                      <p className="m-0 type-ui-sm text-ink-secondary">
+                        Who you are and how to reach you. Shown in the home page roster, on your member profile, and in the experience grid.
+                      </p>
                       <TextField
                         id="member-name"
                         label="Display name"
@@ -1029,28 +1032,16 @@ export function UpdateDetailsPage() {
                         </div>
                       </FieldShell>
 
-                      <div className="grid gap-4 @min-[30rem]/studio-pane:grid-cols-2">
-                        <TextField
-                          id="member-role"
-                          label="Role / focus"
-                          value={form.role}
-                          onChange={(role) => patchForm({ role })}
-                          onBlur={() => markTouched("role")}
-                          error={shownError("role")}
-                          maxLength={LIMITS.role}
-                          placeholder="e.g. Frontend & Interaction"
-                        />
-                        <TextField
-                          id="member-minor"
-                          label="Minor / second major"
-                          value={form.minor}
-                          onChange={(minor) => patchForm({ minor })}
-                          onBlur={() => markTouched("minor")}
-                          error={shownError("minor")}
-                          maxLength={LIMITS.minor}
-                          placeholder="Optional"
-                        />
-                      </div>
+                      <TextField
+                        id="member-minor"
+                        label="Minor / second major"
+                        value={form.minor}
+                        onChange={(minor) => patchForm({ minor })}
+                        onBlur={() => markTouched("minor")}
+                        error={shownError("minor")}
+                        maxLength={LIMITS.minor}
+                        placeholder="Optional"
+                      />
 
                       <TextAreaField
                         id="member-bio"
@@ -1065,8 +1056,8 @@ export function UpdateDetailsPage() {
                       />
 
                       <div className="grid gap-4 border-t border-rule pt-5">
-                        <h2 className="m-0 type-ui font-semibold text-ink">
-                          External Links (optional)
+                        <h2 className="m-0 type-ui-sm font-semibold text-ink-secondary">
+                          Contact links (optional)
                         </h2>
                         <div className="grid gap-4 @min-[30rem]/studio-pane:grid-cols-2">
                           <TextField
@@ -1152,7 +1143,10 @@ export function UpdateDetailsPage() {
                     className="col-start-1 row-start-1 min-w-0"
                     hidden={activeTab !== "skills"}
                   >
-                    <div className="grid gap-6 pt-1">
+                    <div className="grid gap-6 pt-2">
+                      <p className="m-0 type-ui-sm text-ink-secondary">
+                        Shown on your profile and in your chapter on the home page. Order and spelling are kept exactly as you write them.
+                      </p>
                       <ItemsEditor
                         key={`${member.id}-skills`}
                         id="member-skills"
@@ -1204,9 +1198,9 @@ export function UpdateDetailsPage() {
                     className="col-start-1 row-start-1 min-w-0"
                     hidden={activeTab !== "projects"}
                   >
-                    <div className="grid gap-4 pt-1">
+                    <div className="grid gap-5 pt-2">
                       <p className="m-0 type-ui-sm text-ink-secondary">
-                        Featured projects automatically appear in Our Experience &amp; Expertise on the home page.
+                        Your first three projects appear large on your profile; the rest render as compact rows in the order listed below. Starred projects also appear in Our Experience &amp; Expertise on the home page (up to three per member). Use the arrows to reorder.
                       </p>
                       <ProjectsEditor
                         key={`${member.id}-projects`}
@@ -1229,7 +1223,7 @@ export function UpdateDetailsPage() {
                     className="col-start-1 row-start-1 min-w-0"
                     hidden={activeTab !== "photos"}
                   >
-                    <div className="grid gap-5 pt-1">
+                    <div className="grid gap-6 pt-2">
                       <p className="m-0 type-ui-sm text-ink-secondary">
                         Stage photo changes here. When you click Save changes, photos publish first followed by your profile text.
                       </p>

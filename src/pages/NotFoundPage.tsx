@@ -10,7 +10,7 @@ export function NotFoundPage() {
   return (
     <div className="shell shell-block">
       <section className="py-[clamp(3rem,8dvb,5.5rem)]">
-        <p className="mb-5 type-ui-sm font-semibold tracking-[0.04em] uppercase text-ink-secondary">
+        <p className="mb-5 type-ui-sm font-semibold text-ink-secondary">
           404 · Route Not Found
         </p>
         <h1

@@ -24,7 +24,7 @@ export function PillarBadge({
     <span
       className={cn(
         "pillar-label inline-flex items-center",
-        "type-ui-sm font-semibold tracking-[0.04em]",
+        "type-ui-sm font-semibold",
         "[text-box:trim-both_cap_alphabetic]",
         accentByPillar[pillar],
         className,

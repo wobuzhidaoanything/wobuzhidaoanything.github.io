@@ -1,105 +1,442 @@
 [
   {
-    "id": "member-01",
+    "id": "soe-khant",
     "index": "01",
-    "name": "Soe Khant",
+    "slug": "soe-khant",
+    "name": "Paing Soe Khant",
     "pillar": "ESD",
     "pillarFull": "Engineering Systems & Design",
-    "role": "Optimization & Modeling",
-    "bio": "Focuses on operations research, discrete-event simulation, and decision analytics.",
-    "skillsets": ["Optimization", "Simulation", "Python", "Queueing Models", "Data Analysis"],
-    "interests": ["Urban Systems", "Operations Research", "Cartography", "Running"]
+    "bio": "Year 3 ESD student at SUTD (Business Analytics & Operations Research), on a one-year entrepreneurship programme at KTH Stockholm, and Machine Learning Intern at Cager.ai. Turns messy operational data into tools people actually use: forecasting pipelines, live dashboards, and data bots for factories, banks and kitchens.",
+    "skillsets": [
+      "Data Analytics & BI",
+      "Machine Learning & Forecasting",
+      "Operations Research & Optimisation",
+      "Data Engineering & Industrial IoT",
+      "Product Building & Prototyping"
+    ],
+    "interests": [
+      "Urban Systems",
+      "Operations Research",
+      "Cartography",
+      "Running"
+    ],
+    "artifacts": {
+      "heroImage": "photo/soe-khant/hero"
+    },
+    "version": 4,
+    "updatedAt": "2026-11-22T02:11:29.557Z",
+    "tools": [
+      "Python",
+      "SQL",
+      "R",
+      "Julia",
+      "Power BI",
+      "Tableau",
+      "XGBoost",
+      "Prophet",
+      "LangChain",
+      "Node-RED",
+      "MQTT",
+      "PostgreSQL"
+    ],
+    "projects": [
+      {
+        "title": "UOB ATM Cash Replenishment System",
+        "detail": "End-to-end ML pipeline automating daily cash replenishment for 350 ATMs across Singapore. Hybrid ensemble of Holt-Winters, XGBoost and Prophet with dynamic model selection driven by real-time error monitoring, plus an interactive dashboard with Overview, 7-Day Schedule and Location Profiles tabs.",
+        "tag": "UOB, 2026",
+        "url": "https://frabjous-bonbon-b4d2d7.netlify.app/"
+      },
+      {
+        "title": "Keystone Data Analysis Bot",
+        "detail": "LLM assistant built with Python, LangChain and OpenRouter that lets Keystone Cable staff query sensitive production data and Excel files in natural language, returning text answers and generated graphs.",
+        "tag": "Keystone Cable, 2025-26"
+      },
+      {
+        "title": "Keystone Operator Compliance Log & Dashboard",
+        "detail": "Node-RED and PostgreSQL system logging operator start and finish times and machine usage, feeding a Power BI dashboard of compliant vs non-compliant workers against the schedule (SOP compliance visibility).",
+        "tag": "Keystone Cable, 2025-26"
+      },
+      {
+        "title": "Keystone MQTT Broker Restructure",
+        "detail": "Restructured the factory's MQTT broker, optimising message payloads and topics for cleaner, more reliable live production-floor data and better live data visualisation.",
+        "tag": "Keystone Cable, 2025-26"
+      },
+      {
+        "title": "CBS Peer Performance Dashboard",
+        "detail": "Interactive Tableau dashboard letting CBS subscriber banks benchmark their credit portfolio performance against anonymised peer data.",
+        "tag": "CBS, 2026",
+        "url": "https://drive.google.com/file/d/1DrGq9jE8DPUczOD6fAJwts4xf-_wYyK1/view?usp=sharing"
+      },
+      {
+        "title": "Cayenne's Inventory Management System",
+        "detail": "Pareto analysis of 3 months of sales (13 of 105 items made up 80% of sales) set stock priorities; built a real-time inventory dashboard shared across all 3 kitchens that auto-deducts stock on orders and updates on deliveries.",
+        "tag": "Cayenne's, 2026",
+        "url": "https://cayennes.netlify.app/"
+      },
+      {
+        "title": "FlowFinder, What The Hack 2025 Winner",
+        "detail": "Best Hack, 1st place in Clean Water & Sanitation. GPS-enabled device measuring water turbidity with an open-source map for logging and tracking water points in rural, water-scarce areas. Built from scratch in 2 days; drove the technical direction and gave the final presentation.",
+        "tag": "Hackathon, 2025"
+      },
+      {
+        "title": "NUS Maritime Hackathon 2026, Top 10%",
+        "detail": "Team Minorites, Category A. Used optimisation algorithms to maximise Singapore to Australia shipment profitability, narrowing 108 candidate vessels down to 22.",
+        "tag": "Hackathon, 2026"
+      },
+      {
+        "title": "CFA Institute Research Challenge 2025",
+        "detail": "Team lead for a 12-page equity research report on iFAST Corporation. Sourced from annual reports, quarterly earnings releases and Bloomberg, including forensic findings for the investment recommendation.",
+        "tag": "CFA Research Challenge, 2024",
+        "url": "https://drive.google.com/file/d/1dISKzLYIY06pTExL8etrzQSMAkQkYP9Q/view?usp=drive_link"
+      },
+      {
+        "title": "Cager.ai, Machine Learning Intern",
+        "detail": "Researching ML approaches to detect misuse by autonomous AI agents, and mapped Cager's end-to-end detection pipeline together with the CEO.",
+        "tag": "Cager.ai, 2026"
+      },
+      {
+        "title": "Solar-Powered Insect Trap",
+        "detail": "Rebuilt a battery-run insect trap as a solar-powered version that never needs charging. Designed the casing in Autodesk Inventor and 3D printed it, fitting every component with clean wiring.",
+        "tag": "Academic Project"
+      }
+    ],
+    "links": {
+      "linkedin": "https://www.linkedin.com/in/paing-soe-khant-qrc21",
+      "portfolio": "https://canva.link/cscm4uu6vm7qo2c",
+      "email": "paing_soekhant@mymail.sutd.edu.sg"
+    }
   },
   {
-    "id": "member-02",
+    "id": "jin-hng",
     "index": "02",
+    "slug": "jin-hng",
     "name": "Jin Hng",
     "pillar": "CSD",
     "pillarFull": "Computer Science & Design",
-    "role": "Frontend & Interaction",
-    "bio": "Focuses on web interfaces, interaction design, and accessible user experiences.",
-    "skillsets": ["React", "TypeScript", "Tailwind CSS", "UI Systems", "Accessibility"],
-    "interests": ["Interaction Design", "Typography", "Photography", "Specialty Coffee"]
+    "bio": "Yap Jin Hng builds accessible, well-tested web interfaces in React and TypeScript, with side work in FPGA digital design and React Native mobile apps. Represented SUTD in basketball at SUniG 2025.",
+    "skillsets": [
+      "Frontend Development (React, TypeScript)",
+      "Full-Stack Web Development",
+      "Test Engineering (Playwright, Vitest)",
+      "Cross-Platform Mobile (React Native)",
+      "FPGA / Digital Design (Lucid V2)",
+      "3D Modelling & Prototyping (Fusion 360)"
+    ],
+    "tools": [
+      "React & React Native",
+      "TypeScript & JavaScript",
+      "Python (NumPy, Pandas)",
+      "Java",
+      "Express.js & Vite",
+      "MySQL & Supabase (PostgreSQL)",
+      "Playwright & Vitest",
+      "Git",
+      "Fusion 360",
+      "Lucid V2 (Alchitry Au FPGA)",
+      "Arduino",
+      "AI Agent Tools (Codex, OpenCode, Claude Code)"
+    ],
+    "projects": [
+      {
+        "title": "Pacr",
+        "tag": "Mobile App · 2026 – Present",
+        "detail": "Cross-platform social running and dating app, co-developed in React Native.\n- Iterating on core user flows: onboarding, profile setup and social interaction screens.\n- Integrated a webserver, Supabase (PostgreSQL) and React Native.\n- Uses AI-assisted coding tools with a human-in-the-loop approach to accelerate features and troubleshoot UI.\n- Collaborating in a small team on code modularity, data flows and reusable UI components."
+      },
+      {
+        "title": "Hotel Booking Website",
+        "tag": "Project · 2026",
+        "detail": "Elements of Software Construction (SUTD, May – Aug 2026).\n- Co-developed a hotel booking website and test suites in React, MySQL, Playwright and Vitest.\n- Implemented payment and booking logging via the Stripe API and MySQL.\n- Built race-condition and edge-case coverage across unit, integration, system and end-to-end tests."
+      },
+      {
+        "title": "FPGA Slot Machine",
+        "tag": "Project · 2026",
+        "detail": "Computation Structures (SUTD, Jan – Apr 2026), built on an Alchitry Au FPGA board in Lucid V2.\n- Designed finite state machines for game transitions, random number simulation and score tracking.\n- Engineered hardware I/O integration and decoding with the FPGA core."
+      },
+      {
+        "title": "Solar-Powered Mosquito Trap",
+        "tag": "Project · 2025",
+        "detail": "Designing Energy Systems (SUTD, May – Aug 2025).\n- Redesigned the power subsystem from a mains-charged battery to a self-sustaining solar configuration.\n- Performed load-profile calculations and sizing optimization to match panel capacity with battery specifications."
+      },
+      {
+        "title": "Automated Weight Rack",
+        "tag": "Project · 2025",
+        "detail": "Design Thinking and Innovation (SUTD, Jan – Apr 2025).\n- 3D modeled in Fusion 360 an automated weight rack with keyed cross-section sleeves that physically prevent misplacing weights.\n- Applied design thinking to iterate the prototype around intuitive physical and geometric constraints.\n- Incorporated Arduino-based RFID tracking to log inventory as plates are removed or returned."
+      }
+    ],
+    "interests": [
+      "Basketball",
+      "Frontend Engineering",
+      "FPGA Development"
+    ],
+    "links": {
+      "linkedin": "https://www.linkedin.com/in/jinhng/",
+      "email": "jinhng.yap@gmail.com"
+    },
+    "artifacts": {
+      "heroImage": "photo/jin-hng/hero",
+      "heroFocus": "top"
+    },
+    "version": 7,
+    "updatedAt": "2026-11-21T09:12:06.916Z"
   },
   {
-    "id": "member-03",
+    "id": "harsha",
     "index": "03",
+    "slug": "harsha",
     "name": "Harsha",
     "pillar": "CSD",
     "pillarFull": "Computer Science & Design",
-    "role": "Backend & Infrastructure",
-    "bio": "Focuses on APIs, distributed services, databases, and reliable deployment workflows.",
-    "skillsets": ["Node.js", "Go", "PostgreSQL", "Docker", "Distributed Systems"],
-    "interests": ["Systems Architecture", "Embedded Linux", "Self-Hosting", "Hiking"]
+    "minor": "Analytics & AI",
+    "bio": "Uduta Harsha Vardhan builds end-to-end computer vision and machine learning systems, from annotation and training to AWS deployment and full-stack interfaces. Currently a Machine Learning Engineer Intern at Changi Airport Group, with the AWS Solutions Architect certification in progress.",
+    "skillsets": [
+      "Machine Learning",
+      "Full-Stack Computer Vision Applications",
+      "Full-Stack Development",
+      "LLM / RAG Applications",
+      "3D CAD Modelling",
+      "Rapid Prototyping"
+    ],
+    "tools": [
+      "Python & PyTorch",
+      "JavaScript & TypeScript",
+      "OpenCV & CV trackers",
+      "CVAT, Roboflow & Hugging Face",
+      "React & Node.js",
+      "MongoDB & SQL",
+      "AWS: S3, Lambda, SageMaker, EC2, Step Functions, Bedrock, AgentCore",
+      "Docker, Linux & Git",
+      "ROS, PX4 & Gazebo",
+      "Azure & Playwright",
+      "Fusion 360",
+      "ComfyUI"
+    ],
+    "projects": [
+      {
+        "title": "Changi Airport Group",
+        "tag": "Internship · 2026 – Present",
+        "detail": "Machine Learning Engineer Intern (2026 – Present), building computer vision MVPs for airport operations.\n- Design and build full-scale Machine Learning MVPs for Computer Vision applications.\n- Deploy MVPs for UAT and CI/CD.\n- Full ML lifecycle ownership for airport operations while adhering to security requirements.\n- Build Python pipelines on AWS."
+      },
+      {
+        "title": "LexiPath",
+        "tag": "Project · 2026",
+        "detail": "AI literacy diagnostics platform co-built with the Dyslexia Association of Singapore (2026).\n- Co-built the full-stack platform in React, Express and MongoDB with JWT authentication and Playwright testing.\n- Gemini vision flags dyslexia-related handwriting errors.\n- Azure RAG recommends curriculum-based interventions.\n- Educator dashboard tracks learner error trends."
+      },
+      {
+        "title": "AMPLIFY",
+        "tag": "Venture · 2026 – Present",
+        "detail": "Co-founded a two-sided marketplace connecting businesses and creators (2026 – Present).\n- Validated the concept with real users and secured $2,000 pre-seed from SUTD's Baby Shark Fund.\n- Building the full-stack MVP: APIs, authentication and a relational database."
+      },
+      {
+        "title": "SAFMC 2025",
+        "tag": "Competition · 2025",
+        "detail": "Singapore Amazing Flying Machine Competition 2025, Category E (Autonomous Drone Swarm, Search & Rescue). Finalist and 5th Runner-Up medalist.\n- Reached the Finals against postgraduate teams.\n- Built an OpenCV and ArUco CV pipeline for multi-UAV swarm coordination.\n- Stack: ROS, PX4 and Docker, tested in Gazebo."
+      },
+      {
+        "title": "MolarData",
+        "tag": "Internship · 2025",
+        "detail": "Computer Vision Intern (2025), working on large-scale visual data and post-capture imaging.\n- Curated and validated AI-generated annotations across large visual datasets.\n- Co-built a post-capture photography pipeline using focal-length adjustment and AI outpainting."
+      }
+    ],
+    "interests": [],
+    "artifacts": {
+      "heroImage": "photo/harsha/hero"
+    },
+    "version": 3,
+    "updatedAt": "2026-11-21T09:12:06.916Z"
   },
   {
-    "id": "member-04",
+    "id": "vikas",
     "index": "04",
+    "slug": "vikas",
     "name": "Vikas",
     "pillar": "CSD",
     "pillarFull": "Computer Science & Design",
-    "role": "Applied AI & Data",
-    "bio": "Focuses on machine learning models, computer vision, and practical evaluation pipelines.",
-    "skillsets": ["PyTorch", "Computer Vision", "ONNX", "Time-Series ML", "Model Evaluation"],
-    "interests": ["Edge AI", "Multimodal Models", "Badminton", "Music Production"]
+    "bio": "Vikas Shankar works on machine learning and computer vision, from experimentation pipelines and model benchmarking to database engines and full-stack apps.",
+    "skillsets": [
+      "Machine Learning / Computer Vision",
+      "ML Experimentation Pipelines & Model Benchmarking",
+      "Database Systems Implementation",
+      "Full-Stack Development (React, TypeScript)"
+    ],
+    "tools": [
+      "Python",
+      "Java",
+      "C/C++",
+      "React",
+      "TypeScript",
+      "MongoDB",
+      "Spark",
+      "Git",
+      "Linux",
+      "PyTorch",
+      "OpenCV",
+      "Gradio"
+    ],
+    "projects": [
+      {
+        "title": "Panasonic R&D Center",
+        "tag": "ML & GenAI Intern (Deep Learning)",
+        "detail": "- Building end-to-end computer vision pipelines and benchmarking models for a fine-grained recognition task.\n- Made a tool to automate mask generation.\n- Tried several ways to improve detection, such as using depth and adding a classifier."
+      },
+      {
+        "title": "Bigg Tapp Analytics",
+        "tag": "Software Engineering Intern",
+        "detail": "- Did web development and agentic AI integration."
+      },
+      {
+        "title": "Knowledge Management Solutions",
+        "tag": "AI/ML Intern",
+        "detail": "- Led a YOLOv8 object detection pipeline that improved accuracy by 20% using transfer learning."
+      },
+      {
+        "title": "SimpleDB Engine",
+        "detail": "- Built a relational database engine in Java with a B+ tree index and strict two-phase locking with deadlock detection."
+      },
+      {
+        "title": "PLANTEMON",
+        "detail": "- Java Android app that gamifies plant education: players scan and collect real plants, then battle with them in turns. It won 1st place in the cohort.\n- Split the code into three layers: database, battle logic and data model.\n- Built a turn-based battle engine around an abstract BattleHandler that moves through a state machine and checks for a winner."
+      }
+    ],
+    "interests": [],
+    "artifacts": {
+      "heroImage": "photo/vikas/hero"
+    },
+    "version": 5,
+    "updatedAt": "2026-11-21T09:12:06.916Z"
   },
   {
-    "id": "member-05",
+    "id": "nicholas",
     "index": "05",
+    "slug": "nicholas",
     "name": "Nicholas",
     "pillar": "EPD",
     "pillarFull": "Engineering Product Development",
     "minor": "Design, Technology & Society",
-    "role": "Mechanical Design & Prototyping",
-    "bio": "Focuses on CAD-driven product design and FDM rapid prototyping, building accessible hardware from landscaping safety guards to low-cost prosthetics.",
+    "bio": "Nicholas Enrique Selvaraj designs CAD-driven products and FDM rapid prototypes, building accessible hardware from landscaping safety guards to low-cost prosthetics.",
     "skillsets": [
-      "CAD/3D Modelling (Fusion 360)",
-      "Rapid Prototyping & Additive Manufacturing (FDM 3D Printing)",
-      "Engineering Drawing & Product Design",
-      "Basic Electronics & Systems Control",
-      "HTML/CSS/JS (Web Development)"
+      "CAD/3D modelling (Fusion 360)",
+      "Rapid prototyping & additive manufacturing (FDM 3D printing)",
+      "Engineering drawing & product design",
+      "Basic electronics & systems control",
+      "HTML/CSS/JS (web development)"
     ],
-    "tools": ["Fusion 360", "Microsoft Office (Word, Excel, PowerPoint)", "GitHub"],
+    "tools": [
+      "Fusion 360",
+      "Microsoft Office (Word, Excel, PowerPoint)",
+      "GitHub"
+    ],
     "projects": [
       {
         "title": "Guard-Damp-It!",
-        "detail": "Smart weedwhacker safety guard designed for landscaping injury prevention, fabricated with 3D printing."
+        "detail": "Smart weedwhacker safety guard; designed for landscaping injury prevention, fabricated with 3D printing"
       },
       {
         "title": "Prosthetic Socket System",
-        "detail": "Low-cost 3D-printed prosthetic solution focused on accessibility."
+        "detail": "Low-cost 3D-printed prosthetic solution focused on accessibility"
       },
       {
         "title": "Liquid Metal Flexible Antenna",
-        "detail": "EGaIn-in-PDMS antenna design for wearable and flexible electronics."
+        "detail": "EGaIn-in-PDMS antenna design for wearable/flexible electronics"
       },
       {
         "title": "RSAF Medic",
-        "detail": "National Service with the Republic of Singapore Air Force."
+        "detail": "National Service, Republic of Singapore Air Force",
+        "featured": false
       }
     ],
-    "interests": ["Robotics", "Industrial Design", "Cycling", "Woodworking"]
+    "interests": [],
+    "artifacts": {
+      "heroImage": "photo/nicholas/hero"
+    },
+    "version": 5,
+    "updatedAt": "2026-11-21T09:12:06.916Z"
   },
   {
-    "id": "member-06",
+    "id": "jayden",
     "index": "06",
+    "slug": "jayden",
     "name": "Jayden",
     "pillar": "EPD",
     "pillarFull": "Engineering Product Development",
-    "role": "Electronics & Embedded Systems",
-    "bio": "Focuses on PCB design, sensor acquisition, power electronics, and low-level firmware.",
-    "skillsets": ["KiCad PCB", "Embedded C", "FreeRTOS", "Sensor Fusion", "Signal Processing"],
-    "interests": ["Open Hardware", "Analog Circuits", "Bouldering", "Film Photography"]
+    "bio": "Ong Kai Jayden designs PCBs and embedded electronics, with 3D modeling and antenna work, building devices from smart grass cutters to portable braille readers.",
+    "skillsets": [
+      "PCB Design/Prototyping",
+      "Circuitry & Electronics optimization",
+      "3D Modeling",
+      "Basic programming skills (Python, C++)"
+    ],
+    "tools": [
+      "KiCAD",
+      "LTSpice",
+      "Fusion 360",
+      "CST Studio Suite (Antenna Design)",
+      "Python",
+      "C++",
+      "Adobe Premiere"
+    ],
+    "projects": [
+      {
+        "title": "Guard-Damp-IT",
+        "detail": "- Developed a smart grass cutter to minimize the risk of flying projectiles and debris while encouraging safe grass cutting behavior of users. (Circuit/PCB Design)"
+      },
+      {
+        "title": "Brailliance",
+        "detail": "- Real time portable braille device for the visually impaired to promote literacy skills (e.g. reading)\n- Trained custom OCR model for AI camera recognition"
+      },
+      {
+        "title": "SolarDiffuser",
+        "detail": "- Fully solar-powered watering device for irrigation"
+      }
+    ],
+    "interests": [],
+    "artifacts": {
+      "heroImage": "photo/jayden/hero"
+    },
+    "version": 5,
+    "updatedAt": "2026-11-21T09:12:06.916Z"
   },
   {
-    "id": "member-07",
+    "id": "harish",
     "index": "07",
+    "slug": "harish",
     "name": "Harish",
     "pillar": "EPD",
     "pillarFull": "Engineering Product Development",
-    "role": "Product Design & Prototyping",
-    "bio": "Focuses on industrial design, physical prototyping, control systems, and field validation.",
-    "skillsets": ["Product Design", "CAD Modeling", "Rapid Prototyping", "Control Systems", "Testing & QA"],
-    "interests": ["Human-Centered Design", "Autonomous Systems", "Sustainability", "Cooking"]
+    "bio": "Harish works on PCB design, circuitry and 3D prototyping, with antenna design and CNC milling, and is currently self-learning FPGA development.",
+    "skillsets": [
+      "PCB Design",
+      "Circuitry & Electronics",
+      "3D Modelling",
+      "CNC Milling",
+      "Antenna Design",
+      "Video Editing"
+    ],
+    "tools": [
+      "CST Studio Suite",
+      "Fusion 360",
+      "KiCad",
+      "VNA for Antenna Testing",
+      "After Effects (Video Editing)"
+    ],
+    "projects": [
+      {
+        "title": "Children's Museum Singapore (Trinax Private Limited)",
+        "detail": "Designed and worked on various touchpoints in Children's Museum Singapore as part of an internship (Trinax Private Limited).\n- Loanracer\nPedal machine which tracks the speed at which children are turning the pedal with the use of hall sensors\nDesign of Pedal Machine to meet mechanical requirements\n- RFID\nRFID at various touchpoints where children can tap their \"e-wallets\" to spend money\nSupported main engineer with creating the RFID circuit to make sure it is stable"
+      },
+      {
+        "title": "Guard-Damp-it!",
+        "detail": "Modification of weedwacker to provide user feedback and prevent damage caused by debris\n- Conducted multiple tests to determine vibration threshold\n- Vibration threshold provides feedback of how weedwacker is being used"
+      },
+      {
+        "title": "Flexible antenna",
+        "detail": "Antenna which provides real-time angle of knee using changes in frequency emitted from antenna\n- Created multiple designs to find optimal frequency and bandwidth\n- Aided in fabrication of antenna using PDMS and EGaIn"
+      }
+    ],
+    "interests": [],
+    "artifacts": {
+      "heroImage": "photo/harish/hero"
+    },
+    "version": 6,
+    "updatedAt": "2026-11-21T09:12:06.916Z"
   }
 ]

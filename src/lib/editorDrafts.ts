@@ -36,7 +36,6 @@ function normalizeDraftForm(value: unknown): EditorForm | null {
     name: form.name,
     pillar: form.pillar,
     minor: typeof form.minor === "string" ? form.minor : "",
-    role: typeof form.role === "string" ? form.role : "",
     bio: typeof form.bio === "string" ? form.bio : "",
     skillsetsText: form.skillsetsText,
     interestsText: form.interestsText,

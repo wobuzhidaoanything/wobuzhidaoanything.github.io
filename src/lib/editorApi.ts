@@ -179,7 +179,7 @@ export async function listRosterMembers(
 
 export async function addRosterMember(
   password: string,
-  draft: { name: string; pillar: Pillar; role?: string },
+  draft: { name: string; pillar: Pillar },
   expectedIds?: string[],
 ): Promise<ApiResult<RosterResponse>> {
   const result = await request(
@@ -189,7 +189,6 @@ export async function addRosterMember(
       action: "add",
       name: draft.name,
       pillar: draft.pillar,
-      role: draft.role,
       expectedIds,
     }),
   );
