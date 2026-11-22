@@ -346,12 +346,6 @@ export function MemberDetailPage() {
               </p>
             ) : null}
 
-            {member.bio ? (
-              <p className="m-0 max-w-[56ch] type-body-lg text-ink-secondary">
-                {member.bio}
-              </p>
-            ) : null}
-
             {hasLinks ? <MemberLinksRow links={member.links} className="pt-1" /> : null}
           </motion.div>
 

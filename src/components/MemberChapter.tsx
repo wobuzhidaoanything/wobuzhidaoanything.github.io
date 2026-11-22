@@ -200,15 +200,6 @@ export function MemberChapter({
             </motion.p>
           ) : null}
 
-          {member.bio ? (
-            <motion.p
-              variants={riseItem}
-              className="m-0 max-w-[34ch] type-body-lg text-ink-secondary @min-[54rem]/chapter:max-w-[46ch]"
-            >
-              {member.bio}
-            </motion.p>
-          ) : null}
-
           {hasLinks ? (
             <motion.div variants={riseItem}>
               <MemberLinksRow links={member.links} className="pt-1" />
