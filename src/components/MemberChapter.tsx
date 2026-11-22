@@ -137,6 +137,7 @@ export function MemberChapter({
         )}
       >
         <motion.div
+          data-chapter-hero={member.slug}
           className={cn(
             "col-start-1 row-start-1 grid min-w-0 content-start gap-3.5 @min-[54rem]/chapter:gap-5",
             "@min-[54rem]/chapter:sticky @min-[54rem]/chapter:top-[calc(var(--header-h)+2.5rem)] @min-[54rem]/chapter:row-span-2",

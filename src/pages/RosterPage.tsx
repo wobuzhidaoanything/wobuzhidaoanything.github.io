@@ -8,6 +8,7 @@ import { useLiveMembers } from "@/hooks/useLiveMembers";
 import { getPublicMembers } from "@/lib/membersStore";
 import { MemberChapter, type ChapterSurfaceTone } from "@/components/MemberChapter";
 import { SelectedWorkSection } from "@/components/SelectedWorkSection";
+import { IdentityIndicator } from "@/components/IdentityIndicator";
 import { PartnerSection } from "@/components/PartnerSection";
 import { BackToTop } from "@/components/BackToTop";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -145,6 +146,8 @@ export function RosterPage() {
     () => filteredMembers[0]?.slug ?? "01",
   );
   const [showDock, setShowDock] = useState(false);
+  const [inTeamSection, setInTeamSection] = useState(false);
+  const [activeHeroHidden, setActiveHeroHidden] = useState(false);
   const dockNavRef = useRef<HTMLElement | null>(null);
 
   // Sync mobile Back to Top clearance with visible fixed chapter dock.
@@ -207,14 +210,16 @@ export function RosterPage() {
       rafId = 0;
       const headerH = getHeaderHeight();
       const teamEl = document.getElementById("team");
-      if (!teamEl || filteredMembers.length <= 1) {
+      if (!teamEl || filteredMembers.length === 0) {
+        setInTeamSection(false);
         setShowDock(false);
       } else {
         const teamRect = teamEl.getBoundingClientRect();
-        const visible =
+        const inTeam =
           teamRect.top <= window.innerHeight * 0.55 &&
           teamRect.bottom >= Math.min(window.innerHeight * 0.38, headerH + 220);
-        setShowDock(visible);
+        setInTeamSection(inTeam);
+        setShowDock(inTeam && filteredMembers.length > 1);
       }
 
       const chapters = Array.from(document.querySelectorAll<HTMLElement>(".member-chapter"));
@@ -230,6 +235,11 @@ export function RosterPage() {
         }
       }
       if (matchedSlug) setActiveChapterSlug(matchedSlug);
+      const hero = matchedSlug
+        ? document.querySelector<HTMLElement>(`[data-chapter-hero="${matchedSlug}"]`)
+        : null;
+      const heroHidden = hero ? hero.getBoundingClientRect().bottom <= headerH + 4 : false;
+      setActiveHeroHidden((prev) => (prev === heroHidden ? prev : heroHidden));
     };
 
     const onScrollOrResize = () => {
@@ -488,7 +498,7 @@ export function RosterPage() {
             </div>
 
             <div
-              className="filter-rail no-print inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-control bg-surface-muted p-1"
+              className="filter-rail no-print inline-flex max-w-full flex-wrap items-center gap-1.5"
               role="group"
               aria-label="Filter team members by SUTD pillar"
             >
@@ -504,12 +514,17 @@ export function RosterPage() {
                     className={cn(
                       "filter-pill inline-flex min-h-10 cursor-pointer items-center gap-[0.45rem] rounded-full border px-[0.95rem] py-[0.4rem] type-ui font-semibold transition-[background-color,border-color,color] duration-150 pointer-coarse:min-h-11",
                       pressed
-                        ? "border-edge bg-surface font-bold text-ink shadow-chip"
-                        : "border-transparent bg-transparent text-ink-secondary hover:text-ink",
+                        ? "border-ink bg-ink font-bold text-page"
+                        : "border-rule bg-transparent text-ink-secondary hover:border-edge hover:text-ink",
                     )}
                   >
                     <span>{filter.label}</span>
-                    <span className="type-micro font-bold tabular text-ink-secondary">
+                    <span
+                      className={cn(
+                        "type-micro font-bold tabular",
+                        pressed ? "text-page/75" : "text-ink-muted",
+                      )}
+                    >
                       {pillarCounts[filter.id]}
                     </span>
                   </button>
@@ -618,6 +633,15 @@ export function RosterPage() {
             </nav>
           </div>
         ) : null}
+
+        {/* Below the chapter sticky breakpoint the identity column scrolls away, so pin a bar instead */}
+        <div className="min-[54rem]:hidden">
+          <IdentityIndicator
+            member={filteredMembers.find((m) => m.slug === activeChapterSlug) ?? null}
+            targetId={`chapter-${activeChapterSlug}`}
+            visible={inTeamSection && activeHeroHidden}
+          />
+        </div>
       </section>
 
       <SelectedWorkSection
