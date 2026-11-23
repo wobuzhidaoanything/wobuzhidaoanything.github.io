@@ -1,7 +1,11 @@
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { cn } from "cn";
-import type { Pillar, TeamMember } from "@/data/capstone";
+import {
+  getMainPageMemberName,
+  type Pillar,
+  type TeamMember,
+} from "@/data/capstone";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
 import { MemberLinksRow } from "@/components/MemberLinksRow";
 import { TransitionLink } from "@/components/TransitionLink";
@@ -178,7 +182,7 @@ export function MemberChapter({
               transitionSource="chapter"
               className="ui-link-underline inline-block text-inherit hover:text-(--tone)"
             >
-              {member.name}
+              {getMainPageMemberName(member)}
             </TransitionLink>
           </motion.h3>
 

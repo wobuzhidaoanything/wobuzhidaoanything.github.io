@@ -65,6 +65,16 @@ export interface TeamMember {
   updatedAt?: string;
 }
 
+const MAIN_PAGE_NAME_OVERRIDES: Record<string, string> = {
+  "soe-khant": "Soe Khant",
+};
+
+export function getMainPageMemberName(
+  member: Pick<TeamMember, "id" | "name">,
+): string {
+  return MAIN_PAGE_NAME_OVERRIDES[member.id] ?? member.name;
+}
+
 export const PILLAR_FILTERS: {
   id: FilterOption;
   label: string;

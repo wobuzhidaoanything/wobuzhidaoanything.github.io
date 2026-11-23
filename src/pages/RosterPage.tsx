@@ -3,7 +3,12 @@ import { useLocation, useSearchParams } from "react-router";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { ArrowDown, ArrowRight } from "lucide-react";
 import { cn } from "cn";
-import { GROUP_META, PILLAR_FILTERS, type FilterOption } from "@/data/capstone";
+import {
+  GROUP_META,
+  PILLAR_FILTERS,
+  getMainPageMemberName,
+  type FilterOption,
+} from "@/data/capstone";
 import { useLiveMembers } from "@/hooks/useLiveMembers";
 import { getPublicMembers } from "@/lib/membersStore";
 import { MemberChapter, type ChapterSurfaceTone } from "@/components/MemberChapter";
@@ -322,11 +327,9 @@ export function RosterPage() {
             variants={splashRise}
             id="main-content"
             tabIndex={-1}
-            className="m-0 grid justify-items-start gap-[0.1em] font-serif focus:outline-none"
+            className="m-0 font-serif type-display font-semibold text-wrap-balance text-ink focus:outline-none"
           >
-            <span className="font-serif type-display font-semibold text-wrap-balance text-ink">
-              {GROUP_META.code}
-            </span>
+            Tri<span className="text-accent">Axis</span>
           </motion.h1>
 
           <motion.p
@@ -585,13 +588,14 @@ export function RosterPage() {
               <ul className="m-0 flex list-none items-center gap-0.5 p-0 sm:gap-1">
                 {filteredMembers.map((member) => {
                   const isActive = activeChapterSlug === member.slug;
+                  const displayName = getMainPageMemberName(member);
                   return (
                     <li key={member.id} className="shrink-0">
                       <a
                         href={`#chapter-${member.slug}`}
                         tabIndex={showDock ? undefined : -1}
                         aria-current={isActive ? "location" : undefined}
-                        aria-label={`Jump to ${member.name} (${member.pillar})`}
+                        aria-label={`Jump to ${displayName} (${member.pillar})`}
                         className={cn(
                           "dock-link inline-flex h-9 shrink-0 items-center justify-center rounded-full px-3 type-micro font-semibold whitespace-nowrap no-underline transition-[background-color,color] duration-150 pointer-coarse:h-10",
                           isActive
@@ -604,7 +608,7 @@ export function RosterPage() {
                           scrollToElement(`chapter-${member.slug}`);
                         }}
                       >
-                        {memberShortLabel(member.name)}
+                        {memberShortLabel(displayName)}
                       </a>
                     </li>
                   );
