@@ -10,6 +10,15 @@ export interface ParsedProjectDetail {
 
 const BULLET_PREFIX_RE = /^[-•*]\s+(.+)$/;
 
+export function projectId(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `project-${slug || "entry"}`;
+}
+
 export function parseProjectDetail(detail: string): ParsedProjectDetail {
   const lines = detail
     .split(/\r?\n/)

@@ -76,7 +76,7 @@ export function formFromMember(member: TeamMember): EditorForm {
     name: member.name,
     pillar: member.pillar,
     minor: member.minor ?? "",
-    role: member.role,
+    role: member.role ?? "",
     bio: member.bio,
     skillsetsText: serializeList(member.skillsets),
     interestsText: serializeList(member.interests),

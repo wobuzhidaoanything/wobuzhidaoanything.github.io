@@ -1,5 +1,5 @@
-import { useMemo, type MouseEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useEffect, useMemo, useRef, type MouseEvent } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Pencil } from "lucide-react";
 import { cn } from "cn";
@@ -10,9 +10,11 @@ import { useEditorSession } from "@/lib/editorSession";
 import { isValidHttpUrl } from "@/lib/editorForm";
 import {
   focusRouteHeading,
+  getTransitionState,
   runViewTransition,
 } from "@/lib/viewTransitions";
 import { scrollToSectionAligned } from "@/lib/scroll";
+import { projectId } from "@/lib/projectFormatting";
 import { ArtifactFrame } from "@/components/ArtifactFrame";
 import { MemberLinksRow } from "@/components/MemberLinksRow";
 import { ProjectDetailContent } from "@/components/ProjectDetailContent";
@@ -71,6 +73,8 @@ function hasAnyMemberLink(links?: {
 export function MemberDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { hash } = useLocation();
+  const scrolledHash = useRef<string | null>(null);
   const { members: rawMembers } = useLiveMembers();
   const session = useEditorSession();
   const shouldReduceMotion = useReducedMotion();
@@ -97,6 +101,33 @@ export function MemberDetailPage() {
       ? `${member.name} (${member.pillar}) | ${GROUP_META.title}`
       : `Member Not Found | ${GROUP_META.title}`,
   );
+
+  // Wait out the member view transition so the morph snapshot isn't captured mid-scroll.
+  useEffect(() => {
+    if (!member || !hash.startsWith("#project-")) return;
+    if (scrolledHash.current === hash) return;
+    const id = hash.slice(1);
+    let raf = 0;
+    const settle = () => {
+      if (getTransitionState().mode === "member") {
+        raf = requestAnimationFrame(settle);
+        return;
+      }
+      const target = document.getElementById(id);
+      if (!target) return;
+      // The entry fade translates the card; scrolling mid-transform lands short once it settles.
+      const transform = getComputedStyle(target).transform;
+      if (transform !== "none" && transform !== "matrix(1, 0, 0, 1, 0, 0)") {
+        raf = requestAnimationFrame(settle);
+        return;
+      }
+      scrolledHash.current = hash;
+      scrollToSectionAligned(id);
+      target.focus({ preventScroll: true });
+    };
+    raf = requestAnimationFrame(settle);
+    return () => cancelAnimationFrame(raf);
+  }, [member, hash]);
 
   const handleBreadcrumbToTeam = (e: MouseEvent<HTMLAnchorElement>, to: string) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -392,6 +423,8 @@ export function MemberDetailPage() {
                 {member.projects.map((project, idx) => (
                   <motion.li
                     key={project.title}
+                    id={projectId(project.title)}
+                    tabIndex={-1}
                     className="flex items-baseline gap-4 rounded-card border border-rule bg-page/60 p-4"
                     variants={itemFade}
                   >

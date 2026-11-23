@@ -48,7 +48,7 @@ export interface TeamMember {
   name: string;
   pillar: Pillar;
   pillarFull: string;
-  role: string;
+  role?: string;
   bio: string;
   skillsets: string[];
   interests: string[];
@@ -76,9 +76,9 @@ export const PILLAR_FILTERS: {
 ];
 
 export const GROUP_META = {
-  code: "Lockheed Summer Internship",
+  code: "TriAxis",
   institution: "SUTD Capstone",
-  title: "Lockheed Summer Internship: SUTD Capstone",
+  title: "TriAxis: SUTD Capstone",
   pillarsLabel: "EPD · ESD · CSD",
   overview:
     "Seven final-year students from the Singapore University of Technology and Design across Engineering Product Development, Engineering Systems and Design, and Computer Science and Design.",
@@ -157,9 +157,9 @@ export const PARTNER_OUTREACH = {
         "Connecting soon gives your team and SUTD's Capstone Office comfortable runway to scope the problem statement, review legal terms, and lock in the project well before Term 1 begins in September 2027.",
     },
   ],
-  contactEmail: "capstone-lockheed@example.com",
+  contactEmail: "capstone-triaxis@example.com",
   emailSubject:
-    "SUTD Capstone (Lockheed Summer Internship): Industry Partnership Inquiry",
+    "SUTD Capstone (TriAxis): Industry Partnership Inquiry",
   showcaseUrl: "https://capstoneshowcase.sutd.edu.sg/",
   showcaseLabel: "Past SUTD Capstone Projects",
   closingNote:

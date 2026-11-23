@@ -8,6 +8,7 @@ import { TransitionLink } from "@/components/TransitionLink";
 import { PillarBadge } from "@/components/ui/pillar-badge";
 import { useTransitionState } from "@/hooks/useTransitionMember";
 import { isValidHttpUrl } from "@/lib/editorForm";
+import { projectId } from "@/lib/projectFormatting";
 
 export type ChapterSurfaceTone = "default" | "alt" | "charcoal";
 
@@ -137,7 +138,6 @@ export function MemberChapter({
         )}
       >
         <motion.div
-          data-chapter-hero={member.slug}
           className={cn(
             "col-start-1 row-start-1 grid min-w-0 content-start gap-3.5 @min-[54rem]/chapter:gap-5",
             "@min-[54rem]/chapter:sticky @min-[54rem]/chapter:top-[calc(var(--header-h)+2.5rem)] @min-[54rem]/chapter:row-span-2",
@@ -163,6 +163,7 @@ export function MemberChapter({
           <motion.h3
             variants={riseItem}
             id={`chapter-heading-${member.slug}`}
+            data-chapter-hero={member.slug}
             className="m-0 w-fit font-serif type-title-2 font-semibold text-ink"
             style={
               isMorphTarget
@@ -224,6 +225,7 @@ export function MemberChapter({
 
         <motion.div
           variants={stageBlock}
+          data-chapter-hero={member.slug}
           initial={shouldReduceMotion ? false : "hidden"}
           whileInView="visible"
           viewport={{ once: true, amount: "some" }}
@@ -337,7 +339,7 @@ export function MemberChapter({
                       className="ui-card-interactive flex flex-wrap items-center justify-between gap-2.5 rounded-card border border-edge bg-surface px-4 py-3.5"
                     >
                       <TransitionLink
-                        to={`/member/${member.slug}`}
+                        to={`/member/${member.slug}#${projectId(project.title)}`}
                         direction="forward"
                         memberSlug={member.slug}
                         transitionSource="chapter"

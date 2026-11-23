@@ -29,10 +29,11 @@ interface IdentityIndicatorProps {
 }
 
 /**
- * Persistent "whose profile am I reading" marker. Shown only while the
- * member's hero block has scrolled out of view; activating it jumps back
- * to the top of their profile. Rendered as a vertical edge rail on wide
- * screens and a slim bar under the header on smaller ones.
+ * Persistent "whose profile am I reading" marker. Shown once the member's
+ * photo and name have scrolled out from under the header; activating it
+ * jumps back to the top of their profile. Slim bar under the header on
+ * narrow screens; a taller vertical rail pinned to the left edge on wide
+ * ones.
  */
 export function IdentityIndicator({ member, targetId, visible }: IdentityIndicatorProps) {
   const active = Boolean(member) && visible;
@@ -82,13 +83,13 @@ export function IdentityIndicator({ member, targetId, visible }: IdentityIndicat
         aria-label={label}
         title={label}
         className={cn(
-          "no-print group fixed left-[max(1rem,env(safe-area-inset-left,0px))] top-1/2 z-30 hidden max-h-[min(70dvb,26rem)] w-14 -translate-y-1/2 flex-col items-center gap-3 rounded-full border border-edge bg-surface/85 px-1 py-3 shadow-float backdrop-blur-[12px] motion-safe:transition-[opacity,transform] motion-safe:duration-300 motion-safe:ease-(--ease-brand) min-[80rem]:flex",
+          "no-print group fixed left-[max(1rem,env(safe-area-inset-left,0px))] top-1/2 z-30 hidden w-16 -translate-y-1/2 max-h-[min(82dvb,34rem)] flex-col items-center gap-4 rounded-full border border-edge bg-surface/85 px-1.5 py-4 shadow-float backdrop-blur-[12px] motion-safe:transition-[opacity,transform] motion-safe:duration-300 motion-safe:ease-(--ease-brand) min-[54rem]:flex",
           active
             ? "pointer-events-auto translate-x-0 opacity-100"
             : "pointer-events-none -translate-x-3 opacity-0",
         )}
       >
-        {avatar("size-11 type-micro")}
+        {avatar("size-12 type-micro")}
         <span
           aria-hidden="true"
           className="min-h-0 overflow-hidden text-ellipsis whitespace-nowrap font-sans type-micro font-semibold tracking-[0.12em] text-ink [writing-mode:vertical-rl] rotate-180"
@@ -113,7 +114,7 @@ export function IdentityIndicator({ member, targetId, visible }: IdentityIndicat
         aria-label={label}
         className={cn(
           "no-print group fixed left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-30 flex min-h-12 items-center gap-2.5 rounded-full border border-edge bg-surface/90 py-1.5 pl-1.5 pr-2.5 shadow-float backdrop-blur-[12px] motion-safe:transition-[opacity,transform] motion-safe:duration-300 motion-safe:ease-(--ease-brand)",
-          "top-[calc(var(--header-h,4.5rem)+0.5rem)] min-[80rem]:hidden",
+          "top-[calc(var(--header-h,4.5rem)+0.5rem)] min-[54rem]:hidden",
           active
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-2 opacity-0",

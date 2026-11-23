@@ -235,10 +235,12 @@ export function RosterPage() {
         }
       }
       if (matchedSlug) setActiveChapterSlug(matchedSlug);
-      const hero = matchedSlug
-        ? document.querySelector<HTMLElement>(`[data-chapter-hero="${matchedSlug}"]`)
-        : null;
-      const heroHidden = hero ? hero.getBoundingClientRect().bottom <= headerH + 4 : false;
+      const heroes = matchedSlug
+        ? document.querySelectorAll<HTMLElement>(`[data-chapter-hero="${matchedSlug}"]`)
+        : [];
+      const heroHidden =
+        heroes.length > 0 &&
+        Array.from(heroes).some((el) => el.getBoundingClientRect().bottom <= headerH + 4);
       setActiveHeroHidden((prev) => (prev === heroHidden ? prev : heroHidden));
     };
 
@@ -298,7 +300,7 @@ export function RosterPage() {
 
   return (
     <div className="showcase-page relative">
-      {/* Stage 1: Original full-height Lockheed Splash Landing */}
+      {/* Stage 1: Full-height TriAxis Splash Landing */}
       <section
         id="top"
         className="splash @container/splash border-b border-edge"
@@ -321,13 +323,9 @@ export function RosterPage() {
             id="main-content"
             tabIndex={-1}
             className="m-0 grid justify-items-start gap-[0.1em] font-serif focus:outline-none"
-            aria-label="Lockheed Summer Internship"
           >
             <span className="font-serif type-display font-semibold text-wrap-balance text-ink">
-              Lockheed
-            </span>
-            <span className="font-serif type-title-sub italic font-medium text-accent">
-              Summer Internship
+              {GROUP_META.code}
             </span>
           </motion.h1>
 
@@ -634,14 +632,12 @@ export function RosterPage() {
           </div>
         ) : null}
 
-        {/* Below the chapter sticky breakpoint the identity column scrolls away, so pin a bar instead */}
-        <div className="min-[54rem]:hidden">
-          <IdentityIndicator
-            member={filteredMembers.find((m) => m.slug === activeChapterSlug) ?? null}
-            targetId={`chapter-${activeChapterSlug}`}
-            visible={inTeamSection && activeHeroHidden}
-          />
-        </div>
+        {/* Pinned identity marker: slim bar on small screens, vertical rail on wide ones */}
+        <IdentityIndicator
+          member={filteredMembers.find((m) => m.slug === activeChapterSlug) ?? null}
+          targetId={`chapter-${activeChapterSlug}`}
+          visible={inTeamSection && activeHeroHidden}
+        />
       </section>
 
       <SelectedWorkSection

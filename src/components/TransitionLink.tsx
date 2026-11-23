@@ -43,6 +43,13 @@ export function TransitionLink({
     e.preventDefault();
     onBeforeNavigate?.();
 
+    const targetHash =
+      typeof to === "string"
+        ? to.includes("#")
+          ? to.slice(to.indexOf("#") + 1)
+          : ""
+        : (to.hash ?? "");
+
     runViewTransition({
       types: [direction],
       mode: memberSlug ? "member" : "idle",
@@ -57,7 +64,7 @@ export function TransitionLink({
         });
       },
       onFinished: () => {
-        focusRouteHeading();
+        if (!targetHash) focusRouteHeading();
       },
     });
   };
